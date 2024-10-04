@@ -34,10 +34,9 @@ fn topLetDecl(
       ) => @types.Syntax::Let((id, _type), expr, topLevel)
       (((((((_, @lex.Token::IDENTIFIER(id)), _), _type), _), expr), _), None) =>
         @types.Syntax::Let((id, _type), expr, @types.Syntax::Unit)
-      _ => {
-        //println("Invalid top let decl declaration")
+      _ =>
+        // println("Invalid top let decl declaration")
         panic()
-      }
     },
   )
   .parse(tokens)
@@ -103,7 +102,7 @@ fn topFnDecl(
        ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
        ArrayView[@lex.Token],
      )? {
-  //println("top_fn_decl")
+  // println("top_fn_decl")
   ptoken_fn
   .and(identifier)
   .and(lparen)
@@ -114,7 +113,7 @@ fn topFnDecl(
   .and(fnBody)
   .map(
     fn(input) {
-      //println("top_fn_decl input : " + input.to_string())
+      // println("top_fn_decl input : " + input.to_string())
       match input {
         (
           (
@@ -128,11 +127,10 @@ fn topFnDecl(
         }
         (((((((_, @lex.Token::IDENTIFIER(id)), _), None), _), _), type_), fnBody
         ) => ((id, @types.Fun([], type_)), [], fnBody)
-        _ => {
-          //println("Invalid top fn dec declaration")
-          //println(tokens)
+        _ =>
+          // println("Invalid top fn dec declaration")
+          // println(tokens)
           panic()
-        }
       }
     },
   )
@@ -149,7 +147,7 @@ fn paramList(
   .map(
     fn {
       (param, param_list) => {
-        //println("param_list")
+        // println("param_list")
         let params = [param]
         for x in param_list {
           let (_, x) = x
@@ -172,10 +170,9 @@ fn param(
   .map(
     fn {
       (@lex.Token::IDENTIFIER(i), t) => (i, t)
-      _ => {
-        //println("Invalid param")
+      _ =>
+        // println("Invalid param")
         panic()
-      }
     },
   )
   .parse(tokens)
@@ -186,15 +183,15 @@ fn param(
 fn fnBody(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("fnBody: " + tokens.to_string())
+  // println("fnBody: " + tokens.to_string())
   lcurlybracket
   .and(stmt)
   .and(rcurlybracket)
   .map(
     fn {
       ((_, stmt), _) => stmt
-        //println("stmt :")
-        //println(stmt)
+      // println("stmt :")
+      // println(stmt)
       //   stmt
       // }
     },
@@ -230,10 +227,9 @@ fn nontopFnDecl(
         ),
         fnBody,
       ) => ((id, type_), param_list, fnBody)
-      _ => {
-        //println("Invalid non top level declaration")
+      _ =>
+        // println("Invalid non top level declaration")
         panic()
-      }
     },
   )
   .parse(tokens)
@@ -248,10 +244,13 @@ fn nonTopParamList(
   .and(comma.and(nonTopParam).many())
   .map(
     fn {
-      ((id, nonTopParam), [_]) => [(id, nonTopParam)]
-      _ => {
-        //println("Invalid non top level declaration")
-        panic()
+      (first, param_list) => {
+        let param_list = param_list.map(
+          fn {
+            (_, x) => x
+          }
+        )  
+        [first, ..param_list]
       }
     },
   )
@@ -269,10 +268,9 @@ fn nonTopParam(
     fn {
       (@lex.Token::IDENTIFIER(id), Some(type_annotation)) =>
         (id, type_annotation)
-      _ => {
-        //println("Invalid non top level declaration")
+      _ =>
+        // println("Invalid non top level declaration")
         panic()
-      }
     },
   )
   .parse(tokens)
@@ -292,7 +290,7 @@ fn stmt(
 fn letTupleStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("letTupleStmt: " + tokens.to_string())
+  // println("letTupleStmt: " + tokens.to_string())
   ptoken_let
   .and(lparen)
   .and(identifier)
@@ -322,13 +320,20 @@ fn letTupleStmt(
         ),
         stmt,
       ) => {
-        let ids = [(identifier, @types.Type::Unit)]
-        for x in identifiers {
-          match x {
-            (_, @lex.Token::IDENTIFIER(i)) => ids.push((i, @types.Type::Unit))
+        // let ids = [(identifier, @types.Type::Unit)]
+        // for x in identifiers {
+        //   match x {
+        //     (_, @lex.Token::IDENTIFIER(i)) => ids.push((i, @types.Type::Unit))
+        //     _ => panic()
+        //   }
+        // }
+        let mut ids = identifiers.map(
+          fn {
+            (@lex.Token::IDENTIFIER(i), _) => (i, @types.Type::Var({ val: None }))
             _ => panic()
           }
-        }
+        )
+        ids = [(identifier, @types.Type::Unit), ..ids]
         match type_annotation {
           Some(type_) => {
             match type_ {
@@ -343,10 +348,9 @@ fn letTupleStmt(
           None => @types.Syntax::LetTuple(ids, expr, stmt)
         }
       }
-      _ => {
-        //println("Invalid let statement")
+      _ =>
+        // println("Invalid let statement")
         panic()
-      }
     },
   )
   .parse(tokens)
@@ -357,7 +361,7 @@ fn letTupleStmt(
 fn letStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("letStmt: " + tokens.to_string())
+  // println("letStmt: " + tokens.to_string())
   ptoken_let
   .and(identifier)
   .zeroOrOnce(typeAnnotation)
@@ -368,28 +372,17 @@ fn letStmt(
   .map(
     fn {
       (
-        (((((_, @lex.Token::IDENTIFIER(id)), Some(type_annotation)), _), expr), _),
+        (
+          ((((_, @lex.Token::IDENTIFIER(id)), Some(type_annotation)), _), expr),
+          _,
+        ),
         stmt,
-      ) =>
-        @types.Syntax::Let(
-          (id, type_annotation),
-          expr,
-          stmt,
-        )
-      (
-        (((((_, @lex.Token::IDENTIFIER(id)), None), _), expr), _),
-        stmt,
-      ) =>
-        @types.Syntax::Let(
-          (id, @types.Type::Var({val: None})),
-          expr,
-          stmt,
-        )
-        
-      _ => {
-        //println("Invalid let statement")
+      ) => @types.Syntax::Let((id, type_annotation), expr, stmt)
+      ((((((_, @lex.Token::IDENTIFIER(id)), None), _), expr), _), stmt) =>
+        @types.Syntax::Let((id, @types.Type::Var({ val: None })), expr, stmt)
+      _ =>
+        // println("Invalid let statement")
         panic()
-      }
     },
   )
   .parse(tokens)
@@ -407,7 +400,7 @@ fn typeAnnotation(
 fn fnDeclStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("fnDeclStmt: " + tokens.to_string())
+  // println("fnDeclStmt: " + tokens.to_string())
   Parser(nontopFnDecl)
   .and(semicolon)
   .and(stmt)
@@ -425,7 +418,7 @@ fn fnDeclStmt(
 fn assignStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("assignStmt: " + tokens.to_string())
+  // println("assignStmt: " + tokens.to_string())
   Parser(getExpr)
   .and(ptoken_assign)
   .and(expr)
@@ -445,14 +438,14 @@ fn assignStmt(
 fn exprStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("exprStmt: " + tokens.to_string())
+  // println("exprStmt: " + tokens.to_string())
   Parser(expr).parse(tokens)
 }
 
 fn expr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("expr: " + tokens.to_string())
+  // println("expr: " + tokens.to_string())
   Parser(addSubLevelExpr).or(exprEq).or(exprLe).parse(tokens)
 }
 
@@ -493,7 +486,7 @@ fn exprLe(
 fn addSubLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("addSubLevelExpr: " + tokens.to_string())
+  // println("addSubLevelExpr: " + tokens.to_string())
   Parser(mulDivLevelExpr)
   .or(addSubLevelExprAdd)
   .or(addSubLevelExprSub)
@@ -552,7 +545,7 @@ fn addSubLevelExprSub(
 fn mulDivLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("mulDivLevelExpr: " + tokens.to_string())
+  // println("mulDivLevelExpr: " + tokens.to_string())
   Parser(ifLevelExpr)
   .or(mulDivLevelExprMul)
   .or(mulDivLevelExprDiv)
@@ -606,7 +599,7 @@ fn mulDivLevelExprDiv(
 fn ifLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("ifLevelExpr: " + tokens.to_string())
+  // println("ifLevelExpr: " + tokens.to_string())
   Parser(getOrApplyLevelExpr).or(ifExpr).parse(tokens)
 }
 
@@ -635,10 +628,9 @@ fn ifExpr(
     fn {
       (((_, expr), block_expr), Some((_, block_expr2))) =>
         @types.Syntax::If(expr, block_expr, block_expr2)
-      _ => {
-        //println("if_expr: else not handled")
+      _ =>
+        // println("if_expr: else not handled")
         panic()
-      }
     },
   )
   .parse(tokens)
@@ -647,7 +639,7 @@ fn ifExpr(
 fn getOrApplyLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("getOrApplyLevelExpr: " + tokens.to_string())
+  // println("getOrApplyLevelExpr: " + tokens.to_string())
   Parser(valueExpr).or(getExpr).or(applyExpr).parse(tokens)
 }
 
@@ -712,7 +704,7 @@ fn noEmptyApplyExpr(
 fn valueExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("valueExpr: " + tokens.to_string())
+  // println("valueExpr: " + tokens.to_string())
   Parser(unitExpr)
   .or(tupleExpr)
   .or(boolExpr)
@@ -806,7 +798,7 @@ fn negExpr(
 fn floatingPointExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("floatingPointExpr: " + tokens.to_string())
+  // println("floatingPointExpr: " + tokens.to_string())
   ptoken_number
   .and(dot)
   .zeroOrOnce(ptoken_number)
@@ -824,7 +816,7 @@ fn floatingPointExpr(
 fn intExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  //println("intExpr: " + tokens.to_string())
+  // println("intExpr: " + tokens.to_string())
   ptoken(
     fn {
       @lex.Token::NUMBER(_) => true
@@ -885,10 +877,9 @@ fn identifierExpr(
   .map(
     fn {
       @lex.Token::IDENTIFIER(id) => @types.Syntax::Var(id)
-      _ => {
-        //println("identifierExpr: not handled")
+      _ =>
+        // println("identifierExpr: not handled")
         panic()
-      }
     },
   )
   .parse(tokens)
@@ -897,7 +888,7 @@ fn identifierExpr(
 fn parseType(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Type, ArrayView[@lex.Token])? {
-  //println("parseType:" + tokens.to_string())
+  // println("parseType:" + tokens.to_string())
   ptoken(
     fn {
       @lex.Token::UNIT => true
@@ -947,7 +938,8 @@ fn arrayType(
 fn tupleType(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Type, ArrayView[@lex.Token])? {
-  lcurlybracket
+  // println("tupleType: " + tokens.to_string())
+  lparen
   .and(parseType)
   .and(
     ptoken(
@@ -959,8 +951,16 @@ fn tupleType(
     .and(parseType)
     .many(),
   )
-  .and(rbracket)
-  .map(fn { (((_, t), _), _) => @types.Type::Tuple([t]) })
+  .and(rparen)
+  .map(
+    fn {
+      (((_, t), arr_t), _) => {
+        let r_arr = arr_t.map(fn { (_, t) => t })
+        // println("tupleType: " + [t, ..r_arr].to_string())
+        @types.Type::Tuple([t, ..r_arr])
+      }
+    },
+  )
   .parse(tokens)
 }
 // function_type:
@@ -1046,15 +1046,14 @@ fn log[V](self : Parser[V]) -> Parser[V] {
   fn {
     input =>
       match self.parse(input) {
-        None => {
-          //println("None")
-          //println(input)
-          None
-        }
-        Some(_) as result => result
-          // println("Some")
+        None =>
+          // println("None")
           // println(input)
-          
+          None
+        Some(_) as result => result
+        // println("Some")
+        // println(input)
+
         // }
       }
   }
@@ -1079,7 +1078,7 @@ fn zeroOrOnce[V1, V2](
   self : Parser[V1],
   parser2 : Parser[V2]
 ) -> Parser[(V1, V2?)] {
-  //println("zeroOrOnce")
+  // println("zeroOrOnce")
   fn(input) {
     match self.parse(input) {
       Some((v1, rest)) =>
@@ -1244,7 +1243,8 @@ test {
   let tokens = []
   @lex.lex(
     {
-      str: #| let foo: Int = 1;
+      str: #| let foo: (Int, Int) = (1, 2);
+           #| let foo: Int = 1;
            #| fn bar(x: Int, y: Int) -> Int {
            #|   1
            #| };
@@ -1265,7 +1265,7 @@ test {
 test {
   let tokens = []
   @lex.lex({ str: "let x: Int = 1;", offset: 0, array: tokens })
-  //println(tokens)
+  // println(tokens)
   let (prog, _) = topLetDecl(tokens[:]).unwrap()
   println(prog)
 }
