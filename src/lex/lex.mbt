@@ -88,7 +88,7 @@ pub fn lex(context : Context) -> Unit {
     }
     ' ' | '\n' | '\t' | '\r' | '\\' => context.offset += 1
     ch =>
-      if ch >= '1' && ch <= '9' {
+      if ch >= '0' && ch <= '9' {
         let number = "\{str[offset]}"
         context.offset += 1
         lex_number_rest(context, number)

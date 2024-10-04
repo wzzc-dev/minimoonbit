@@ -13,6 +13,7 @@ fn topLevel(
 fn topLetDecl(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("topLetDecl: " + tokens.to_string())
   ptoken(
     fn {
       @lex.Token::LET => true
@@ -35,8 +36,10 @@ fn topLetDecl(
       (((((((_, @lex.Token::IDENTIFIER(id)), _), _type), _), expr), _), None) =>
         @types.Syntax::Let((id, _type), expr, @types.Syntax::Unit)
       _ =>
-        // println("Invalid top let decl declaration")
-        panic()
+        {
+          // println("Invalid top let decl declaration")
+          panic()
+        }
     },
   )
   .parse(tokens)
@@ -810,9 +813,14 @@ fn floatingPointExpr(
   .zeroOrOnce(ptoken_number)
   .map(
     fn {
-      ((NUMBER(num1), _), Some(NUMBER(num2))) =>
-        @types.Syntax::Double(num1.to_double() + num2.to_double() * 0.1)
-      _ => panic()
+      ((NUMBER(num1), _), Some(NUMBER(num2))) => {
+        let d = @strconv.parse_double?(num1.to_string() + "." + num2.to_string()).unwrap()
+        @types.Syntax::Double(d)
+      }
+      _ => {
+        // println("floatingPointExpr: not handled, input: " + tokens.to_string())
+        panic()
+      }
     },
   )
   .parse(tokens)
@@ -1249,7 +1257,9 @@ test {
   let tokens = []
   @lex.lex(
     {
-      str: #| let foo: (Int, Int) = (1, 2);
+      str: 
+           #| let bar: (Int, Double) = (1, 2.0);
+           #| let foo: (Int, Int) = (1, 2);
            #| let foo: Int = 1;
            #| fn bar(x: Int, y: Int) -> Int {
            #|   1
@@ -1270,7 +1280,7 @@ test {
 
 test {
   let tokens = []
-  @lex.lex({ str: "let x: Int = 1;", offset: 0, array: tokens })
+  @lex.lex({ str: "let bar: (Int, Double) = (1, 2.0);", offset: 0, array: tokens })
   // println(tokens)
   let (prog, _) = topLetDecl(tokens[:]).unwrap()
   println(prog)
