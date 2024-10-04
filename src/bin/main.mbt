@@ -93,7 +93,7 @@ fn CompileStatus::step(self : CompileStatus) -> Bool {
       self.ast = Some(parsed)
     }
     Typecheck => {
-      let typechecked = @util.die("TODO: typecheck")
+      let typechecked = @typing.typing(self.ast.unwrap())
       self.typechecked = Some(typechecked)
     }
     Knf => {
