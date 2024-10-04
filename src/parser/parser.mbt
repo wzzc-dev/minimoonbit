@@ -17,7 +17,7 @@ fn topLetDecl(
   ptoken(
     fn {
       @lex.Token::LET => true
-      _ => panic()
+      _ => false
     },
   )
   .and(identifier)
@@ -31,13 +31,13 @@ fn topLetDecl(
     fn {
       (
         ((((((_, @lex.Token::IDENTIFIER(id)), _), _type), _), expr), _),
-        Some(topLevel),
+        Some(topLevel)
       ) => @types.Syntax::Let((id, _type), expr, topLevel)
       (((((((_, @lex.Token::IDENTIFIER(id)), _), _type), _), expr), _), None) =>
         @types.Syntax::Let((id, _type), expr, @types.Syntax::Unit)
       _ =>
         {
-          // println("Invalid top let decl declaration")
+          println("Invalid top let decl declaration")
           panic()
         }
     },
@@ -922,28 +922,27 @@ fn parseType(
     },
   )
   .or(arrayType)
-  .or(tupleType)
   .or(functionType)
+  .or(tupleType)
   .parse(tokens)
 }
-
-// array_type: 'Array' '[' type ']';
-
-let array : Parser[@lex.Token] = ptoken(
-  fn {
-    @lex.Token::ARRAY(_) => true
-    _ => false
-  },
-)
 
 fn arrayType(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Type, ArrayView[@lex.Token])? {
-  array
+  // println("arrayType: " + tokens.to_string())
+  ptoken_array
   .and(lbracket)
   .and(parseType)
   .and(rbracket)
-  .map(fn { ((_, type_), _) => @types.Type::Array(type_) })
+  .map(
+    fn { 
+      ((_, type_), _) => {
+        // println("arrayType type_: " + type_.to_string())
+        @types.Type::Array(type_)
+      }
+    }
+  )
   .parse(tokens)
 }
 
@@ -969,8 +968,10 @@ fn tupleType(
   .map(
     fn {
       (((_, t), arr_t), _) => {
+        // println("tupleType: t: " + t.to_string())
+        // println("tupleType: arr_t: " + arr_t.to_string())
         let r_arr = arr_t.map(fn { (_, t) => t })
-        // println("tupleType: " + [t, ..r_arr].to_string())
+        // println("tupleType: [t, ..r_arr]: " + [t, ..r_arr].to_string())
         @types.Type::Tuple([t, ..r_arr])
       }
     },
@@ -990,6 +991,7 @@ let arrow : Parser[@lex.Token] = ptoken(
 fn functionType(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Type, ArrayView[@lex.Token])? {
+  // println("functionType: " + tokens.to_string())
   lparen
   .and(parseType)
   .and(
@@ -1007,7 +1009,10 @@ fn functionType(
   .and(parseType)
   .map(
     fn {
-      (((((_, type_), _), _), _), type2) => @types.Type::Fun([type_], type2)
+      (((((_, type_), arr), _), _), type2) => {
+        let arr_t = arr.map(fn { (_, t) => t })
+        @types.Type::Fun([type_, ..arr_t], type2)
+      }
     },
   )
   .parse(tokens)
@@ -1111,7 +1116,7 @@ fn Parser::ref[Value](ref : Ref[Parser[Value]]) -> Parser[Value] {
 
 let ptoken_array : Parser[@lex.Token] = ptoken(
   fn {
-    @lex.Token::ARRAY(_) => true
+    @lex.Token::ARRAY => true
     _ => false
   },
 )
@@ -1252,15 +1257,19 @@ pub fn parse_from_string(str : String) -> @types.Syntax {
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   prog
 }
-
 test {
   let tokens = []
   @lex.lex(
     {
-      str: 
+      str: #| let foo: (Int, Int) -> Int = 1;
            #| let bar: (Int, Double) = (1, 2.0);
            #| let foo: (Int, Int) = (1, 2);
            #| let foo: Int = 1;
+           #| let foo: Double = 1;
+           #| let foo: Bool = 1;
+           #| let foo: Unit = 1;
+           #| let foo: Array[Int] = Array::make(x, y);
+          //  #| let foo: (Int, Int) -> Int = fn(x, y) { x + y }
            #| fn bar(x: Int, y: Int) -> Int {
            #|   1
            #| };
@@ -1273,15 +1282,15 @@ test {
       array: tokens,
     },
   )
-  println(tokens)
+  // println(tokens)
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println(prog)
 }
 
 test {
   let tokens = []
-  @lex.lex({ str: "let bar: (Int, Double) = (1, 2.0);", offset: 0, array: tokens })
-  // println(tokens)
+  @lex.lex({ str: "let foo: Array[Int] = Array::make(x, y);", offset: 0, array: tokens })
+  println(tokens)
   let (prog, _) = topLetDecl(tokens[:]).unwrap()
   println(prog)
 }
