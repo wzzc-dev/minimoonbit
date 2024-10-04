@@ -320,20 +320,20 @@ fn letTupleStmt(
         ),
         stmt,
       ) => {
-        // let ids = [(identifier, @types.Type::Unit)]
-        // for x in identifiers {
-        //   match x {
-        //     (_, @lex.Token::IDENTIFIER(i)) => ids.push((i, @types.Type::Unit))
-        //     _ => panic()
-        //   }
-        // }
-        let mut ids = identifiers.map(
-          fn {
-            (@lex.Token::IDENTIFIER(i), _) => (i, @types.Type::Var({ val: None }))
+        let ids = []
+        for x in identifiers {
+          match x {
+            (_, @lex.Token::IDENTIFIER(i)) => ids.push((i, @types.Type::Unit))
             _ => panic()
           }
-        )
-        ids = [(identifier, @types.Type::Unit), ..ids]
+        }
+        // let mut ids = identifiers.map(
+        //   fn {
+        //     (@lex.Token::IDENTIFIER(i), _) => (i, @types.Type::Var({ val: None }))
+        //     _ => panic()
+        //   }
+        // )
+        // ids = [(identifier, @types.Type::Unit), ..ids]
         match type_annotation {
           Some(type_) => {
             match type_ {
@@ -343,7 +343,7 @@ fn letTupleStmt(
                 }
               _ => panic()
             }
-            @types.Syntax::LetTuple(ids, expr, stmt)
+            @types.Syntax::LetTuple([(identifier, @types.Type::Unit), ..ids], expr, stmt)
           }
           None => @types.Syntax::LetTuple(ids, expr, stmt)
         }
@@ -745,8 +745,14 @@ fn tupleExpr(
   .and(rparen)
   .map(
     fn {
-      ((_, [(_, expr)]), _) => @types.Syntax::Tuple([expr])
-      ((_, [] | [_, _, ..]), _) => panic()
+      (((_, first), arr), _) => {
+        let expr = arr.map(
+          fn {
+            (_, expr) => expr
+          }
+        )
+        @types.Syntax::Tuple([first, ..expr])
+      }
     },
   )
   .parse(tokens)
