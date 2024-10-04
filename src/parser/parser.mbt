@@ -28,8 +28,10 @@ fn topLetDecl(
   .zeroOrOnce(topLevel)
   .map(
     fn {
-      (((((((_, @lex.Token::IDENTIFIER(id)), _), _type), _), expr), _), Some(topLevel)) =>
-        @types.Syntax::Let((id, _type), expr, topLevel)
+      (
+        ((((((_, @lex.Token::IDENTIFIER(id)), _), _type), _), expr), _),
+        Some(topLevel),
+      ) => @types.Syntax::Let((id, _type), expr, topLevel)
       (((((((_, @lex.Token::IDENTIFIER(id)), _), _type), _), expr), _), None) =>
         @types.Syntax::Let((id, _type), expr, @types.Syntax::Unit)
       _ => {
@@ -49,17 +51,23 @@ fn toplevelFnDecl(
   .and(semicolon)
   .zeroOrOnce(topLevel)
   .map(
-    fn { 
-      (((name, args, body), _), Some(topLevel)) => @types.Syntax::LetRec({name, args, body}, topLevel)
-      (((name, args, body), _), None) => @types.Syntax::LetRec({name, args, body}, @types.Syntax::Unit) 
-    }
+    fn {
+      (((name, args, body), _), Some(topLevel)) =>
+        @types.Syntax::LetRec({ name, args, body }, topLevel)
+      (((name, args, body), _), None) =>
+        @types.Syntax::LetRec({ name, args, body }, @types.Syntax::Unit)
+    },
   )
   .parse(tokens)
 }
 
 fn mainFnDecl(
   tokens : ArrayView[@lex.Token]
-) -> (((String, @types.Type), Array[(String, @types.Type)], @types.Syntax), ArrayView[@lex.Token])? {
+) ->
+     (
+       ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
+       ArrayView[@lex.Token],
+     )? {
   ptoken(
     fn {
       @lex.Token::FN => true
@@ -76,7 +84,12 @@ fn mainFnDecl(
     ),
   )
   .and(fnBody)
-  .map(fn { (_, fnBody) => (("main", @types.Type::Unit), [], fnBody) })
+  .map(
+    fn {
+      (_, fnBody) =>
+        (("main", @types.Type::Fun([], @types.Type::Unit)), [], fnBody)
+    },
+  )
   .parse(tokens)
 }
 
@@ -85,7 +98,11 @@ fn mainFnDecl(
 
 fn topFnDecl(
   tokens : ArrayView[@lex.Token]
-) -> (((String, @types.Type), Array[(String, @types.Type)], @types.Syntax), ArrayView[@lex.Token])? {
+) ->
+     (
+       ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
+       ArrayView[@lex.Token],
+     )? {
   println("top_fn_decl")
   ptoken_fn
   .and(identifier)
@@ -105,11 +122,12 @@ fn topFnDecl(
             type_,
           ),
           fnBody,
-        ) =>
-            ((id, type_), param_list, fnBody)
+        ) => {
+          let fun_type = param_list.map(fn { (_, type_) => type_ })
+          ((id, @types.Fun(fun_type, type_)), param_list, fnBody)
+        }
         (((((((_, @lex.Token::IDENTIFIER(id)), _), None), _), _), type_), fnBody
-        ) =>
-          ((id, type_), [], fnBody)
+        ) => ((id, @types.Fun([], type_)), [], fnBody)
         _ => {
           println("Invalid top fn dec declaration")
           println(tokens)
@@ -350,14 +368,24 @@ fn letStmt(
   .map(
     fn {
       (
-        (((((_, @lex.Token::IDENTIFIER(id)), type_annotation), _), expr), _),
+        (((((_, @lex.Token::IDENTIFIER(id)), Some(type_annotation)), _), expr), _),
         stmt,
       ) =>
         @types.Syntax::Let(
-          (id, @types.Type::Var({ val: type_annotation })),
+          (id, type_annotation),
           expr,
           stmt,
         )
+      (
+        (((((_, @lex.Token::IDENTIFIER(id)), None), _), expr), _),
+        stmt,
+      ) =>
+        @types.Syntax::Let(
+          (id, @types.Type::Var({val: None})),
+          expr,
+          stmt,
+        )
+        
       _ => {
         println("Invalid let statement")
         panic()
@@ -1217,7 +1245,7 @@ test {
   @lex.lex(
     {
       str: #| let foo: Int = 1;
-           #| fn bar() -> Int {
+           #| fn bar(x: Int, y: Int) -> Int {
            #|   1
            #| };
            #| fn main {
