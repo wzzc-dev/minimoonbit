@@ -89,7 +89,7 @@ fn CompileStatus::step(self : CompileStatus) -> Bool {
   match self.curr_stage {
     Parse => {
       let source_code = self.source_code.unwrap()
-      let parsed = @util.die("TODO: parse")
+      let parsed = @parser.parse_from_string(source_code)
       self.ast = Some(parsed)
     }
     Typecheck => {
@@ -225,7 +225,7 @@ fn main {
             let i = @strconv.parse_int?(s)
             match i {
               Ok(i) => knf_opt_iters.val = i
-              Err(e) => @util.die("Invalid number")
+              Err(_) => @util.die("Invalid number")
             }
           },
         ),
@@ -239,7 +239,7 @@ fn main {
             let i = @strconv.parse_int?(s)
             match i {
               Ok(i) => knf_opt_inline_threshold.val = i
-              Err(e) => @util.die("Invalid number")
+              Err(_) => @util.die("Invalid number")
             }
           },
         ),
