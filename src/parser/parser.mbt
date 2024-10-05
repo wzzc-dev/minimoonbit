@@ -7,6 +7,7 @@ fn program(
 fn topLevel(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("topLevel: " + tokens.to_string())
   Parser(toplevelFnDecl).or(topLetDecl).parse(tokens)
 }
 
@@ -193,8 +194,8 @@ fn fnBody(
   .map(
     fn {
       ((_, stmt), _) => stmt
-      // println("stmt :")
-      // println(stmt)
+      // {
+      //   println("stmt :" + stmt.to_string())
       //   stmt
       // }
     },
@@ -449,7 +450,7 @@ fn expr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("expr: " + tokens.to_string())
-  Parser(addSubLevelExpr).or(exprEq).or(exprLe).parse(tokens)
+  Parser(exprEq).or(exprLe).or(addSubLevelExpr).parse(tokens)
 }
 
 fn exprEq(
@@ -481,18 +482,13 @@ fn exprLe(
   .parse(tokens)
 }
 
-// add_sub_level_expr:
-//  mul_div_level_expr
-//  | mul_div_level_expr '+' add_sub_level_expr
-//  | mul_div_level_expr '-' add_sub_level_expr;
-
 fn addSubLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("addSubLevelExpr: " + tokens.to_string())
-  Parser(mulDivLevelExpr)
-  .or(addSubLevelExprAdd)
-  .or(addSubLevelExprSub)
+  Parser(addSubLevelExprAdd)
+  .or(addSubLevelExprSub)  
+  .or(mulDivLevelExpr)
   .parse(tokens)
 }
 
@@ -506,6 +502,7 @@ let ptoken_plus : Parser[@lex.Token] = ptoken(
 fn addSubLevelExprAdd(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("addSubLevelExprAdd: " + tokens.to_string())
   Parser(mulDivLevelExpr)
   .and(ptoken_plus)
   .and(addSubLevelExpr)
@@ -549,9 +546,9 @@ fn mulDivLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("mulDivLevelExpr: " + tokens.to_string())
-  Parser(ifLevelExpr)
-  .or(mulDivLevelExprMul)
+  Parser(mulDivLevelExprMul)
   .or(mulDivLevelExprDiv)
+  .or(ifLevelExpr)
   .parse(tokens)
 }
 
@@ -649,6 +646,7 @@ fn getOrApplyLevelExpr(
 fn getExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("getExpr: " + tokens.to_string())
   Parser(valueExpr)
   .and(lbracket)
   .and(expr)
@@ -662,7 +660,8 @@ fn getExpr(
 fn applyExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  Parser(emptyApplyExpr).or(noEmptyApplyExpr).parse(tokens)
+  // println("applyExpr: " + tokens.to_string())
+  Parser(noEmptyApplyExpr).or(emptyApplyExpr).parse(tokens)
 }
 
 fn emptyApplyExpr(
@@ -749,6 +748,10 @@ fn tupleExpr(
   .map(
     fn {
       (((_, first), arr), _) => {
+        // println("tuple_expr: " + arr.to_string())
+        if(arr.is_empty()){
+          return first
+        }
         let expr = arr.map(
           fn {
             (_, expr) => expr
@@ -839,8 +842,14 @@ fn intExpr(
   )
   .map(
     fn {
-      NUMBER(num) => @types.Syntax::Int(num)
-      _ => panic()
+      NUMBER(num) =>{
+        // println("intExpr: " + num.to_string())
+        @types.Syntax::Int(num)
+      }
+      _ => {
+        // println("intExpr: not handled, input: " + tokens.to_string())
+        panic()
+      }
     },
   )
   .parse(tokens)
@@ -1261,22 +1270,24 @@ test {
   let tokens = []
   @lex.lex(
     {
-      str: #| let foo: (Int, Int) -> Int = 1;
-           #| let bar: (Int, Double) = (1, 2.0);
-           #| let foo: (Int, Int) = (1, 2);
-           #| let foo: Int = 1;
-           #| let foo: Double = 1;
-           #| let foo: Bool = 1;
-           #| let foo: Unit = 1;
-           #| let foo: Array[Int] = Array::make(x, y);
-          //  #| let foo: (Int, Int) -> Int = fn(x, y) { x + y }
-           #| fn bar(x: Int, y: Int) -> Int {
-           #|   1
-           #| };
-           #| fn main {
-           #|    let x: Int = 1;
-           #|    ()
-           #| };
+      str: 
+          //  #| let sum:Int = 1 + 1;
+          //  #| let foo: (Int, Int) -> Int = 1;
+          //  #| let bar: (Int, Double) = (1, 2.0);
+          //  #| let foo: (Int, Int) = (1, 2);
+          //  #| let foo: Int = 1;
+          //  #| let foo: Double = 1;
+          //  #| let foo: Bool = 1;
+          //  #| let foo: Unit = 1;
+          //  #| let foo: Array[Int] = Array::make(x, y);
+          // //  #| let foo: (Int, Int) -> Int = fn(x, y) { x + y }
+          //  #| fn bar(x: Int, y: Int) -> Int {
+          //  #|   1
+          //  #| };
+          //  #| fn main {
+           #|    let x: Int = (1 + 1) * 1;
+          //  #|    println(x)
+          //  #| };
       ,
       offset: 0,
       array: tokens,
