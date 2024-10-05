@@ -584,6 +584,7 @@ let ptoken_slash : Parser[@lex.Token] = ptoken(
 fn mulDivLevelExprDiv(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("mulDivLevelExprDiv: " + tokens.to_string())
   Parser(ifLevelExpr)
   .and(ptoken_slash)
   .and(mulDivLevelExpr)
@@ -640,7 +641,7 @@ fn getOrApplyLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("getOrApplyLevelExpr: " + tokens.to_string())
-  Parser(valueExpr).or(getExpr).or(applyExpr).parse(tokens)
+  Parser(getExpr).or(applyExpr).or(valueExpr).parse(tokens)
 }
 
 fn getExpr(
@@ -677,6 +678,7 @@ fn emptyApplyExpr(
 fn noEmptyApplyExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("noEmptyApplyExpr: " + tokens.to_string())
   Parser(valueExpr)
   .and(lparen)
   .and(expr)
@@ -1284,10 +1286,11 @@ test {
           //  #| fn bar(x: Int, y: Int) -> Int {
           //  #|   1
           //  #| };
-          //  #| fn main {
-           #|    let x: Int = (1 + 1) * 1;
-          //  #|    println(x)
-          //  #| };
+           #| fn main {
+           #|    let x: Int = (1 + 1) * (1 / 1);
+           #|    println(x)
+          //  #|   ()
+           #| };
       ,
       offset: 0,
       array: tokens,
