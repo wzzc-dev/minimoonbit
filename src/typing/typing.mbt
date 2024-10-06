@@ -1,7 +1,7 @@
 type! TyErr String
 
 fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
-  // println("unify:" + t1.to_string() + " t2: " + t2.to_string())
+  println("unify:" + t1.to_string() + " t2: " + t2.to_string())
   let t1 = t1.repr()
   let t2 = t2.repr()
   if physical_equal(t1, t2) {
@@ -12,6 +12,7 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
     (Var(t), ty) | (ty, Var(t)) =>
       match t.val {
         None => {
+          println("match (t1, t2) {  t1: " + t1.to_string() + " ty: " + ty.to_string())
           check_occur!(t1, ty)
           t.val = Some(ty)
         }
@@ -34,19 +35,30 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
 }
 
 fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
-  if physical_equal(t1, t2) {
-    raise TyErr("check_occur: occurs check failed")
-  }
   match (t1, t2) {
-    (Var(t1), Var(t2)) => check_occur!(t1.val.unwrap(), t2.val.unwrap())
-    (Var(t1), Array(Var(ty))) | (Array(Var(ty)), Var(t1)) =>
-      check_occur!(t1.val.unwrap(), ty.val.unwrap())
-    (Tuple(tys), Var(t1)) | (Var(t1), Tuple(tys)) =>
+    (Var(ty1), Var(ty2)) => {
+      if(physical_equal(t1, t2)) {
+        raise TyErr("occurs check error")
+      }
+      check_occur!(ty1.val.unwrap(), ty2.val.unwrap())
+    }
+    (Var(ty1), Array(Var(ty))) | (Array(Var(ty)), Var(ty1)) =>{
+      if (physical_equal(t1, t2)) {
+        raise TyErr("occurs check error")
+      }
+      check_occur!(ty1.val.unwrap(), ty.val.unwrap())}
+    (Tuple(tys), Var(ty1)) | (Var(ty1), Tuple(tys)) =>
       for ty in tys {
-        check_occur!(t1.val.unwrap(), ty)
+        if (physical_equal(t1, ty)) {
+          raise TyErr("occurs check error")
+        }
+        check_occur!(ty1.val.unwrap(), ty)
       }
     (Fun(tys, Var(ty)), Var(t1)) | (Var(t1), Fun(tys, Var(ty))) => {
       for t in tys {
+        if (physical_equal(t, t1.val.unwrap())) {
+          raise TyErr("occurs check error")
+        }
         check_occur!(Var(t1), t)
       }
       check_occur!(t1.val.unwrap(), ty.val.unwrap())
@@ -58,7 +70,7 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
 type LocalCtx @immut/sorted_map.T[String, @types.Type]
 
 fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
-  // println("infer:" + e.to_string())
+  println("infer:" + e.to_string())
   match e {
     Unit => Unit
     Bool(_) => Bool
@@ -341,7 +353,7 @@ pub fn typing(e : @types.Syntax) -> @types.Syntax {
   // println("program: " + e.to_string())
   try {
     unify!(Unit, infer!(@immut/sorted_map.empty(), e))
-    // println("type check ok")
+    println("type check ok")
     // println("extenv: " + extenv.to_string())
     // println("typed program: " + e.to_string())
     for ext_f, ext_t in extenv {
@@ -367,10 +379,10 @@ test "typing" {
     #| };
   let test2 =
     #| fn main {
-    #|    fn f(x: Int) -> (Int, Int) {
+    #|    fn f(x) -> (Int, Int) {
     #|      (x, x)
     #|    };
-    #|    f(1)
+    #|    ()
     //#| fn main {
     // #| let sum:Int = 1 + 1;
     //  #| let foo: (Int, Int) -> Int = 1;
