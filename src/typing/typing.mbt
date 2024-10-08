@@ -1,7 +1,7 @@
 type! TyErr String
 
 fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
-  println("unify:" + t1.to_string() + " t2: " + t2.to_string())
+  // println("unify:" + t1.to_string() + " t2: " + t2.to_string())
   let t1 = t1.repr()
   let t2 = t2.repr()
   if physical_equal(t1, t2) {
@@ -12,9 +12,19 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
     (Var(t), ty) | (ty, Var(t)) =>
       match t.val {
         None => {
-          println("match (t1, t2) {  t1: " + t1.to_string() + " ty: " + ty.to_string())
+          // println(
+          //   "match (t1, t2) {  t1: " + t1.to_string() + " ty: " + ty.to_string(),
+          // )
           check_occur!(t1, ty)
           t.val = Some(ty)
+          // println(
+          //   "unify! done" +
+          //   " t.val: " +
+          //   t.val.to_string() +
+          //   " Some(ty): " +
+          //   Some(ty).to_string() +
+          //   "",
+          // )
         }
         _ => ()
       }
@@ -30,34 +40,46 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
       unify!(ty1, ty2)
     }
     //  .. // handle the function, tuple, and array type  
-    _ => raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
+    _ =>
+      raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
   }
 }
 
 fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
+  // println("check_occur:" + t1.to_string() + " t2: " + t2.to_string())
   match (t1, t2) {
     (Var(ty1), Var(ty2)) => {
-      if(physical_equal(t1, t2)) {
-        raise TyErr("occurs check error")
+      if physical_equal(t1, t2) {
+        raise TyErr(
+          "occurs check error, t1" + t1.to_string() + ", t2:" + t2.to_string(),
+        )
       }
       check_occur!(ty1.val.unwrap(), ty2.val.unwrap())
     }
-    (Var(ty1), Array(Var(ty))) | (Array(Var(ty)), Var(ty1)) =>{
-      if (physical_equal(t1, t2)) {
-        raise TyErr("occurs check error")
+    (Var(ty1), Array(Var(ty))) | (Array(Var(ty)), Var(ty1)) => {
+      if physical_equal(t1, t2) {
+        raise TyErr(
+          "occurs check error, t1" + t1.to_string() + ", t2:" + t2.to_string(),
+        )
       }
-      check_occur!(ty1.val.unwrap(), ty.val.unwrap())}
+      check_occur!(ty1.val.unwrap(), ty.val.unwrap())
+    }
     (Tuple(tys), Var(ty1)) | (Var(ty1), Tuple(tys)) =>
       for ty in tys {
-        if (physical_equal(t1, ty)) {
-          raise TyErr("occurs check error")
+        match ty {
+          Var(t) =>
+            if physical_equal(t, ty1) {
+              raise TyErr("check_self_ref between Tvar and Fun[TVar]")
+            } else {
+              check_occur!(ty1.val.unwrap(), ty)
+            }
+          _ => ()
         }
-        check_occur!(ty1.val.unwrap(), ty)
       }
     (Fun(tys, Var(ty)), Var(t1)) | (Var(t1), Fun(tys, Var(ty))) => {
       for t in tys {
-        if (physical_equal(t, t1.val.unwrap())) {
-          raise TyErr("occurs check error")
+        if physical_equal(t, t1.val.unwrap()) {
+          raise TyErr("occurs check between Tvar and Fun[TVar]")
         }
         check_occur!(Var(t1), t)
       }
@@ -70,12 +92,12 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
 type LocalCtx @immut/sorted_map.T[String, @types.Type]
 
 fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
-  println("infer:" + e.to_string())
   match e {
     Unit => Unit
     Bool(_) => Bool
     Int(_) => Int
     Double(_) => Double
+    // eg.
     Var(x) =>
       match ctx._[x] {
         Some(t) => t.repr()
@@ -96,32 +118,29 @@ fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
       }
       Tuple(result)
     }
-    Not(e) =>
-      match infer!(ctx, e) {
+    Not(syn) =>
+      match infer!(ctx, syn) {
         Bool => Bool
-        _ => raise TyErr("not type error")
+        _ => raise TyErr("The operand of Not is not a bool value")
       }
-    Array(e1, e2) => {
-      let t1 = infer!(ctx, e1)
-      if t1 != Int {
-        raise TyErr("array type error")
+    Array(n, syn) =>
+      match infer!(ctx, n) {
+        Int => Array(infer!(ctx, syn))
+        _ => raise TyErr("The operand of Array is not a int value")
       }
-      Array(infer!(ctx, e2))
-    }
-    Neg(e1, ..) as neg => {
-      let r = infer!(ctx, e1)
-      match r {
+    Neg(syn, ..) as neg =>
+      match infer!(ctx, syn) {
         Int => {
-          neg.kind = Some(@types.Kind::Int)
+          neg.kind = Some(Int)
           Int
         }
         Double => {
-          neg.kind = Some(@types.Kind::Double)
+          neg.kind = Some(Double)
           Double
         }
-        _ => raise TyErr("neg type error")
+        _ => raise TyErr("The operand of Neg is not a int or double value")
       }
-    }
+    // eg.
     App(f, args) => {
       let ret_ty = @types.Type::new_tvar()
       let f_ty = infer!(ctx, f)
@@ -132,105 +151,92 @@ fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
       unify!(f_ty, Fun(args_ty, ret_ty))
       ret_ty
     }
-    Get(e1, e2) => {
-      let t2 = infer!(ctx, e2)
-      if t2 != Array(Int) {
-        raise TyErr("get type error")
+    Get(arr, index) =>
+      match infer!(ctx, index) {
+        Int =>
+          match infer!(ctx, arr) {
+            Array(t) => t
+            _ => raise TyErr("The operand of Get should have Type Array")
+          }
+        _ => raise TyErr("The index of Get should have Type Int")
       }
-      let t1 = infer!(ctx, e1)
-      unify!(t1, Array(t2))
-      t1
-    }
-    If(e1, e2, e3) => {
-      let t1 = infer!(ctx, e1)
-      if t1 != Bool {
-        raise TyErr("if type error")
+    If(condition, b1, b2) =>
+      match infer!(ctx, condition) {
+        Bool =>
+          if infer!(ctx, b1) == infer!(ctx, b2) {
+            return infer!(ctx, b1)
+          } else {
+            raise TyErr("The branchs of If should have same type")
+          }
+        _ => raise TyErr("The condition of If should have Type Bool")
       }
-      let t2 = infer!(ctx, e2)
-      let t3 = infer!(ctx, e3)
-      if t2 != t3 {
-        raise TyErr("if type error")
-      }
-      t2
-    }
-    Prim(e1, e2, _, ..) as prim => {
-      let t1 = infer!(ctx, e1)
-      let t2 = infer!(ctx, e2)
-      match (t1, t2) {
+    Prim(l, r, _, ..) as prim =>
+      match (infer!(ctx, l), infer!(ctx, r)) {
         (Int, Int) => {
-          prim.kind = Some(@types.Kind::Int)
+          prim.kind = Some(Int)
           Int
         }
         (Double, Double) => {
-          prim.kind = Some(@types.Kind::Double)
+          prim.kind = Some(Double)
           Double
         }
-        (Var(t1), Var(t2)) =>
-          match (t1.val.unwrap(), t2.val.unwrap()) {
-            (Int, Int) => Int
-            (Double, Double) => Double
-            _ => raise TyErr("prim type error")
-          }
-        _ => raise TyErr("prim type error")
+        (Var(t), Int) | (Int, Var(t)) => {
+          t.val = Some(Double)
+          prim.kind = Some(Int)
+          Int
+        }
+        (Var(t), Double) | (Double, Var(t)) => {
+          t.val = Some(Double)
+          prim.kind = Some(Double)
+          Double
+        }
+        (Var(_), Var(_)) => {
+          prim.kind = Some(Int)
+          Int
+        }
+        _ => raise TyErr("The operands of Prim should have same type")
       }
-    }
-    Eq(e1, e2) => {
-      let t1 = infer!(ctx, e1)
-      let t2 = infer!(ctx, e2)
-      match (t1, t2) {
+    Eq(l, r) =>
+      match (infer!(ctx, l), infer!(ctx, r)) {
         (Int, Int) | (Double, Double) => Bool
-        (Var(t1), Int) | (Int, Var(t1)) => {
-          t1.val = Some(Int)
+        (Var(t), Int) | (Int, Var(t)) => {
+          t.val = Some(Int)
           Bool
         }
-        (Var(t1), Double) | (Double, Var(t1)) => {
-          t1.val = Some(Double)
+        (Var(t), Double) | (Double, Var(t)) => {
+          t.val = Some(Double)
           Bool
         }
-        (Var(t1), Var(t2)) =>
-          match (t1.val.unwrap(), t2.val.unwrap()) {
-            (Int, Int) | (Double, Double) => Bool
-            _ => raise TyErr("eq type error")
-          }
-        _ => raise TyErr("eq type error")
+        _ => raise TyErr("The operands of Eq should have same type")
       }
-    }
-    LE(e1, e2) => {
-      let t1 = infer!(ctx, e1)
-      let t2 = infer!(ctx, e2)
-      match (t1, t2) {
+    LE(l, r) =>
+      match (infer!(ctx, l), infer!(ctx, r)) {
         (Int, Int) | (Double, Double) => Bool
-        (Var(t1), Int) | (Int, Var(t1)) => {
-          t1.val = Some(Int)
+        (Var(t), Int) | (Int, Var(t)) => {
+          t.val = Some(Int)
           Bool
         }
-        (Var(t1), Double) | (Double, Var(t1)) => {
-          t1.val = Some(Int)
+        (Var(t), Double) | (Double, Var(t)) => {
+          t.val = Some(Double)
           Bool
         }
-        (Var(t1), Var(t2)) =>
-          match (t1.val.unwrap(), t2.val.unwrap()) {
-            (Int, Int) | (Double, Double) => Bool
-            _ => raise TyErr("le type error")
-          }
-        _ => raise TyErr("le type error")
+        _ => raise TyErr("The operands of LE should have same type")
       }
-    }
-    Let((name, ty), e1, e2) =>
+    Let((name, ty), value, s1) =>
       match ty {
         Var({ val: None }) => {
-          let t = infer!(ctx, e1)
+          let t = infer!(ctx, value)
           unify!(ty, t)
-          let ctx_with_name = ctx._.insert(name, t)
-          infer!(ctx_with_name, e1)
+          let newctx = ctx._.insert(name, t)
+          infer!(newctx, s1)
         }
         _ => {
-          let t = infer!(ctx, e1)
+          let t = infer!(ctx, value)
           if t == ty {
-            let newctx = ctx._.insert(name, t)
-            infer!(newctx, e2)
+            let newctx = ctx._.insert(name, ty)
+            infer!(newctx, s1)
           } else {
-            raise TyErr("let type error")
+            raise TyErr("The value and expression types in Let are different")
           }
         }
       }
@@ -245,28 +251,47 @@ fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
       unify!(t, Fun(params_ty, body_ty))
       infer!(env_with_f, rest)
     }
-    LetTuple(vars_types, e1, e2) => {
-      let tys = vars_types.map(fn { (_, t) => deref_type(t) })
-      match e1 {
-        Tuple(tys1) => {
-          if tys.length() != tys1.length() {
-            raise TyErr("let tuple type error")
+    LetTuple(arr, s1, s2) =>
+      match arr[0].1 {
+        Var({ val: None }) =>
+          match s1 {
+            Tuple(arr_tup) => {
+              let mut newctx = ctx
+              for i, value in arr {
+                let t = infer!(ctx, arr_tup[i])
+                unify!(value.1, t)
+                newctx = ctx._.insert(value.0, t)
+              }
+              infer!(newctx, s2)
+            }
+            _ => raise TyErr("The first operand of LetTuple should be tuple")
           }
-          let mut new_ctx = ctx
-          for i, ty1 in tys {
-            let t = infer!(ctx, tys1[i])
-            unify!(ty1, t)
-            new_ctx = ctx._.insert(vars_types[i].0, ty1)
+        _ =>
+          match s1 {
+            Tuple(arr_tup) => {
+              let mut newctx = ctx
+              for i, value in arr {
+                let t = infer!(ctx, arr_tup[i])
+                if value.1 == t {
+                  newctx = ctx._.insert(value.0, t)
+                } else {
+                  raise TyErr("The types of tuple and array are different")
+                }
+              }
+              infer!(newctx, s2)
+            }
+            _ => raise TyErr("The first operand of LetTuple should be tuple")
           }
-          infer!(new_ctx, e2)
-        }
-        _ => raise TyErr("let tuple type error")
       }
-    }
-    Put(name, _, value) =>
+    Put(name, n, value) =>
       match name {
-        Var(_) => infer!(ctx, value)
-        _ => raise TyErr("put type error")
+        Get(_, _) =>
+          if infer!(ctx, name) == infer!(ctx, n) {
+            infer!(ctx, value)
+          } else {
+            raise TyErr("The operand of Put should have same type")
+          }
+        _ => raise TyErr("The operand of Put should be Get")
       }
   }
 }
@@ -350,10 +375,10 @@ pub let extenv : Map[String, @types.Type] = {
 }
 
 pub fn typing(e : @types.Syntax) -> @types.Syntax {
-  // println("program: " + e.to_string())
+  println("program: " + e.to_string())
   try {
     unify!(Unit, infer!(@immut/sorted_map.empty(), e))
-    println("type check ok")
+    // println("type check ok")
     // println("extenv: " + extenv.to_string())
     // println("typed program: " + e.to_string())
     for ext_f, ext_t in extenv {
@@ -362,7 +387,7 @@ pub fn typing(e : @types.Syntax) -> @types.Syntax {
     deref_term(e)
   } catch {
     TyErr(s) => {
-      println("type error: " + s)
+      println("typeing error: " + s)
       return e
     }
   }
@@ -378,10 +403,14 @@ test "typing" {
     // #|  ()
     #| };
   let test2 =
-    #| fn main {
-    #|    fn f(x) -> (Int, Int) {
+    #|  fn test(x: Int) -> Int {
+    #|    x + 1
+    #|  };
+    #|  fn main {
+    #|    fn f(x: Int) {
     #|      (x, x)
     #|    };
+    #|    let fnx = f(1);
     #|    ()
     //#| fn main {
     // #| let sum:Int = 1 + 1;
@@ -399,8 +428,12 @@ test "typing" {
     //  #| };
     //  #|    let x: Int = (1 + 1) * (1 / 1);
     #| };
+    #|
+  let tests = [test2]
   // println(tokens)
-  let ast = @parser.parse_from_string(test2)
-  println(ast)
-  println(typing(ast))
+  for test_ in tests {
+    let ast = @parser.parse_from_string(test_)
+    println(ast)
+    println(typing(ast))
+  }
 }
