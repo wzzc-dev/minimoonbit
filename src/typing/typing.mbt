@@ -1,4 +1,4 @@
-type! TyErr String
+type! TyErr String derive(ToJson)
 
 fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
   // println("unify:" + t1.to_string() + " t2: " + t2.to_string())
@@ -28,18 +28,20 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
         }
         _ => ()
       }
+    // handle the array type 
     (Array(t1), Array(t2)) => unify!(t1, t2)
+    // handle the tuple
     (Tuple(tys1), Tuple(tys2)) =>
       for i, ty in tys1 {
         unify!(ty, tys2[i])
       }
+    // handle the function
     (Fun(tys1, ty1), Fun(tys2, ty2)) => {
       for i, ty in tys1 {
         unify!(ty, tys2[i])
       }
       unify!(ty1, ty2)
     }
-    //  .. // handle the function, tuple, and array type  
     _ =>
       raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
   }
@@ -69,7 +71,9 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
         match ty {
           Var(t) =>
             if physical_equal(t, ty1) {
-              raise TyErr("check_self_ref between Tvar and Fun[TVar]")
+              raise TyErr(
+                "The type of tuple element should not be a type variable ",
+              )
             } else {
               check_occur!(ty1.val.unwrap(), ty)
             }
@@ -79,11 +83,15 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
     (Fun(tys, Var(ty)), Var(t1)) | (Var(t1), Fun(tys, Var(ty))) => {
       for t in tys {
         if physical_equal(t, t1.val.unwrap()) {
-          raise TyErr("occurs check between Tvar and Fun[TVar]")
+          raise TyErr("The type of function should not be a type variable")
         }
-        check_occur!(Var(t1), t)
+        check_occur!(t1.val.unwrap(), t)
       }
-      check_occur!(t1.val.unwrap(), ty.val.unwrap())
+      if physical_equal(ty, t1) {
+        raise TyErr("The type of function should not be a type variable")
+      } else {
+        check_occur!(t1.val.unwrap(), ty.val.unwrap())
+      }
     }
     _ => ()
   }
@@ -92,6 +100,7 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
 type LocalCtx @immut/sorted_map.T[String, @types.Type]
 
 fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
+  // println("infer: " + e.to_string())
   match e {
     Unit => Unit
     Bool(_) => Bool
@@ -142,6 +151,7 @@ fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
       }
     // eg.
     App(f, args) => {
+      // println("App: " + f.to_string() + " args: " + args.to_string())
       let ret_ty = @types.Type::new_tvar()
       let f_ty = infer!(ctx, f)
       let args_ty = []
@@ -181,7 +191,7 @@ fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
           Double
         }
         (Var(t), Int) | (Int, Var(t)) => {
-          t.val = Some(Double)
+          t.val = Some(Int)
           prim.kind = Some(Int)
           Int
         }
@@ -374,23 +384,15 @@ pub let extenv : Map[String, @types.Type] = {
   "atan": Fun([Double], Double),
 }
 
-pub fn typing(e : @types.Syntax) -> @types.Syntax {
-  println("program: " + e.to_string())
-  try {
-    unify!(Unit, infer!(@immut/sorted_map.empty(), e))
-    // println("type check ok")
-    // println("extenv: " + extenv.to_string())
-    // println("typed program: " + e.to_string())
-    for ext_f, ext_t in extenv {
-      extenv[ext_f] = deref_type(ext_t)
-    }
-    deref_term(e)
-  } catch {
-    TyErr(s) => {
-      println("typeing error: " + s)
-      return e
-    }
+pub fn typing(e : @types.Syntax) -> @types.Syntax!TyErr {
+  unify!(Unit, infer!(@immut/sorted_map.empty(), e))
+  // println("type check ok")
+  // println("extenv: " + extenv.to_string())
+  // println("typed program: " + e.to_string())
+  for ext_f, ext_t in extenv {
+    extenv[ext_f] = deref_type(ext_t)
   }
+  deref_term(e)
 }
 
 test "typing" {
@@ -407,8 +409,8 @@ test "typing" {
     #|    x + 1
     #|  };
     #|  fn main {
-    #|    fn f(x: Int) {
-    #|      (x, x)
+    #|    fn f(x) {
+    #|      x + 1
     #|    };
     #|    let fnx = f(1);
     #|    ()
@@ -434,6 +436,15 @@ test "typing" {
   for test_ in tests {
     let ast = @parser.parse_from_string(test_)
     println(ast)
-    println(typing(ast))
+    try {
+      let result = typing!(ast)
+      println(result)
+    } catch {
+      TyErr(s) => {
+        println("typing error")
+        println(s)
+      }
+    }
+    // println(result.unwrap())
   }
 }
