@@ -103,25 +103,25 @@ pub fn Type::op_equal(self : Type, other : Type) -> Bool {
     _ => false
   }
 }
+
 pub fn Type::repr(self : Type) -> Type {
   match self {
-    Var(ty) as tvar => {
+    Var(ty) as tvar =>
       match ty.val {
         Some(ty1) => {
-          let t1 = ty1.repr();
-          ty.val = Some(t1);
+          let t1 = ty1.repr()
+          ty.val = Some(t1)
           t1
         }
         None => tvar
       }
-    }
-    Fun(xs, x) => Fun(xs.map(fn{t=>t.repr()}), x.repr())
-    Tuple(xs) => Tuple(xs.map(fn{t=>t.repr()}))
+    Fun(xs, x) => Fun(xs.map(fn { t => t.repr() }), x.repr())
+    Tuple(xs) => Tuple(xs.map(fn { t => t.repr() }))
     Array(x) => Array(x.repr())
     ty => ty
   }
 }
 
 pub fn Type::new_tvar() -> Type {
-  Var({val : None})
+  Var({ val: None })
 }
