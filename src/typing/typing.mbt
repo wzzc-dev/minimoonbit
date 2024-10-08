@@ -83,9 +83,15 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
         }
         check_occur!(Var(t1), t)
       }
-      check_occur!(t1.val.unwrap(), ty.val.unwrap())
+      match @types.Type::Var(ty) {
+        ty =>
+          if physical_equal(ty, t1.val.unwrap()) {
+            raise TyErr("check_self_ref between Tvar and Fun[TVar]")
+          } else {
+            check_occur!(t1.val.unwrap(), ty)
+          }
+      }
     }
-    _ => ()
   }
 }
 

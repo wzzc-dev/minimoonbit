@@ -29,5 +29,20 @@ fn KnfEnv::new_named_temp(self : KnfEnv, name : Name) -> Name {
 }
 
 pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf { // !Failure
-  abort("todo")
+  match s {
+    Var(x) => Knf::Var(@types.from_string?(x).unwrap())
+    // Add(a, b, ty) => {
+    //   let a_name = generate_name()                  //_1
+    //   let b_name = generate_name()                  //_2
+    //   KnfLet(a_name, ty, expr_to_knf(env, a),    // let _1 = <a>
+    //     KnfLet(b_name, ty, expr_to_knf(env, b),   //let _2 = <b>
+    //       KnfAdd(a_name, b_name)))                //_1 + _2
+    // }
+    // Let((x, t), expr, cont) => {
+    //   let new_env = env.add(x, t)
+    //   Let((x, t), expr_to_knf(env, expr),     //   let x: T = <expr> in
+    //     expr_to_knf(new_env, cont))             //    <cont>
+    // }
+    _ => Knf::Unit
+  }
 }
