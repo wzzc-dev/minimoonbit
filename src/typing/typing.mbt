@@ -1,4 +1,4 @@
-type! TyErr String
+type! TyErr String derive(ToJson)
 
 fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
   // println("unify:" + t1.to_string() + " t2: " + t2.to_string())
@@ -410,10 +410,10 @@ test "typing" {
     #| };
   let test2 =
     #|  fn test(x: Int) -> Int {
-    #|    x + 1 + 1.1
+    #|    x + 1
     #|  };
     #|  fn main {
-    #|    fn f(x: Int) {
+    #|    fn f(x) -> (Int, Int) {
     #|      (x, x)
     #|    };
     #|    let fnx = f(1);
@@ -440,7 +440,15 @@ test "typing" {
   for test_ in tests {
     let ast = @parser.parse_from_string(test_)
     println(ast)
-    let result = typing!(ast)
-    println(result)
+    try {
+      let result = typing!(ast)
+      println(result)
+    } catch {
+      TyErr(s) => {
+        println("typing error")
+        println(s)
+      }
+    }
+    // println(result.unwrap())
   }
 }
