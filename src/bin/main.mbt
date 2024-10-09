@@ -93,8 +93,8 @@ fn CompileStatus::step(self : CompileStatus) -> Bool {
       self.ast = Some(parsed)
     }
     Typecheck => {
-      let typechecked = @typing.typing?(self.ast.unwrap())
-      self.typechecked = Some(typechecked.unwrap())
+      let typechecked = @typing.typing(self.ast.unwrap())
+      self.typechecked = Some(typechecked)
     }
     Knf => {
       let knf = self.knf_env.to_knf(self.typechecked.unwrap())
