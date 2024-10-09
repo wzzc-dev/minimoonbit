@@ -387,22 +387,15 @@ pub let extenv : Map[String, @types.Type] = {
   "atan": Fun([Double], Double),
 }
 
-pub fn typing(e : @types.Syntax) -> @types.Syntax {
-  try {
-    unify!(Unit, infer!(@immut/sorted_map.empty(), e))
-    // println("type check ok")
-    // println("extenv: " + extenv.to_string())
-    // println("typed program: " + e.to_string())
-    for ext_f, ext_t in extenv {
-      extenv[ext_f] = deref_type(ext_t)
-    }
-    deref_term(e)
-  } catch {
-    TyErr(s) => {
-      println("typeing error: " + s)
-      return e
-    }
+pub fn typing(e : @types.Syntax) -> @types.Syntax!TyErr {
+  unify!(Unit, infer!(@immut/sorted_map.empty(), e))
+  // println("type check ok")
+  // println("extenv: " + extenv.to_string())
+  // println("typed program: " + e.to_string())
+  for ext_f, ext_t in extenv {
+    extenv[ext_f] = deref_type(ext_t)
   }
+  deref_term(e)
 }
 
 test "typing" {
@@ -419,8 +412,8 @@ test "typing" {
     #|    x + 1
     #|  };
     #|  fn main {
-    #|    fn f(x) -> (Int, Int) {
-    #|      (x, x)
+    #|    fn f(x) {
+    #|      x + x
     #|    };
     #|    let fnx = f(1);
     #|    ()
@@ -447,8 +440,8 @@ test "typing" {
     let ast = @parser.parse_from_string(test_)
     println(ast)
     // try {
-      let result = typing(ast)
-      println(result)
+    let result = typing!(ast)
+    println(result)
     // } catch {
     //   TyErr(s) => {
     //     println("typing error")
