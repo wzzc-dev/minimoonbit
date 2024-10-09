@@ -69,35 +69,43 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
         match ty {
           Var(t) =>
             if physical_equal(t, ty1) {
-              raise TyErr("check_self_ref between Tvar and Fun[TVar]")
+              raise TyErr("The type of tuple element should not be a type variable ")
             } else {
               check_occur!(ty1.val.unwrap(), ty)
             }
           _ => ()
         }
       }
-    (Fun(tys, Var(ty)), Var(t1)) | (Var(t1), Fun(tys, Var(ty))) => {
-      for t in tys {
-        if physical_equal(t, t1.val.unwrap()) {
-          raise TyErr("occurs check between Tvar and Fun[TVar]")
+    (Fun(tys, ty), Var(t1)) | (Var(t1), Fun(tys, ty)) => {
+      for ty in tys {
+        match ty {
+          Var(t) =>
+            if physical_equal(t, t1) {
+              raise TyErr("The type of function element should not be a type variable ")
+            } else {
+              check_occur!(t1.val.unwrap(), t.val.unwrap())
+            }
+          _ => ()
         }
-        check_occur!(Var(t1), t)
       }
-      match @types.Type::Var(ty) {
-        ty =>
-          if physical_equal(ty, t1.val.unwrap()) {
-            raise TyErr("check_self_ref between Tvar and Fun[TVar]")
+      match ty {
+        Var(t) =>
+          if physical_equal(t, t1) {
+            raise TyErr("The type of function return value should not be a type variable ")
           } else {
-            check_occur!(t1.val.unwrap(), ty)
+            check_occur!(t1.val.unwrap(), t.val.unwrap())
           }
+        _ => ()
       }
     }
+    _ => ()
   }
 }
 
 type LocalCtx @immut/sorted_map.T[String, @types.Type]
 
 fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
+  // println("infer: " + e.to_string())
   match e {
     Unit => Unit
     Bool(_) => Bool
@@ -148,6 +156,7 @@ fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
       }
     // eg.
     App(f, args) => {
+      // println("App: " + f.to_string() + " args: " + args.to_string())
       let ret_ty = @types.Type::new_tvar()
       let f_ty = infer!(ctx, f)
       let args_ty = []
