@@ -97,8 +97,8 @@ fn CompileStatus::step(self : CompileStatus) -> Bool {
       self.typechecked = Some(typechecked.unwrap())
     }
     Knf => {
-      let knf = self.knf_env.to_knf(self.typechecked.unwrap())
-      self.knf = Some(knf)
+      let knf = self.knf_env.to_knf?(self.typechecked.unwrap())
+      self.knf = Some(knf.unwrap())
     }
     KnfOpt => {
       let knf = self.knf.unwrap()

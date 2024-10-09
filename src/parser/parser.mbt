@@ -1304,8 +1304,8 @@ test {
     #| };
   let test2 =
     #| fn main {
-    #|    fn f(x) -> (Int, Int) {
-    #|     (x, x)
+    #|    fn f(x: Int) -> Int {
+    #|     1 + 1
     #|    };
     #|    f(1)
     //#| fn main {
