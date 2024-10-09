@@ -85,15 +85,12 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
         if physical_equal(t, t1.val.unwrap()) {
           raise TyErr("The type of function should not be a type variable")
         }
-        check_occur!(Var(t1), t)
+        check_occur!(t1.val.unwrap(), t)
       }
-      match @types.Type::Var(ty) {
-        ty =>
-          if physical_equal(ty, t1.val.unwrap()) {
-            raise TyErr("The type of function should not be a type variable")
-          } else {
-            check_occur!(t1.val.unwrap(), ty)
-          }
+      if physical_equal(ty, t1) {
+        raise TyErr("The type of function should not be a type variable")
+      } else {
+        check_occur!(t1.val.unwrap(), ty.val.unwrap())
       }
     }
     _ => ()
@@ -194,7 +191,7 @@ fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
           Double
         }
         (Var(t), Int) | (Int, Var(t)) => {
-          t.val = Some(Double)
+          t.val = Some(Int)
           prim.kind = Some(Int)
           Int
         }
@@ -413,7 +410,7 @@ test "typing" {
     #|  };
     #|  fn main {
     #|    fn f(x) {
-    #|      x + x
+    #|      x + 1
     #|    };
     #|    let fnx = f(1);
     #|    ()
@@ -439,15 +436,15 @@ test "typing" {
   for test_ in tests {
     let ast = @parser.parse_from_string(test_)
     println(ast)
-    // try {
-    let result = typing!(ast)
-    println(result)
-    // } catch {
-    //   TyErr(s) => {
-    //     println("typing error")
-    //     println(s)
-    //   }
-    // }
+    try {
+      let result = typing!(ast)
+      println(result)
+    } catch {
+      TyErr(s) => {
+        println("typing error")
+        println(s)
+      }
+    }
     // println(result.unwrap())
   }
 }
