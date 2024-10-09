@@ -191,7 +191,7 @@ fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
           Double
         }
         (Var(t), Int) | (Int, Var(t)) => {
-          t.val = Some(Int)
+          t.val = Some(Double)
           prim.kind = Some(Int)
           Int
         }
