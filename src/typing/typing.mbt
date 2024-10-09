@@ -76,27 +76,24 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
           _ => ()
         }
       }
-    (Fun(tys, ty), Var(t1)) | (Var(t1), Fun(tys, ty)) => {
-      for ty in tys {
-        match ty {
-          Var(t) =>
-            if physical_equal(t, t1) {
-              raise TyErr("The type of function element should not be a type variable ")
-            } else {
-              check_occur!(t1.val.unwrap(), t.val.unwrap())
-            }
+    (@types.Type::Fun(xs,x),Var(ty)) |  (Var(ty),@types.Type::Fun(xs,x)) => {
+      for i in xs{
+        match i {
+          Var(t) => if physical_equal(t,ty) {
+            raise TyErr("The type of fun element should not be a type variable ")
+          }
+          else {
+            check_occur!(ty.val.unwrap(),t.val.unwrap())}
           _ => ()
         }
       }
-      match ty {
-        Var(t) =>
-          if physical_equal(t, t1) {
-            raise TyErr("The type of function return value should not be a type variable ")
-          } else {
-            check_occur!(t1.val.unwrap(), t.val.unwrap())
+      match x {
+          Var(t) => if physical_equal(t,ty) {
+            raise TyErr("The type of tuple element should not be a type variable ")
           }
-        _ => ()
-      }
+          else {check_occur!(ty.val.unwrap(),t.val.unwrap())}
+          _ => ()
+        }
     }
     _ => ()
   }
