@@ -28,18 +28,20 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
         }
         _ => ()
       }
+    // handle the array type 
     (Array(t1), Array(t2)) => unify!(t1, t2)
+    // handle the tuple
     (Tuple(tys1), Tuple(tys2)) =>
       for i, ty in tys1 {
         unify!(ty, tys2[i])
       }
+    // handle the function
     (Fun(tys1, ty1), Fun(tys2, ty2)) => {
       for i, ty in tys1 {
         unify!(ty, tys2[i])
       }
       unify!(ty1, ty2)
     }
-    //  .. // handle the function, tuple, and array type  
     _ =>
       raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
   }
@@ -81,14 +83,14 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
     (Fun(tys, Var(ty)), Var(t1)) | (Var(t1), Fun(tys, Var(ty))) => {
       for t in tys {
         if physical_equal(t, t1.val.unwrap()) {
-          raise TyErr("occurs check between Tvar and Fun[TVar]")
+          raise TyErr("The type of function should not be a type variable")
         }
         check_occur!(Var(t1), t)
       }
       match @types.Type::Var(ty) {
         ty =>
           if physical_equal(ty, t1.val.unwrap()) {
-            raise TyErr("check_self_ref between Tvar and Fun[TVar]")
+            raise TyErr("The type of function should not be a type variable")
           } else {
             check_occur!(t1.val.unwrap(), ty)
           }
@@ -385,23 +387,16 @@ pub let extenv : Map[String, @types.Type] = {
   "atan": Fun([Double], Double),
 }
 
-pub fn typing(e : @types.Syntax) -> @types.Syntax {
-  println("program: " + e.to_string())
-  try {
-    unify!(Unit, infer!(@immut/sorted_map.empty(), e))
-    // println("type check ok")
-    // println("extenv: " + extenv.to_string())
-    // println("typed program: " + e.to_string())
-    for ext_f, ext_t in extenv {
-      extenv[ext_f] = deref_type(ext_t)
-    }
-    deref_term(e)
-  } catch {
-    TyErr(s) => {
-      println("typeing error: " + s)
-      return e
-    }
+pub fn typing(e : @types.Syntax) -> @types.Syntax!TyErr {
+  // println("program: " + e.to_string())
+  unify!(Unit, infer!(@immut/sorted_map.empty(), e))
+  // println("type check ok")
+  // println("extenv: " + extenv.to_string())
+  // println("typed program: " + e.to_string())
+  for ext_f, ext_t in extenv {
+    extenv[ext_f] = deref_type(ext_t)
   }
+  deref_term(e)
 }
 
 test "typing" {
@@ -415,7 +410,7 @@ test "typing" {
     #| };
   let test2 =
     #|  fn test(x: Int) -> Int {
-    #|    x + 1
+    #|    x + 1 + 1.1
     #|  };
     #|  fn main {
     #|    fn f(x: Int) {
@@ -445,6 +440,7 @@ test "typing" {
   for test_ in tests {
     let ast = @parser.parse_from_string(test_)
     println(ast)
-    println(typing(ast))
+    let result = typing!(ast)
+    println(result)
   }
 }
