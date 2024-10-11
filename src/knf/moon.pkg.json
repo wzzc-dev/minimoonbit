@@ -5,7 +5,8 @@
       "alias": "types"
     },
     "moonbitlang/minimbt/util",
-    "moonbitlang/minimbt/parser"
+    "moonbitlang/minimbt/parser",
+    "moonbitlang/minimbt/typing"
   ],
   "test-import": [
     "moonbitlang/minimbt/parser",
