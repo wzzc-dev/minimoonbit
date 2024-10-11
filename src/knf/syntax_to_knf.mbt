@@ -28,6 +28,8 @@ fn KnfEnv::new_named_temp(self : KnfEnv, name : Name) -> Name {
   { ..name, slot: counter }
 }
 
+
+
 pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Failure
   match s {
     Unit => Unit
@@ -39,7 +41,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
     If(syn1, syn2, syn3) =>
       match syn1 {
         Bool(b) => if b { to_knf!(self, syn2) } else { to_knf!(self, syn3) }
-        _ => raise KnfErr("Unknown type")
+        _ => raise KnfErr("the condition of if must be bool")
       }
     Neg(syn, ~kind) =>
       match kind {
@@ -53,7 +55,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
           let knf = to_knf!(self, syn)
           Knf::Let((temp, Int), knf, FNeg(temp))
         }
-        _ => raise KnfErr("Unknown type")
+        _ => raise KnfErr("the type of negation is unknown")
       }
     Prim(lsyn, rsyn, op, ~kind) => {
       let l = to_knf!(self, lsyn)
@@ -80,7 +82,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
           }
           Knf::Let((l_name, Double), l, Knf::Let((r_name, Double), r, opty))
         }
-        _ => raise KnfErr("Unknown type")
+        _ => raise KnfErr("the type of prim is unknown")
       }
     }
     Eq(syn1, syn2) => {
@@ -102,18 +104,15 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       let new_knf = KnfEnv::new(new_env)
       let knf_val = to_knf!(self, syn)
       let rest = to_knf!(new_knf, knf)
-
       let name = @types.from_string?(name).unwrap()
-      Knf::Let((name, ty), knf_val, rest)
+      Let((name, ty), knf_val, rest)
     }
     LetRec(defs, knf) => {
       println("LetRec- defs: " + defs.to_string() + ",knf: " + knf.to_string())
       let name = @types.from_string?(defs.name.0).unwrap()
       let ty = defs.name.1
       let args = defs.args.map(
-        fn (arg) {
-          (@types.from_string?(arg.0).unwrap(), arg.1)
-        }
+        fn(arg) { (@types.from_string?(arg.0).unwrap(), arg.1) },
       )
       let knf_body = to_knf!(self, defs.body)
       println("LetRec- knf_body: " + knf_body.to_string())
@@ -122,13 +121,16 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       LetRec({ name, ty, args, body: knf_body }, rest)
     }
     App(syn, args) => {
-      let knf_name = new_temp(self)
-      let knf_val = to_knf!(self, syn)
-      let knf_args = Array::new()
-      for arg in args {
-        knf_args.push(to_knf!(self, arg))
+      match syn {
+        Var(name) => {
+          let knf_name = @types.name_only(name.to_string())
+          let knf_args = Array::new()
+          for arg in args {
+            knf_args.push(to_knf!(self, arg))
+          }
+          Apply(knf_name, [])
+        }
       }
-      Apply(knf_name, [])
     }
     Tuple(syns) => {
       let names = Array::new()
@@ -176,9 +178,36 @@ type! KnfErr String derive(ToJson)
 
 test {
   let test2 =
-    #| let x: Int = 1;
+    #|  fn main {
+    #|    fn f(x) {
+    #|      x + 1
+    #|    };
+    #|    let fnx = f(1);
+    #|    ()
+    #|};
+  let test2 =
+    #|  let x: Int = 1 + 1;
+    #|  let y: Int = x;
   let parse = @parser.parse_from_string(test2)
   println(parse)
-  let knf = to_knf!(KnfEnv::new(@immut/hashmap.new()), parse)
-  println(knf)
+  try {
+    let typed = @typing.typing!(parse)
+    println(typed)
+    let knf = to_knf!(KnfEnv::new(@immut/hashmap.new()), typed)
+    println(knf)
+  } catch {
+    @typing.TyErr(s) => {
+      println("typing error")
+      println(s)
+    }
+    KnfErr(s) => {
+      println("knf error")
+      println(s)
+    }
+    _ => {
+      println("unknown error")
+    }
+  }
+
+  
 }
