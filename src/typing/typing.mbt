@@ -99,7 +99,7 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
 
 type LocalCtx @immut/sorted_map.T[String, @types.Type]
 
-fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
+pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
   // println("infer: " + e.to_string())
   match e {
     Unit => Unit
