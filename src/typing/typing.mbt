@@ -395,6 +395,15 @@ pub fn typing(e : @types.Syntax) -> @types.Syntax!TyErr {
   deref_term(e)
 }
 
+pub fn get_type(
+  m : @immut/hashmap.T[String, @types.Type],
+  e : @types.Syntax
+) -> @types.Type!TyErr {
+  let mut sort_map : LocalCtx = @immut/sorted_map.empty()
+  m.each(fn { k, v => sort_map = sort_map._.insert(k, v) })
+  infer!(sort_map, e)
+}
+
 test "typing" {
   // #| let x:Int = 1 + 1;
   let _str =
