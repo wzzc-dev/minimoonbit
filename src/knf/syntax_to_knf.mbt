@@ -82,18 +82,189 @@ fn KnfEnv::app_bind_name(
   }
 }
 
-fn KnfEnv::tuple_bind_name(
+fn KnfEnv::app_let_bind_name(
   self : KnfEnv,
   name : Name,
+  e : @types.Syntax,
   args : Array[@types.Syntax],
   args_names : Array[Name]
 ) -> Knf!KnfErr {
+  let all_args = args.copy()
   match args.pop() {
     None => Apply(name, args_names.rev())
-    Some(arg) => {
-      let (s_name, s_ty, knf) = get_knf!(self, arg)
-      args_names.push(s_name)
-      Let((s_name, s_ty), knf, tuple_bind_name!(self, name, args, args_names))
+    Some(arg) =>
+      match arg {
+        Var(_) =>
+          Apply(
+            name,
+            all_args.map(
+              fn(x) {
+                match x {
+                  Var(name) => @types.from_string?(name).unwrap()
+                  _ => @types.from_string?("").unwrap()
+                }
+              },
+            ),
+          )
+        _ => {
+          let (s_name, s_ty, knf) = get_knf!(self, arg)
+          args_names.push(s_name)
+          Let(
+            (s_name, s_ty),
+            knf,
+            app_bind_name!(self, name, e, args, args_names),
+          )
+        }
+      }
+  }
+}
+
+fn KnfEnv::handle_app_bind_name(
+  self : KnfEnv,
+  s : @types.Syntax,
+  arr_s : Array[@types.Syntax]
+) -> Knf!KnfErr {
+  println("handle_app_bind_name: s " + s.to_string())
+  let (s_name, s_ty, knf) = get_knf!(self, s)
+  get_arr_nm!(self, [], s, s_name, arr_s.copy())
+}
+
+fn get_arr_nm(
+  self : KnfEnv,
+  nm : Array[Name],
+  s : @types.Syntax,
+  s_name : Name,
+  arr_s : Array[@types.Syntax]
+) -> Knf!KnfErr {
+  println("get_arr_nm: s " + s.to_string() + " s_name " + s_name.to_string() + "arr_s: " + arr_s.to_string())
+  match s {
+    Var(f) =>
+      if @typing.extenv.contains(f) {
+        let ss = arr_s.pop()
+        println("arr_s " + arr_s.to_string())
+        match ss {
+          None => ExternalFunctionApplication("minimbt_" + f, nm)
+          Some(ss) => {
+            let ty = get_type!(self.externals, ss)
+            println("arr_s " + arr_s.to_string())
+            insert_let!(self, ss, ty, s_name, nm, arr_s.copy())
+          }
+        }
+      } else {
+        let ty_s = get_type!(self.externals, s)
+        insert_let!(self, s, ty_s, s_name, nm, arr_s.copy())
+      }
+    _ => {
+      let ty_s = get_type!(self.externals, s)
+      insert_let!(self, s, ty_s, s_name, nm, arr_s.copy())
+      // let ss = arr_s.pop()
+      // match ss {
+      //   None => Apply(s_name, nm)
+      //   Some(ss) => {
+      //     let ty = get_type!(self.externals, ss)
+      //     insert_let!(self, ss, ty, s_name, nm, arr_s)
+      //   }
+      // }
+    }
+  }
+}
+
+fn insert_let(
+  self : KnfEnv,
+  s : @types.Syntax,
+  t : @types.Type,
+  s_name : Name,
+  nm : Array[Name],
+  arr_s : Array[@types.Syntax]
+) -> Knf!KnfErr {
+  match s {
+    Var(str) => {
+      println(
+        "insert_let: s_name " +
+        s_name.to_string() +
+        " arr_s " +
+        arr_s.to_string() +
+        "str " +
+        str,
+      )
+      let x = @types.from_string?(str).unwrap()
+      nm.insert(0, x)
+      get_arr_nm!(self, nm, s, s_name, arr_s)
+    }
+    _ => {
+      let x = self.new_temp()
+      let k = to_knf!(self, s)
+      nm.insert(0, x)
+      Let((x, t), k, get_arr_nm!(self, nm, s, s_name, arr_s))
+    }
+  }
+}
+
+fn insert_let2(
+  self : KnfEnv,
+  s : @types.Syntax,
+  t : @types.Type,
+  s_name : Name,
+  nm : Array[Name],
+  arr_s : Array[@types.Syntax]
+) -> Knf!KnfErr {
+  match s {
+    Var(str) => {
+      println(
+        "insert_let: s_name " +
+        s_name.to_string() +
+        " arr_s " +
+        arr_s.to_string() +
+        "str " +
+        str,
+      )
+      let x = @types.from_string?(str).unwrap()
+      nm.insert(0, x)
+      get_arr_nm!(self, nm, s, s_name, arr_s)
+    }
+    _ => {
+      let x = self.new_temp()
+      let k = to_knf!(self, s)
+      nm.insert(0, x)
+      Let((x, t), k, get_arr_nm!(self, nm, s, s_name, arr_s))
+    }
+  }
+}
+
+
+fn KnfEnv::tuple_let_bind_name(
+  self : KnfEnv,
+  nm : Array[Name],
+  arr_s : Array[@types.Syntax],
+  s : @types.Syntax,
+  t : @types.Type
+) -> Knf!KnfErr {
+  match s {
+    Var(str) => {
+      let x = @types.from_string?(str).unwrap()
+      nm.insert(0, x)
+      tuple_bind_name!(self, nm, arr_s)
+    }
+    _ => {
+      let x = self.new_temp()
+      let k = to_knf!(self, s)
+      nm.insert(0, x)
+      Let((x, t), k, tuple_bind_name!(self, nm, arr_s))
+    }
+  }
+}
+
+fn KnfEnv::tuple_bind_name(
+  self : KnfEnv,
+  nm : Array[Name],
+  arr_s : Array[@types.Syntax]
+) -> Knf!KnfErr { //这里我从尾部到头部取元组
+  let ss = arr_s.pop()
+  match ss {
+    None => Tuple(nm)
+    Some(ss) => {
+      let ty = get_type!(self.externals, ss)
+      tuple_let_bind_name!(self, nm, arr_s, ss, ty) //在生成对应的knf的时候，我每次都将新元素插到第一个位置，来保证最后结果的顺序是正确的
     }
   }
 }
@@ -233,51 +404,33 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       LetRec({ name: fun_name, ty, args: fun_args, body: fun_body }, rest)
     }
     App(syn, args) => {
-      let (name, _, _) = get_knf!(self, syn)
-      match syn {
-        Var(n) =>
-          if @typing.extenv.contains(n) {
-            ExternalFunctionApplication(
-              "minimbt_" + n,
-              args.map(
-                fn(x) {
-                  match x {
-                    Var(name) => @types.from_string?(name).unwrap()
-                    _ => @types.from_string?("").unwrap()
-                  }
-                },
-              ),
-            )
-          } else {
-            println(
-              "App: syn" + syn.to_string() + ", args: " + args.to_string(),
-            )
-            app_bind_name!(self, name, syn, args, Array::new())
-          }
-        _ => app_bind_name!(self, name, syn, args, Array::new())
-      }
+      println("App: syn" + syn.to_string() + ", args: " + args.to_string())
+      handle_app_bind_name!(self, syn, args)
     }
-    Tuple(syns) => {
-      // Tuple([name1,name2...])
-      let mut result : Knf = Unit
-      let arr_names = Array::new()
-      for syn in syns {
-        match syn {
-          Var(name) => {
-            let name = @types.from_string?(name).unwrap()
-            arr_names.push(name)
-            result = Knf::Tuple(arr_names)
-          }
-          _ => {
-            let knf = to_knf!(self, syn)
-            let name = new_temp(self)
-            arr_names.push(name)
-            result = Knf::Let((name, Unit), result, knf)
-          }
-        }
-      }
-      result
-    }
+    // let (name, _, _) = get_knf!(self, syn)
+    // match syn {
+    //   Var(n) =>
+    //     if @typing.extenv.contains(n) {
+    //       ExternalFunctionApplication(
+    //         "minimbt_" + n,
+    //         args.map(
+    //           fn(x) {
+    //             match x {
+    //               Var(name) => @types.from_string?(name).unwrap()
+    //               _ => @types.from_string?("").unwrap()
+    //             }
+    //           },
+    //         ),
+    //       )
+    //     } else {
+    //       println(
+    //         "App: syn" + syn.to_string() + ", args: " + args.to_string(),
+    //       )
+    //       app_bind_name!(self, name, syn, args, Array::new())
+    //     }
+    //   _ => app_bind_name!(self, name, syn, args, Array::new())
+    // }
+    Tuple(syns) => tuple_bind_name!(self, [], syns)
     LetTuple(args, syn, rest) => {
       //println("Enter LetTuple")
       let mut env_tuple = self.externals
