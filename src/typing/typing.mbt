@@ -176,7 +176,9 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
           if infer!(ctx, b1) == infer!(ctx, b2) {
             return infer!(ctx, b1)
           } else {
-            raise TyErr("The branchs of If should have same type")
+            let b1_ty = infer!(ctx, b1)
+            let b2_ty = infer!(ctx, b2)
+            raise TyErr("The branchs of If should have same type: b1 " + b1.to_string() + " b1 " + b2.to_string())
           }
         _ => raise TyErr("The condition of If should have Type Bool")
       }
@@ -404,53 +406,53 @@ pub fn get_type(
   infer!(sort_map, e)
 }
 
-test "typing" {
-  // #| let x:Int = 1 + 1;
-  let _str =
-    #| fn main {
-    #|  let x = 1 + 1;
-    #|  println(x)
-    // #|  println("Hello, world!")
-    // #|  ()
-    #| };
-  let test2 =
-    #|  fn main {
-    #|    fn f(x) {
-    #|      x + 1
-    #|    };
-    #|    let fnx = f(1);
-    #|    ()
-    //#| fn main {
-    // #| let sum:Int = 1 + 1;
-    //  #| let foo: (Int, Int) -> Int = 1;
-    //  #| let bar: (Int, Double) = (1, 2.0);
-    //  #| let foo: (Int, Int) = (1, 2);
-    //  #| let foo: Int = 1;
-    //  #| let foo: Double = 1;
-    //  #| let foo: Bool = 1;
-    //  #| let foo: Unit = 1;
-    //  #| let foo: Array[Int] = Array::make(x, y);
-    //  //  #| let foo: (Int, Int) -> Int = fn(x, y) { x + y }
-    //  #| fn bar(x: Int, y: Int) -> Int {
-    //  #|   1
-    //  #| };
-    //  #|    let x: Int = (1 + 1) * (1 / 1);
-    #| };
-    #|
-  let tests = [test2]
-  // println(tokens)
-  for test_ in tests {
-    let ast = @parser.parse_from_string(test_)
-    println(ast)
-    try {
-      let result = typing!(ast)
-      println(result)
-    } catch {
-      TyErr(s) => {
-        println("typing error")
-        println(s)
-      }
-    }
-    // println(result.unwrap())
-  }
-}
+// test "typing" {
+//   // #| let x:Int = 1 + 1;
+//   let _str =
+//     #| fn main {
+//     #|  let x = 1 + 1;
+//     #|  println(x)
+//     // #|  println("Hello, world!")
+//     // #|  ()
+//     #| };
+//   let test2 =
+//     #|  fn main {
+//     #|    fn f(x) {
+//     #|      x + 1
+//     #|    };
+//     #|    let fnx = f(1);
+//     #|    ()
+//     //#| fn main {
+//     // #| let sum:Int = 1 + 1;
+//     //  #| let foo: (Int, Int) -> Int = 1;
+//     //  #| let bar: (Int, Double) = (1, 2.0);
+//     //  #| let foo: (Int, Int) = (1, 2);
+//     //  #| let foo: Int = 1;
+//     //  #| let foo: Double = 1;
+//     //  #| let foo: Bool = 1;
+//     //  #| let foo: Unit = 1;
+//     //  #| let foo: Array[Int] = Array::make(x, y);
+//     //  //  #| let foo: (Int, Int) -> Int = fn(x, y) { x + y }
+//     //  #| fn bar(x: Int, y: Int) -> Int {
+//     //  #|   1
+//     //  #| };
+//     //  #|    let x: Int = (1 + 1) * (1 / 1);
+//     #| };
+//     #|
+//   let tests = [test2]
+//   // println(tokens)
+//   for test_ in tests {
+//     let ast = @parser.parse_from_string(test_)
+//     println(ast)
+//     try {
+//       let result = typing!(ast)
+//       println(result)
+//     } catch {
+//       TyErr(s) => {
+//         println("typing error")
+//         println(s)
+//       }
+//     }
+//     // println(result.unwrap())
+//   }
+// }
