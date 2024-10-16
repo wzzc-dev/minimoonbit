@@ -70,6 +70,7 @@ fn mainFnDecl(
        ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
        ArrayView[@lex.Token],
      )? {
+  // println("main_fn_decl: " + tokens.to_string())    
   ptoken(
     fn {
       @lex.Token::FN => true
@@ -89,6 +90,7 @@ fn mainFnDecl(
   .map(
     fn {
       (_, fnBody) =>
+        // println("main_fn_decl: fnBody: " + fnBody.to_string())
         (("main", @types.Type::Fun([], @types.Type::Unit)), [], fnBody)
     },
   )
@@ -105,7 +107,7 @@ fn topFnDecl(
        ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
        ArrayView[@lex.Token],
      )? {
-  // println("top_fn_decl")
+  // println("top_fn_decl: " + tokens.to_string())
   ptoken_fn
   .and(identifier)
   .and(lparen)
@@ -130,10 +132,11 @@ fn topFnDecl(
         }
         (((((((_, @lex.Token::IDENTIFIER(id)), _), None), _), _), type_), fnBody
         ) => ((id, @types.Fun([], type_)), [], fnBody)
-        _ =>
-          // println("Invalid top fn dec declaration")
-          // println(tokens)
+        _ => {
+          println("Invalid top fn dec declaration")
+          println(tokens)
           panic()
+        }
       }
     },
   )
@@ -194,8 +197,8 @@ fn fnBody(
     fn {
       ((_, stmt), _) => stmt
       // {
-      //   println("stmt :" + stmt.to_string())
-      //   stmt
+      // println("fnBody: stmt :" + stmt.to_string())
+
       // }
     },
   )
@@ -464,17 +467,17 @@ fn expr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("expr: " + tokens.to_string())
-  Parser(exprEq).or(exprLe).or(addSubLevelExpr).parse(tokens)
+  // Parser(addSubLevelExpr).or(exprEq).or(exprLe).parse(tokens)
+   Parser(exprEq).or(exprLe).or(addSubLevelExpr).parse(tokens)
 }
 
 fn exprEq(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   Parser(addSubLevelExpr)
-  .and(ptoken_assign)
-  .and(ptoken_assign)
+  .and(ptoken_eq)
   .and(expr)
-  .map(fn { (((expr, _), _), expr2) => @types.Syntax::Eq(expr, expr2) })
+  .map(fn { ((expr, _), expr2) => @types.Syntax::Eq(expr, expr2) })
   .parse(tokens)
 }
 
@@ -488,11 +491,11 @@ let ptoken_le : Parser[@lex.Token] = ptoken(
 fn exprLe(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("exprLe: " + tokens.to_string())
   Parser(addSubLevelExpr)
   .and(ptoken_le)
-  .and(ptoken_assign)
   .and(expr)
-  .map(fn { (((expr, _), _), expr2) => @types.Syntax::LE(expr, expr2) })
+  .map(fn { ((expr, _), expr2) => @types.Syntax::LE(expr, expr2) })
   .parse(tokens)
 }
 
@@ -504,6 +507,10 @@ fn addSubLevelExpr(
   .or(addSubLevelExprSub)
   .or(mulDivLevelExpr)
   .parse(tokens)
+  // Parser(mulDivLevelExpr)
+  // .or(addSubLevelExprAdd)
+  // .or(addSubLevelExprSub)
+  // .parse(tokens)
 }
 
 let ptoken_plus : Parser[@lex.Token] = ptoken(
@@ -564,6 +571,10 @@ fn mulDivLevelExpr(
   .or(mulDivLevelExprDiv)
   .or(ifLevelExpr)
   .parse(tokens)
+  // Parser(ifLevelExpr)
+  // .or(mulDivLevelExprMul)
+  // .or(mulDivLevelExprDiv)
+  // .parse(tokens)
 }
 
 let ptoken_star : Parser[@lex.Token] = ptoken(
@@ -635,6 +646,7 @@ let ptoken_else : Parser[@lex.Token] = ptoken(
 fn ifExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("ifExpr: " + tokens.to_string())
   ptoken_if
   .and(expr)
   .and(blockExpr)
@@ -643,9 +655,10 @@ fn ifExpr(
     fn {
       (((_, expr), block_expr), Some((_, block_expr2))) =>
         @types.Syntax::If(expr, block_expr, block_expr2)
-      _ =>
-        // println("if_expr: else not handled")
+      _ => {
+        println("if_expr: else not handled")
         panic()
+      }
     },
   )
   .parse(tokens)
@@ -797,6 +810,7 @@ fn tupleExpr(
 fn blockExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("blockExpr: " + tokens.to_string())
   lcurlybracket
   .and(stmt)
   .and(rcurlybracket)
@@ -1133,16 +1147,26 @@ fn zeroOrOnce[V1, V2](
   self : Parser[V1],
   parser2 : Parser[V2]
 ) -> Parser[(V1, V2?)] {
-  // println("zeroOrOnce")
   fn(input) {
-    match self.parse(input) {
-      Some((v1, rest)) =>
-        match parser2.parse(rest) {
-          None => Some(((v1, None), rest))
-          Some((v2, rest2)) => Some(((v1, Some(v2)), rest2))
-        }
-      None => None
-    }
+    self
+    .parse(input)
+    .bind(
+      fn {
+        (v1, rest) =>
+          match parser2.parse(rest) {
+            None => Some(((v1, None), rest))
+            Some((v2, rest2)) => Some(((v1, Some(v2)), rest2))
+          }
+      },
+    )
+    // match self.parse(input) {
+    //   Some((v1, rest)) =>
+    //     match parser2.parse(rest) {
+    //       None => Some(((v1, None), rest))
+    //       Some((v2, rest2)) => Some(((v1, Some(v2)), rest2))
+    //     }
+    //   None => None
+    // }
   }
 }
 
@@ -1202,6 +1226,13 @@ let dot : Parser[@lex.Token] = ptoken(
 let ptoken_assign : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::ASSIGN => true
+    _ => false
+  },
+)
+
+let ptoken_eq : Parser[@lex.Token] = ptoken(
+  fn {
+    @lex.Token::EQ => true
     _ => false
   },
 )
@@ -1287,9 +1318,12 @@ fn parse[V](
 
 let parser : Parser[@types.Syntax] = Parser(program)
 
+pub type! ParserErr String derive(ToJson)
+
 pub fn parse_from_string(str : String) -> @types.Syntax {
   let tokens = []
   @lex.lex({ str, offset: 0, array: tokens })
+  // println(tokens)
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   prog
 }
@@ -1305,7 +1339,15 @@ test {
   let test2 =
     #| fn main {
     #|    fn f(x: Int) -> Int {
-    #|     1 + 1
+    #|     if x <= 1 {
+    #|        1
+    #|     } else {
+    #|        if x <= 2 {
+    #|          2
+    #|        } else {
+    #|          3
+    #|        }
+    #|     }
     #|    };
     #|    f(1)
     //#| fn main {
@@ -1333,8 +1375,18 @@ test {
 
 test {
   let tokens = []
-  @lex.lex({ str: "f()", offset: 0, array: tokens })
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/ack.mbt").unwrap()
+  @lex.lex({ str: _test2, offset: 0, array: tokens })
   println(tokens)
-  let (prog, _) = stmt(tokens[:]).unwrap()
+  let (prog, _) = parser.parse(tokens[:]).unwrap()
   println(prog)
 }
+
+// test {
+//   let tokens = []
+//   let _test2 = "ack(x - 1, ack(x, y - 1))"
+//   @lex.lex({ str: _test2, offset: 0, array: tokens })
+//   println(tokens)
+//   let (prog, _) = stmt(tokens[:]).unwrap()
+//   println(prog)
+// }

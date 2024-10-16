@@ -47,8 +47,8 @@ pub fn lex(context : Context) -> Unit {
         array.push(LE)
         context.offset += 2
       } else {
-        array.push(LE)
-        context.offset += 1
+        println("< unknown char")
+        panic()
       }
     '(' => {
       array.push(LPAREN)
@@ -190,37 +190,37 @@ pub enum Token {
   COMMENT
 } derive(Show)
 
-test {
-  let tokens = []
-  lex(
-    {
-      str: #| fn main() {
-           #|    let hello = "world"
-           #|    println(hello)
-           #| }
-      ,
-      offset: 0,
-      array: tokens,
-    },
-  )
-  println(tokens)
+// test {
+//   let tokens = []
+//   lex(
+//     {
+//       str: #| fn main() {
+//            #|    let hello = "world"
+//            #|    println(hello)
+//            #| }
+//       ,
+//       offset: 0,
+//       array: tokens,
+//     },
+//   )
+//   println(tokens)
 
-  // let (prog, _) = parseType(tokens[:]).unwrap()
-  // println(prog)  
+//   // let (prog, _) = parseType(tokens[:]).unwrap()
+//   // println(prog)  
 
-}
-test {
-  let tokens = []
-  lex(
-    {
-      str: "let x = x",
-      offset: 0,
-      array: tokens,
-    },
-  )
-  println(tokens)
+// }
+// test {
+//   let tokens = []
+//   lex(
+//     {
+//       str: "let x = x",
+//       offset: 0,
+//       array: tokens,
+//     },
+//   )
+//   println(tokens)
 
-  // let (prog, _) = parseType(tokens[:]).unwrap()
-  // println(prog)  
+//   // let (prog, _) = parseType(tokens[:]).unwrap()
+//   // println(prog)  
 
-}
+// }

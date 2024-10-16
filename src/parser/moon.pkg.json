@@ -4,6 +4,7 @@
         {
             "path": "moonbitlang/minimbt",
             "alias": "types"
-        }
+        },
+        "moonbitlang/x/fs"
     ]
 }
