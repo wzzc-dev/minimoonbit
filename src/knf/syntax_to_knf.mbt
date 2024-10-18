@@ -186,26 +186,26 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         Some(Int) =>
           // Knf::Let((knf.0, Int), knf.1, Neg(knf.0))
           match syn {
-            Var(name) => {
-              let name = @types.from_string?(name).unwrap()
+            Var(str) => {
+              let name = @types.from_string?(str).unwrap()
               Neg(name)
             }
             _ => {
               let name = self.new_temp()
-              let k = to_knf!(self, s)
+              let k = to_knf!(self, syn)
               Let((name, Int), k, Neg(name))
             }
           }
         Some(Double) =>
           match syn {
-            Var(name) => {
-              let name = @types.from_string?(name).unwrap()
+            Var(str) => {
+              let name = @types.from_string?(str).unwrap()
               FNeg(name)
             }
             _ => {
-              let x = self.new_temp()
-              let k = to_knf!(self, s)
-              Let((x, Int), k, FNeg(x))
+              let name = self.new_temp()
+              let k = to_knf!(self, syn)
+              Let((name, Double), k, FNeg(name))
             }
           }
         _ => raise KnfErr("the type of negation is unknown")
@@ -250,7 +250,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
               }
             _ =>
               match rsyn {
-                Var(_) => Let((l_name, Double), r, opty)
+                Var(_) => Let((l_name, Double), l, opty)
                 _ => Let((l_name, Double), l, Let((r_name, Double), r, opty))
               }
           }
@@ -289,6 +289,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       LetRec({ name: fun_name, ty, args: fun_args, body: fun_body }, rest)
     }
     App(syn, args) => {
+      // println("app: syn: " + syn.to_string())
+      // println("app: args: " + args.to_string())
       let (app_name, ty, _) = get_knf!(self, syn)
       let args_names = Array::new()
       fn let_app(
@@ -306,8 +308,6 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
                 args_names.rev(),
               )
             } else {
-              println("app_name: " + app_name.to_string())
-              println("ty: " + ty.to_string())
               Apply(app_name, args_names.rev())
             }
           Some(arg) =>
@@ -324,31 +324,10 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
                   let_app!(env, name, ty, args)
                 }
               _ => {
-                println("before get_knf")
                 let (arg_name, arg_ty, arg_knf) = get_knf!(self, arg)
-                println(
-                  "after get_knf" +
-                  arg_name.to_string() +
-                  " " +
-                  arg_ty.to_string() +
-                  arg_knf.to_string(),
-                )
+                
                 args_names.push(arg_name)
-                println(
-                  "after let_app arg_name" +
-                  arg_name.to_string() +
-                  ", arg_ty" +
-                  arg_ty.to_string() +
-                  ", knf" +
-                  arg_knf.to_string() +
-                  "env: " +
-                  "name: " +
-                  name.to_string() +
-                  ", ty: " +
-                  ty.to_string() +
-                  ", args: " +
-                  args_names.to_string(),
-                )
+                
                 Let((arg_name, arg_ty), arg_knf, let_app!(env, name, ty, args))
               }
             }
@@ -445,12 +424,16 @@ test {
       println("not mbt file")
       continue
     }
+    // guard file.starts_with("matmul-flat") else {
+    //   println("matmul-flat mbt file")
+    //   continue
+    // }
     let _test2 = @fs.read_file_to_string?(path="test/test_src/" + file).unwrap()
     let parse = @parser.parse_from_string(_test2)
     try {
       let typed = @typing.typing!(parse)
       // println(typed)
-      let knf = to_knf!(KnfEnv::new(@immut/hashmap.new()), typed)
+      let knf = to_knf!(new(@immut/hashmap.new()), typed)
       println(knf)
     } catch {
       @typing.TyErr(s) => {
@@ -467,7 +450,7 @@ test {
 }
 
 test {
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/adder.mbt").unwrap()
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/matmul-flat.mbt").unwrap()
   let parse = @parser.parse_from_string(_test2)
   // println(parse)
   try {
