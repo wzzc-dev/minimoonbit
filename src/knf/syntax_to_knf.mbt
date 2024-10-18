@@ -333,10 +333,10 @@ test {
 test {
   let _test2 = @fs.read_file_to_string?(path="test/test_src/ack.mbt").unwrap()
   let parse = @parser.parse_from_string(_test2)
-  // println(parse)
+  println(parse)
   try {
     let typed = @typing.typing!(parse)
-    // println(typed)
+    println(typed)
     let knf = to_knf!(KnfEnv::new(@immut/hashmap.new()), typed)
     println(knf)
   } catch {

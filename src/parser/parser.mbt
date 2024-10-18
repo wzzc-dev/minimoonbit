@@ -35,11 +35,22 @@ fn topLetDecl(
         Some(topLevel),
       ) => @types.Syntax::Let((id, _type), expr, topLevel)
       (((((((_, @lex.Token::IDENTIFIER(id)), _), _type), _), expr), _), None) =>
-        @types.Syntax::Let((id, _type), expr, @types.Syntax::Unit)
-      _ => {
-        println("Invalid top let decl declaration")
+        @types.Syntax::Let((id, _type), expr, Unit)
+      (((((((_, ident), _), _type), _), expr), _), _) => {
+        println(
+          "Invalid top let decl declaration" +
+          tokens.to_string() +
+          "expr: " +
+          expr.to_string() +
+          "ident: " +
+          ident.to_string(),
+        )
         panic()
       }
+      // _ => {
+      //   println("Invalid top let decl declaration" + tokens.to_string())
+      //   panic()
+      // }
     },
   )
   .parse(tokens)
@@ -132,9 +143,16 @@ fn topFnDecl(
         }
         (((((((_, @lex.Token::IDENTIFIER(id)), _), None), _), _), type_), fnBody
         ) => ((id, @types.Fun([], type_)), [], fnBody)
-        _ => {
-          println("Invalid top fn dec declaration")
-          println(tokens)
+        (((((((_, ident), _), _), _), _), type_), fnBody) => {
+          println("Invalid top fn decl declaration" + tokens.to_string())
+          println(
+            "ident: " +
+            ident.to_string() +
+            " type: " +
+            type_.to_string() +
+            " fnBody: " +
+            fnBody.to_string(),
+          )
           panic()
         }
       }
@@ -319,7 +337,6 @@ fn letTupleStmt(
   .and(stmt)
   .map(
     fn {
-      // TODO: ?
       (
         (
           (
@@ -340,7 +357,10 @@ fn letTupleStmt(
         for x in identifiers {
           match x {
             (_, @lex.Token::IDENTIFIER(i)) => ids.push((i, @types.Type::Unit))
-            _ => panic()
+            (_, ident) => {
+              println("let tuple ident: " + ident.to_string())
+              panic()
+            }
           }
         }
         // let mut ids = identifiers.map(
@@ -468,7 +488,7 @@ fn expr(
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("expr: " + tokens.to_string())
   // Parser(addSubLevelExpr).or(exprEq).or(exprLe).parse(tokens)
-   Parser(exprEq).or(exprLe).or(addSubLevelExpr).parse(tokens)
+  Parser(exprEq).or(exprLe).or(addSubLevelExpr).parse(tokens)
 }
 
 fn exprEq(
@@ -503,14 +523,27 @@ fn addSubLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("addSubLevelExpr: " + tokens.to_string())
-  Parser(addSubLevelExprAdd)
-  .or(addSubLevelExprSub)
-  .or(mulDivLevelExpr)
-  .parse(tokens)
-  // Parser(mulDivLevelExpr)
-  // .or(addSubLevelExprAdd)
+  // Parser(addSubLevelExprAdd)
   // .or(addSubLevelExprSub)
+  // .or(mulDivLevelExpr)
   // .parse(tokens)
+  Parser(mulDivLevelExpr)
+  .zeroOrOnce(
+    ptoken_plus.and(addSubLevelExpr).or(ptoken_minus.and(addSubLevelExpr)),
+  )
+  .map(
+    fn {
+      (expr, None) => expr
+      (expr, Some((@lex.Add, expr2))) =>
+        @types.Syntax::Prim(expr, expr2, @types.Op::Add, kind=None)
+      (expr, Some((@lex.Sub, expr2))) =>
+        @types.Syntax::Prim(expr, expr2, @types.Op::Sub, kind=None)
+      _ => {
+        println("Invalid addSubLevelExpr")
+        panic()  }
+    },
+  )
+  .parse(tokens)
 }
 
 let ptoken_plus : Parser[@lex.Token] = ptoken(
@@ -520,43 +553,12 @@ let ptoken_plus : Parser[@lex.Token] = ptoken(
   },
 )
 
-fn addSubLevelExprAdd(
-  tokens : ArrayView[@lex.Token]
-) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // println("addSubLevelExprAdd: " + tokens.to_string())
-  Parser(mulDivLevelExpr)
-  .and(ptoken_plus)
-  .and(addSubLevelExpr)
-  .map(
-    fn {
-      ((expr, _), expr2) =>
-        @types.Syntax::Prim(expr, expr2, @types.Op::Add, kind=None)
-    },
-  )
-  .parse(tokens)
-}
-
 let ptoken_minus : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::Sub => true
     _ => false
   },
 )
-
-fn addSubLevelExprSub(
-  tokens : ArrayView[@lex.Token]
-) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  Parser(mulDivLevelExpr)
-  .and(ptoken_minus)
-  .and(addSubLevelExpr)
-  .map(
-    fn {
-      ((expr, _), expr2) =>
-        @types.Syntax::Prim(expr, expr2, @types.Op::Sub, kind=None)
-    },
-  )
-  .parse(tokens)
-}
 
 // mul_div_level_expr:
 //  if_level_expr
@@ -567,14 +569,32 @@ fn mulDivLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("mulDivLevelExpr: " + tokens.to_string())
-  Parser(mulDivLevelExprMul)
-  .or(mulDivLevelExprDiv)
-  .or(ifLevelExpr)
-  .parse(tokens)
+  // Parser(mulDivLevelExprMul)
+  // .or(mulDivLevelExprDiv)
+  // .or(ifLevelExpr)
+  // .parse(tokens)
   // Parser(ifLevelExpr)
   // .or(mulDivLevelExprMul)
   // .or(mulDivLevelExprDiv)
   // .parse(tokens)
+  Parser(ifLevelExpr)
+  .zeroOrOnce(
+    ptoken_star.and(mulDivLevelExpr).or(ptoken_slash.and(mulDivLevelExpr)),
+  )
+  .map(
+    fn {
+      (expr, None) => expr
+      (expr, Some((@lex.Mul, expr2))) =>
+        @types.Syntax::Prim(expr, expr2, @types.Op::Mul, kind=None)
+      (expr, Some((@lex.Div, expr2))) =>
+        @types.Syntax::Prim(expr, expr2, @types.Op::Div, kind=None)
+      _ => {
+        println("Invalid mulDivLevelExpr")
+        panic()
+      }  
+    }
+  )
+  .parse(tokens)
 }
 
 let ptoken_star : Parser[@lex.Token] = ptoken(
@@ -584,44 +604,12 @@ let ptoken_star : Parser[@lex.Token] = ptoken(
   },
 )
 
-fn mulDivLevelExprMul(
-  tokens : ArrayView[@lex.Token]
-) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  Parser(ifLevelExpr)
-  .and(ptoken_star)
-  .and(mulDivLevelExpr)
-  .map(
-    fn {
-      ((expr, _), expr2) =>
-        @types.Syntax::Prim(expr, expr2, @types.Op::Mul, kind=None)
-    },
-  )
-  .parse(tokens)
-}
-
 let ptoken_slash : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::Div => true
     _ => false
   },
 )
-
-fn mulDivLevelExprDiv(
-  tokens : ArrayView[@lex.Token]
-) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // println("mulDivLevelExprDiv: " + tokens.to_string())
-  Parser(ifLevelExpr)
-  .and(ptoken_slash)
-  .and(mulDivLevelExpr)
-  .map(
-    fn {
-      ((expr, _), expr2) =>
-        @types.Syntax::Prim(expr, expr2, @types.Op::Div, kind=None)
-    },
-  )
-  .parse(tokens)
-}
-
 fn ifLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -655,10 +643,8 @@ fn ifExpr(
     fn {
       (((_, expr), block_expr), Some((_, block_expr2))) =>
         @types.Syntax::If(expr, block_expr, block_expr2)
-      _ => {
-        println("if_expr: else not handled")
-        panic()
-      }
+      (((_, expr), block_expr), None) =>
+        @types.Syntax::If(expr, block_expr, Unit)
     },
   )
   .parse(tokens)
@@ -668,7 +654,11 @@ fn getOrApplyLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("getOrApplyLevelExpr: " + tokens.to_string())
-  Parser(getExpr).or(applyExpr).or(valueExpr).parse(tokens)
+  // Parser(getExpr).or(applyExpr).or(valueExpr).parse(tokens)
+  match Parser(valueExpr).parse(tokens) {
+    Some(_) => Parser(getExpr).or(applyExpr).or(valueExpr).parse(tokens)
+    None => None
+  }
 }
 
 fn getExpr(
@@ -863,6 +853,10 @@ fn floatingPointExpr(
         let d = @strconv.parse_double?(
           num1.to_string() + "." + num2.to_string(),
         ).unwrap()
+        @types.Syntax::Double(d)
+      }
+      ((NUMBER(num1), _), None) => {
+        let d = @strconv.parse_double?(num1.to_string() + "." + "0".to_string()).unwrap()
         @types.Syntax::Double(d)
       }
       _ =>
