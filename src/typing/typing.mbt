@@ -159,7 +159,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
         args_ty.push(infer!(ctx, a))
       }
       unify!(f_ty, Fun(args_ty, ret_ty))
-      ret_ty
+      ret_ty.repr()
     }
     Get(arr, index) =>
       match infer!(ctx, index) {
@@ -178,7 +178,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
           } else {
             let b1_ty = infer!(ctx, b1)
             let b2_ty = infer!(ctx, b2)
-            raise TyErr("The branchs of If should have same type: b1 " + b1.to_string() + " b1 " + b2.to_string() + " but got: b1 ty: " + b1_ty.to_string() + " b2 ty:" + b2_ty.to_string())
+            raise TyErr("The branchs of If should have same type: b1 " + b1.to_string() + " b2 " + b2.to_string() + " but got: b1 ty: " + b1_ty.to_string() + " b2 ty:" + b2_ty.to_string())
           }
         _ => raise TyErr("The condition of If should have Type Bool")
       }
@@ -454,5 +454,19 @@ test "typing" {
       }
     }
     // println(result.unwrap())
+  }
+}
+test {
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/ack.mbt").unwrap()
+  let parse = @parser.parse_from_string(_test2)
+  println(parse)
+  try {
+    let typed = typing!(parse)
+    println(typed)
+  } catch {
+    TyErr(s) => {
+      println("typing error")
+      println(s)
+    }
   }
 }

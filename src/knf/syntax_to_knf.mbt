@@ -65,31 +65,118 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       match syn1 {
         Bool(b) => if b { to_knf!(self, syn2) } else { to_knf!(self, syn3) }
         Eq(lhs, rhs) => {
-          let (l_name, l_ty, lt) = get_knf!(self, lhs)
-          let (r_name, r_ty, rt) = get_knf!(self, rhs)
-          Let(
-            (l_name, l_ty),
-            lt,
-            Let(
-              (r_name, r_ty),
-              rt,
-              IfEq(l_name, r_name, to_knf!(self, syn2), to_knf!(self, syn3)),
-            ),
-          )
+          let (l_name, l_ty, lknf) = get_knf!(self, lhs)
+          let (r_name, r_ty, rknf) = get_knf!(self, rhs)
+          match lhs {
+            Var(_) =>
+              match rhs {
+                Var(_) =>
+                  IfEq(l_name, r_name, to_knf!(self, syn2), to_knf!(self, syn3))
+                _ =>
+                  Let(
+                    (r_name, r_ty),
+                    rknf,
+                    IfEq(
+                      l_name,
+                      r_name,
+                      to_knf!(self, syn2),
+                      to_knf!(self, syn3),
+                    ),
+                  )
+              }
+            _ =>
+              match rhs {
+                Var(_) =>
+                  Let(
+                    (r_name, r_ty),
+                    rknf,
+                    IfEq(
+                      l_name,
+                      r_name,
+                      to_knf!(self, syn2),
+                      to_knf!(self, syn3),
+                    ),
+                  )
+                _ =>
+                  Let(
+                    (l_name, l_ty),
+                    lknf,
+                    Let(
+                      (r_name, r_ty),
+                      rknf,
+                      IfEq(
+                        l_name,
+                        r_name,
+                        to_knf!(self, syn2),
+                        to_knf!(self, syn3),
+                      ),
+                    ),
+                  )
+              }
+          }
         }
         LE(lhs, rhs) => {
-          let (l_name, l_ty, lt) = get_knf!(self, lhs)
-          let (r_name, r_ty, rt) = get_knf!(self, rhs)
-          Let(
-            (l_name, l_ty),
-            lt,
-            Let(
-              (r_name, r_ty),
-              rt,
-              IfLe(l_name, r_name, to_knf!(self, syn2), to_knf!(self, syn3)),
-            ),
-          )
+          let (l_name, l_ty, lknf) = get_knf!(self, lhs)
+          let (r_name, r_ty, rknf) = get_knf!(self, rhs)
+          match lhs {
+            Var(_) =>
+              match rhs {
+                Var(_) =>
+                  IfLe(l_name, r_name, to_knf!(self, syn2), to_knf!(self, syn3))
+                _ =>
+                  Let(
+                    (r_name, r_ty),
+                    rknf,
+                    IfLe(
+                      l_name,
+                      r_name,
+                      to_knf!(self, syn2),
+                      to_knf!(self, syn3),
+                    ),
+                  )
+              }
+            _ =>
+              match rhs {
+                Var(_) =>
+                  Let(
+                    (r_name, r_ty),
+                    rknf,
+                    IfLe(
+                      l_name,
+                      r_name,
+                      to_knf!(self, syn2),
+                      to_knf!(self, syn3),
+                    ),
+                  )
+                _ =>
+                  Let(
+                    (l_name, l_ty),
+                    lknf,
+                    Let(
+                      (r_name, r_ty),
+                      rknf,
+                      IfLe(
+                        l_name,
+                        r_name,
+                        to_knf!(self, syn2),
+                        to_knf!(self, syn3),
+                      ),
+                    ),
+                  )
+              }
+          }
         }
+        // let (r_name, r_ty, rt) = get_knf!(self, rhs)
+
+        // Let(
+        //   (l_name, l_ty),
+        //   lt,
+        //   Let(
+        //     (r_name, r_ty),
+        //     rt,
+        //     IfLe(l_name, r_name, to_knf!(self, syn2), to_knf!(self, syn3)),
+        //   ),
+        // )
         Not(b) => to_knf!(self, If(b, syn3, syn2))
         _ => to_knf!(self, syn1)
       }
@@ -135,7 +222,18 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
             Mul => opty = Mul(l_name, r_name)
             Div => opty = Div(l_name, r_name)
           }
-          Knf::Let((l_name, Int), l, Knf::Let((r_name, Int), r, opty))
+          match lsyn {
+            Var(_) =>
+              match rsyn {
+                Var(_) => opty
+                _ => Let((r_name, Int), r, opty)
+              }
+            _ =>
+              match rsyn {
+                Var(_) => Let((l_name, Int), r, opty)
+                _ => Let((l_name, Int), l, Let((r_name, Int), r, opty))
+              }
+          }
         }
         Some(Double) => {
           match op {
@@ -144,7 +242,18 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
             Mul => opty = FMul(l_name, r_name)
             Div => opty = FDiv(l_name, r_name)
           }
-          Knf::Let((l_name, Double), l, Knf::Let((r_name, Double), r, opty))
+          match lsyn {
+            Var(_) =>
+              match rsyn {
+                Var(_) => opty
+                _ => Let((r_name, Double), r, opty)
+              }
+            _ =>
+              match rsyn {
+                Var(_) => Let((l_name, Double), r, opty)
+                _ => Let((l_name, Double), l, Let((r_name, Double), r, opty))
+              }
+          }
         }
         _ => raise KnfErr("the type of prim is unknown")
       }
@@ -188,14 +297,17 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         ty : @types.Type,
         args : Array[@types.Syntax]
       ) -> Knf!KnfErr {
+   
         match args.pop() {
           None =>
-            if @typing.extenv.contains(app_name.name.unwrap()) {
+            if @typing.extenv.contains(app_name.to_string()) {
               ExternalFunctionApplication(
-                "minimbt_" + app_name.name.unwrap(),
+                "minimbt_" + app_name.to_string(),
                 args_names.rev(),
               )
             } else {
+              println("app_name: " + app_name.to_string())
+              println("ty: " + ty.to_string())
               Apply(app_name, args_names.rev())
             }
           Some(arg) =>
@@ -212,8 +324,31 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
                   let_app!(env, name, ty, args)
                 }
               _ => {
+                println("before get_knf")
                 let (arg_name, arg_ty, arg_knf) = get_knf!(self, arg)
+                println(
+                  "after get_knf" +
+                  arg_name.to_string() +
+                  " " +
+                  arg_ty.to_string() +
+                  arg_knf.to_string(),
+                )
                 args_names.push(arg_name)
+                println(
+                  "after let_app arg_name" +
+                  arg_name.to_string() +
+                  ", arg_ty" +
+                  arg_ty.to_string() +
+                  ", knf" +
+                  arg_knf.to_string() +
+                  "env: " +
+                  "name: " +
+                  name.to_string() +
+                  ", ty: " +
+                  ty.to_string() +
+                  ", args: " +
+                  args_names.to_string(),
+                )
                 Let((arg_name, arg_ty), arg_knf, let_app!(env, name, ty, args))
               }
             }
@@ -306,12 +441,12 @@ test {
   println(list)
   for file in list {
     println(file)
-    guard file.ends_with(".mbt") else { println("not mbt file"); continue }
+    guard file.ends_with(".mbt") else {
+      println("not mbt file")
+      continue
+    }
     let _test2 = @fs.read_file_to_string?(path="test/test_src/" + file).unwrap()
-    println("--------------------------------------------------------")
-    println(_test2)
     let parse = @parser.parse_from_string(_test2)
-    println(parse)
     try {
       let typed = @typing.typing!(parse)
       // println(typed)
@@ -330,13 +465,14 @@ test {
     }
   }
 }
+
 test {
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/ack.mbt").unwrap()
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/adder.mbt").unwrap()
   let parse = @parser.parse_from_string(_test2)
-  println(parse)
+  // println(parse)
   try {
     let typed = @typing.typing!(parse)
-    println(typed)
+    // println(typed)
     let knf = to_knf!(KnfEnv::new(@immut/hashmap.new()), typed)
     println(knf)
   } catch {
