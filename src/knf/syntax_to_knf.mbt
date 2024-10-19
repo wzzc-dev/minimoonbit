@@ -139,8 +139,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
               match rhs {
                 Var(_) =>
                   Let(
-                    (r_name, r_ty),
-                    rknf,
+                    (l_name, l_ty),
+                    lknf,
                     IfLe(
                       l_name,
                       r_name,
@@ -291,69 +291,105 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
     App(syn, args) => {
       // println("app: syn: " + syn.to_string())
       // println("app: args: " + args.to_string())
-      let (app_name, ty, _) = get_knf!(self, syn)
       let args_names = Array::new()
-      fn let_app(
-        env : KnfEnv,
-        name : Name,
-        ty : @types.Type,
-        args : Array[@types.Syntax]
-      ) -> Knf!KnfErr {
-   
+
+      // fn let_app(self : KnfEnv, args : Array[@types.Syntax]) -> Knf!KnfErr {
+      //   match args.pop() {
+      //     None => {
+      //       let app_name = match syn {
+      //         Var(name) => name
+      //         _ => raise KnfErr("app: expected a variable")
+      //       }
+      //       if @typing.extenv.contains(app_name.to_string()) {
+      //         ExternalFunctionApplication(
+      //           "minimbt_" + app_name.to_string(),
+      //           args_names.rev(),
+      //         )
+      //       } else {
+      //         Apply(@types.from_string?(app_name).unwrap(), args_names.rev())
+      //       }
+      //     }
+      //     Some(arg) =>
+      //       match arg {
+      //         Var(s_name) => {
+      //           let name = @types.from_string?(s_name).unwrap()
+      //           args_names.push(name)
+      //           let_app!(self, args)
+      //         }
+      //         _ => {
+      //           let (arg_name, arg_ty, arg_knf) = get_knf!(self, arg)
+      //           args_names.push(arg_name)
+      //           Let((arg_name, arg_ty), arg_knf, let_app!(self, args))
+      //         }
+      //       }
+      //   }
+      // }
+
+      let app_name = match syn {
+        Var(name) => name
+        _ => panic()
+      }
+
+      fn let_args() -> Knf!KnfErr {
         match args.pop() {
-          None =>
-            if @typing.extenv.contains(app_name.to_string()) {
+          None => {
+            if @typing.extenv.contains(app_name) {
+              args_names.push(@types.from_string?(app_name).unwrap())
               ExternalFunctionApplication(
-                "minimbt_" + app_name.to_string(),
+                "minimbt_" + app_name,
                 args_names.rev(),
               )
             } else {
-              Apply(app_name, args_names.rev())
+              Apply(@types.from_string?(app_name).unwrap(), args_names.rev())
             }
+          }
           Some(arg) =>
             match arg {
-              Var(s_name) =>
-                if @typing.extenv.contains(s_name) {
-                  ExternalFunctionApplication(
-                    "minimbt_" + s_name,
-                    args_names.rev(),
-                  )
-                } else {
-                  let name = @types.from_string?(s_name).unwrap()
-                  args_names.push(name)
-                  let_app!(env, name, ty, args)
-                }
+              Var(name) => {
+                let name = @types.from_string?(name).unwrap()
+                args_names.push(name)
+                let_args!()
+              }
               _ => {
-                let (arg_name, arg_ty, arg_knf) = get_knf!(self, arg)
-                
-                args_names.push(arg_name)
-                
-                Let((arg_name, arg_ty), arg_knf, let_app!(env, name, ty, args))
+                let (name, ty, knf) = get_knf!(self, arg)
+                args_names.push(name)
+                Let((name, ty), knf, let_args!())
               }
             }
         }
       }
 
-      let_app!(self, app_name, ty, args)
+      // fn let_app() -> Knf!KnfErr {
+      //   match s {
+      //     Var(name) =>
+            
+      //     _ => {
+      //       let (name, t, k) = get_knf!(self, s)
+      //       Let((name, t), k, let_app!())
+      //     }
+      //   }
+      // }
+
+      let_args!()
     }
     Tuple(syns) => {
       let syns_names = Array::new()
       fn let_tuple(syns : Array[@types.Syntax]) -> Knf!KnfErr {
         match syns.pop() {
           None => Tuple(syns_names)
-          Some(syn) =>
+          Some(syn) => {
+            let (name, ty, knf) = get_knf!(self, syn)
             match syn {
-              Var(s_name) => {
-                let name = @types.from_string?(s_name).unwrap()
+              Var(_) => {
                 syns_names.push(name)
                 let_tuple!(syns)
               }
               _ => {
-                let (name, ty, knf) = get_knf!(self, syn)
                 syns_names.push(name)
                 Let((name, ty), knf, let_tuple!(syns))
               }
             }
+          }
         }
       }
 
@@ -389,7 +425,23 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
     Get(e1, e2) => {
       let (name1, e1_ty, knf1) = get_knf!(self, e1)
       let (name2, e2_ty, knf2) = get_knf!(self, e2)
-      Let((name1, e1_ty), knf1, Let((name2, e2_ty), knf2, Get(name1, name2)))
+      match e1 {
+        Var(_) =>
+          match e2 {
+            Var(_) => Get(name1, name2)
+            _ => Let((name2, e2_ty), knf2, Get(name1, name2))
+          }
+        _ =>
+          match e2 {
+            Var(_) => Let((name1, e1_ty), knf1, Get(name1, name2))
+            _ =>
+              Let(
+                (name1, e1_ty),
+                knf1,
+                Let((name2, e2_ty), knf2, Get(name1, name2)),
+              )
+          }
+      }
     }
     Put(syn1, syn2, syn3) => {
       let (name1, s1_ty, knf1) = get_knf!(self, syn1)
@@ -408,7 +460,40 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
     Array(e1, e2) => {
       let (name1, e1_ty, knf1) = get_knf!(self, e1)
       let (name2, e2_ty, knf2) = get_knf!(self, e2)
-      Let((name1, e1_ty), knf1, Let((name2, e2_ty), knf2, ExternalArray(name1)))
+      fn genArray(name1 : Name, name2 : Name) {
+        match e2_ty {
+          Int =>
+            ExternalFunctionApplication("minimbt_create_array", [name1, name2])
+          Double =>
+            ExternalFunctionApplication(
+              "minimbt_create_float_array",
+              [name1, name2],
+            )
+          _ =>
+            ExternalFunctionApplication(
+              "minimbt_create_ptr_array",
+              [name1, name2],
+            )
+        }
+      }
+
+      match e1 {
+        Var(_) =>
+          match e2 {
+            Var(_) => genArray(name1, name2)
+            _ => Let((name2, e2_ty), knf2, genArray(name1, name2))
+          }
+        _ =>
+          match e2 {
+            Var(_) => Let((name1, e1_ty), knf1, genArray(name1, name2))
+            _ =>
+              Let(
+                (name1, e1_ty),
+                knf1,
+                Let((name2, e2_ty), knf2, genArray(name1, name2)),
+              )
+          }
+      }
     }
   }
 }

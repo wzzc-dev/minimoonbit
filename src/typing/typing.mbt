@@ -159,6 +159,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
         args_ty.push(infer!(ctx, a))
       }
       unify!(f_ty, Fun(args_ty, ret_ty))
+      // println("ret_ty: {}" + ret_ty.to_string())
       ret_ty.repr()
     }
     Get(arr, index) =>
@@ -244,11 +245,19 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
         }
         _ => {
           let t = infer!(ctx, value)
-          if t == ty {
-            let newctx = ctx._.insert(name, ty)
+          // println("T: before")
+          // println("TY: " + ty.repr().to_string());
+          // println("after")
+          if t == ty.repr() {
+            let newctx = ctx._.insert(name, t)
             infer!(newctx, s1)
           } else {
-            raise TyErr("The value and expression types in Let are different")
+            raise TyErr("The value and expression types in Let are different" +
+              " in name: " +  name.to_string() +
+              "\nvalue: " + value.to_string() +
+              "\nt: " + t.to_string() +
+              "\nty: " + ty.to_string()
+              )
           }
         }
       }
@@ -375,6 +384,7 @@ pub let extenv : Map[String, @types.Type] = {
   "read_char": Fun([], Int),
   "print_char": Fun([Int], Unit),
   "print_newline": Fun([], Unit),
+  "print_endline": Fun([], Unit),
   "int_of_float": Fun([Double], Int),
   "float_of_int": Fun([Int], Double),
   "truncate": Fun([Double], Int),
@@ -457,7 +467,8 @@ test "typing" {
   }
 }
 test {
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/ack.mbt").unwrap()
+  // let x = Array::make(10, 0);
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/matmul-flat.mbt").unwrap()
   let parse = @parser.parse_from_string(_test2)
   println(parse)
   try {

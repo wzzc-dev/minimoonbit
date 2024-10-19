@@ -66,8 +66,10 @@ fn toplevelFnDecl(
   .map(
     fn {
       (((name, args, body), _), Some(topLevel)) =>
+        // println("top_let_decl: name" + name.to_string())
         @types.Syntax::LetRec({ name, args, body }, topLevel)
       (((name, args, body), _), None) =>
+        // println("top_let_decl: name None" + name.to_string())
         @types.Syntax::LetRec({ name, args, body }, @types.Syntax::Unit)
     },
   )
@@ -81,7 +83,7 @@ fn mainFnDecl(
        ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
        ArrayView[@lex.Token],
      )? {
-  // println("main_fn_decl: " + tokens.to_string())    
+  // println("main_fn_decl: " + tokens.to_string())
   ptoken(
     fn {
       @lex.Token::FN => true
@@ -246,6 +248,11 @@ fn nontopFnDecl(
   .map(
     fn {
       ((((((_, @lex.Token::IDENTIFIER(id)), _), param_list), _), type_), fnBody) => {
+        // println("nontop_fn_decl")
+        // println("nontop_fn_decl: id: " + id.to_string())
+        // println("nontop_fn_decl: param_list: " + param_list.to_string())
+        // println("nontop_fn_decl: type_: " + type_.to_string())
+
         let params = match param_list {
           Some(type_) => type_
           None => []
@@ -417,8 +424,11 @@ fn letStmt(
           _,
         ),
         stmt,
-      ) => @types.Syntax::Let((id, type_annotation), expr, stmt)
+      ) =>
+        // println("letStmt: " + ((id, type_annotation), expr, stmt).to_string())
+        @types.Syntax::Let((id, type_annotation), expr, stmt)
       ((((((_, @lex.Token::IDENTIFIER(id)), None), _), expr), _), stmt) =>
+        // println("letStmt: None" + (id, expr, stmt).to_string())
         @types.Syntax::Let((id, @types.Type::Var({ val: None })), expr, stmt)
       _ =>
         // println("Invalid let statement")
@@ -460,7 +470,7 @@ fn assignStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("assignStmt: " + tokens.to_string())
-  Parser(getExpr)
+  Parser(getOrApplyLevelExpr)
   .and(ptoken_assign)
   .and(expr)
   .and(semicolon)
@@ -536,45 +546,29 @@ fn addSubLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   Parser(mulDivLevelExpr)
-  .zeroOrOnce(
-    ptoken_plus.and(addSubLevelExpr).or(ptoken_minus.and(addSubLevelExpr)),
-  )
+  .and(ptoken_plus.or(ptoken_minus).and(mulDivLevelExpr).many())
   .map(
     fn {
-      (expr, None) => expr
-      (expr, Some((@lex.Add, expr2))) =>
-        @types.Syntax::Prim(expr, expr2, @types.Op::Add, kind=None)
-      (expr, Some((@lex.Sub, expr2))) =>
-        @types.Syntax::Prim(expr, expr2, @types.Op::Sub, kind=None)
-      _ => {
-        println("Invalid addSubLevelExpr")
-        panic()
+      (e, list) => {
+        if list.is_empty() {
+          return e
+        }
+        let result = list.fold(
+          init=e,
+          fn {
+            e, (Add, expr) => Prim(e, expr, Add, kind=None)
+            e, (Sub, expr) => Prim(e, expr, Sub, kind=None)
+            _, (t, _) => {
+              println(" Add or Sub not " + t.to_string())
+              panic()
+            }
+          },
+        )
+        result
       }
     },
   )
   .parse(tokens)
-  // Parser(mulDivLevelExpr)
-  // .zeroOrOnce(ptoken_plus.or(ptoken_minus).and(mulDivLevelExpr).many())
-  // .map(
-  //   fn {
-  //     (expr, None) => expr
-  //     (e, Some(list)) => {
-  //       let result = list.fold(
-  //         init=e,
-  //         fn {
-  //           e, (Add, expr) => Prim(e, expr, Add, kind=None)
-  //           e, (Sub, expr) => Prim(e, expr, Sub, kind=None)
-  //           _, (t, _) => {
-  //             println(" Add or Sub not " + t.to_string())
-  //             panic()
-  //           }
-  //         },
-  //       )
-  //       result
-  //     }
-  //   },
-  // )
-  // .parse(tokens)
 }
 
 let ptoken_plus : Parser[@lex.Token] = ptoken(
@@ -708,29 +702,64 @@ fn getOrApplyLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("getOrApplyLevelExpr: " + tokens.to_string())
-  Parser(getExpr).or(applyExpr).or(valueExpr).parse(tokens)
-  // Parser(valueExpr)
-  // .zeroOrOnce(
-  //   lbracket.and(expr).and(rbracket).many()
-  //   .or(
-  //     lparen
-  //     .zeroOrOnce(
-  //       Parser(expr)
-  //       .and(
-  //         comma
-  //         .and(exp)
-  //       )
-  //     )
-  //     .and(rparen)
-  //     .map()
-  //   )
-  // )
-  // .map(
-  //   fn {
-  //     (expr, None) => expr
-  //   }
-  // )
-  // .parse(tokens)
+  // Parser(getExpr).or(applyExpr).or(valueExpr).parse(tokens)
+  Parser(valueExpr)
+  .and(
+    lbracket
+    .or(lparen)
+    .zeroOrOnce(Parser(expr).and(comma.and(expr).many()))
+    .and(rbracket.or(rparen))
+    .many(),
+    // )
+  )
+  .map(
+    fn {
+      (expr, list) => {
+        if list.is_empty() {
+          return expr
+        }
+        let result = list.fold(
+          init=expr,
+          fn {
+            e, ((l, None), _) => {
+              match l {
+                LBRACKET => {
+                  println("getExpr LBRACKET not empty - token :" +
+                  tokens.to_string())
+                  panic()
+                }
+                LPAREN => App(e, [])
+                _ => {
+                  println("Invalid getExpr need [ or (")
+                  panic()}
+              }
+            }
+            e, ((l, Some((expr1, list))), _) => {
+              let tails = list.map(fn { (_, e2) => e2 })
+              // println("applyExpr tails: " + tails.to_string())
+              // println("applyExpr l: " + l.to_string())
+              match l {
+                LBRACKET =>
+                  if list.is_empty() {
+                    Get(e, expr1)
+                  } else {
+                    println(
+                      "getExpr LBRACKET is not empty - token :" +
+                      tokens.to_string(),
+                    )
+                    panic()
+                  }
+                LPAREN => App(e, [expr1, ..tails])
+                _ => panic()
+              }
+            }
+          },
+        )
+        result
+      }
+    },
+  )
+  .parse(tokens)
 }
 
 fn getExpr(
@@ -738,37 +767,22 @@ fn getExpr(
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("getExpr: " + tokens.to_string())
   // Parser(valueExpr)
-  // .and(
-  //   lbracket
-  //   .zeroOrOnce(expr)
-  //   .and(rbracket)
-  //   .many(),
-  // )
+  // .and(lbracket)
+  // .and(expr)
+  // .and(rbracket)
   // .map(
-  //   fn {
-  //     (e, list) => {
-  //       let result = list.fold(
-  //         init=e,
-  //         fn {
-  //           e, ((_, None),_) => {
-  //             Get(e, Unit)
-  //           }
-  //           e, ((_, Some(i)),_) => {
-  //             Get(e, i)
-  //           }
-  //         }
-  //       )
-  //       result
-  //     }
-  //   },
+  //   fn { (((value_expr, _), expr), _) => @types.Syntax::Get(value_expr, expr) },
   // )
   // .parse(tokens)
   Parser(valueExpr)
-  .and(lbracket)
-  .and(expr)
-  .and(rbracket)
+  .and(lbracket.and(expr).and(rbracket).many())
   .map(
-    fn { (((value_expr, _), expr), _) => @types.Syntax::Get(value_expr, expr) },
+    fn {
+      (e, list) => {
+        let result = list.fold(init=e, fn { e, ((_, expr), _) => Get(e, expr) })
+        result
+      }
+    },
   )
   .parse(tokens)
 }
@@ -1496,8 +1510,20 @@ test {
   let tokens = []
   let test1 =
     #| fn main {
-    #|  let x = 1 + 1;
-    #|  c[i][j] = c[i][j] + a[i][k] * b[k][j];
+    // #|  let x = c[i][j];
+    #|    let a = make_arr(2, 3, dummy);b[2][0] = 11.0; b[2][1] = 12.0;
+    #| let _ = mul(2,3,2,a,b,c);
+    #|let _ = print_int(truncate(c[0][0]));
+    #|let _ = print_endline();
+    // #|let _ = print_int(truncate(c[0][1]));
+    // #| let _ = print_endline();
+    // #| let _ = print_int(truncate(c[1][0]));
+    // #| let _ = print_endline();
+    // #| let _ = print_int(truncate(c[1][1]));
+    // #|  let _ = print_int(truncate(c[0][0]));
+
+    // #| + b[o] * c[u];
+    // #|  c[i][j] = c[i][j] + a[i][k] * b[k][j];
     #|  ()
     // #|  println(x)
     #| };
@@ -1509,18 +1535,15 @@ test {
 
 test {
   let tokens = []
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/ack.mbt").unwrap()
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/matmul-flat.mbt").unwrap()
   @lex.lex({ str: _test2, offset: 0, array: tokens })
   // println(tokens)
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println(prog)
 }
 
-// test {
-//   let tokens = []
-//   let _test2 = "ack(x - 1, ack(x, y - 1))"
-//   @lex.lex({ str: _test2, offset: 0, array: tokens })
-//   println(tokens)
-//   let (prog, _) = stmt(tokens[:]).unwrap()
-//   println(prog)
-// }
+test {
+  let x = ["1", "2", "3", "4"]
+  let res = x.fold(init="0", fn { n, i => "F(" + n + "," + i + ")" })
+  println(res)
+}
