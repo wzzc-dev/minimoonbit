@@ -116,6 +116,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
             None => {
               let t = @types.Type::new_tvar()
               extenv[x] = t
+              // println("infer: " + x + " is " + t.to_string())
               t
             }
           }
@@ -179,7 +180,16 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
           } else {
             let b1_ty = infer!(ctx, b1)
             let b2_ty = infer!(ctx, b2)
-            raise TyErr("The branchs of If should have same type: b1 " + b1.to_string() + " b2 " + b2.to_string() + " but got: b1 ty: " + b1_ty.to_string() + " b2 ty:" + b2_ty.to_string())
+            raise TyErr(
+              "The branchs of If should have same type: b1 " +
+              b1.to_string() +
+              " b2 " +
+              b2.to_string() +
+              " but got: b1 ty: " +
+              b1_ty.to_string() +
+              " b2 ty:" +
+              b2_ty.to_string(),
+            )
           }
         _ => raise TyErr("The condition of If should have Type Bool")
       }
@@ -252,12 +262,17 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
             let newctx = ctx._.insert(name, t)
             infer!(newctx, s1)
           } else {
-            raise TyErr("The value and expression types in Let are different" +
-              " in name: " +  name.to_string() +
-              "\nvalue: " + value.to_string() +
-              "\nt: " + t.to_string() +
-              "\nty: " + ty.to_string()
-              )
+            raise TyErr(
+              "The value and expression types in Let are different" +
+              " in name: " +
+              name.to_string() +
+              "\nvalue: " +
+              value.to_string() +
+              "\nt: " +
+              t.to_string() +
+              "\nty: " +
+              ty.to_string(),
+            )
           }
         }
       }
@@ -272,7 +287,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
       unify!(t, Fun(params_ty, body_ty))
       infer!(env_with_f, rest)
     }
-    LetTuple(arr, s1, s2) =>
+    LetTuple(arr, s1, s2) => 
       match arr[0].1 {
         Var({ val: None }) =>
           match s1 {
@@ -285,7 +300,27 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
               }
               infer!(newctx, s2)
             }
-            _ => raise TyErr("The first operand of LetTuple should be tuple")
+            Var(_) => {
+              let t = infer!(ctx, s1)
+              match t {
+                Tuple(arr_tup) => {
+                  for i, value in arr {
+                    // println("unifying " + value.1.to_string() + " with " + arr_tup[i].to_string())
+                    unify!(value.1, arr_tup[i])
+                  }
+                  infer!(ctx, s2)
+                }
+                _ =>
+                  raise TyErr("Tuple expected, found {}")
+              }
+            }
+            _ =>
+              raise TyErr(
+                "The first operand of LetTuple should be tuple, but got: " +
+                s1.to_string() +
+                " with type: " +
+                infer!(ctx, s1).to_string(),
+              )
           }
         _ =>
           match s1 {
@@ -466,9 +501,10 @@ test "typing" {
     // println(result.unwrap())
   }
 }
+
 test {
   // let x = Array::make(10, 0);
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/matmul-flat.mbt").unwrap()
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/inprod.mbt").unwrap()
   let parse = @parser.parse_from_string(_test2)
   println(parse)
   try {
