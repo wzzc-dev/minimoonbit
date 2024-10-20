@@ -62,8 +62,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
     Bool(b) => if b { Int(1) } else { Int(0) }
     Not(syn) => to_knf!(self, If(syn, Int(0), Int(1)))
     If(syn1, syn2, syn3) =>
+      // println("if: " + syn1.to_string())
       match syn1 {
-        Bool(b) => if b { to_knf!(self, syn2) } else { to_knf!(self, syn3) }
         Eq(lhs, rhs) => {
           let (l_name, l_ty, lknf) = get_knf!(self, lhs)
           let (r_name, r_ty, rknf) = get_knf!(self, rhs)
@@ -88,8 +88,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
               match rhs {
                 Var(_) =>
                   Let(
-                    (r_name, r_ty),
-                    rknf,
+                    (l_name, l_ty),
+                    lknf,
                     IfEq(
                       l_name,
                       r_name,
@@ -118,12 +118,15 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         LE(lhs, rhs) => {
           let (l_name, l_ty, lknf) = get_knf!(self, lhs)
           let (r_name, r_ty, rknf) = get_knf!(self, rhs)
+          // println("LE: " + (l_name, l_ty, lknf).to_string())
+          // println("LE: " + (r_name, r_ty, rknf).to_string())
           match lhs {
             Var(_) =>
               match rhs {
                 Var(_) =>
                   IfLe(l_name, r_name, to_knf!(self, syn2), to_knf!(self, syn3))
                 _ =>
+                  // println("LE: rhs is  a variable" + r_name.to_string())
                   Let(
                     (r_name, r_ty),
                     rknf,
@@ -178,7 +181,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         //   ),
         // )
         Not(b) => to_knf!(self, If(b, syn3, syn2))
-        _ => to_knf!(self, syn1)
+        _ => to_knf!(self, If(Eq(syn1, Bool(false)), syn3, syn2))
       }
     Neg(syn, ~kind) =>
       // let knf = get_knf!(self, syn)
@@ -213,6 +216,10 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
     Prim(lsyn, rsyn, op, ~kind) => {
       let (l_name, _, l) = get_knf!(self, lsyn)
       let (r_name, _, r) = get_knf!(self, rsyn)
+      // println("l_name = " + l_name.to_string())
+      // println("r_name = " + r_name.to_string())
+      // println("lsyn = " + lsyn.to_string())
+      // println("rsyn = " + rsyn.to_string())
       let mut opty : Knf = Unit
       match kind {
         Some(Int) => {
@@ -230,7 +237,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
               }
             _ =>
               match rsyn {
-                Var(_) => Let((l_name, Int), r, opty)
+                Var(_) => Let((l_name, Int), l, opty)
                 _ => Let((l_name, Int), l, Let((r_name, Int), r, opty))
               }
           }
@@ -258,8 +265,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         _ => raise KnfErr("the type of prim is unknown")
       }
     }
-    Eq(syn1, syn2) => to_knf!(self, If(Eq(syn1, syn2), Int(1), Int(0)))
-    LE(syn1, syn2) => to_knf!(self, If(LE(syn1, syn2), Int(1), Int(0)))
+    Eq(syn1, syn2) => to_knf!(self, If(Eq(syn1, syn2), Bool(true), Bool(false)))
+    LE(syn1, syn2) => to_knf!(self, If(LE(syn1, syn2), Bool(true), Bool(false)))
     Let((name, ty), syn, rest) => {
       let knf = to_knf!(self, syn)
       let new_env = {
@@ -558,12 +565,12 @@ test {
 }
 
 test {
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/cls-reg-bug.mbt").unwrap() //cls-reg-bug.mbt
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/matmul-flat.mbt").unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   // println(parse)
   try {
     let typed = @typing.typing!(parse)
-    // println(typed)
+    println(typed)
     let knf = to_knf!(KnfEnv::new(@immut/hashmap.new()), typed)
     println(knf)
   } catch {
