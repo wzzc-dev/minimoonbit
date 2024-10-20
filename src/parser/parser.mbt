@@ -360,10 +360,11 @@ fn letTupleStmt(
         ),
         stmt,
       ) => {
-        let ids = []
+        let ids = [(identifier, @types.Type::Var({ val: None }))]
         for x in identifiers {
           match x {
-            (_, @lex.Token::IDENTIFIER(i)) => ids.push((i, @types.Type::Unit))
+            (_, @lex.Token::IDENTIFIER(i)) =>
+              ids.push((i, @types.Type::Var({ val: None })))
             (_, ident) => {
               println("let tuple ident: " + ident.to_string())
               panic()
@@ -380,24 +381,24 @@ fn letTupleStmt(
         match type_annotation {
           Some(type_) => {
             match type_ {
-              @types.Type::Tuple(typeTuple) =>
+              Tuple(typeTuple) =>
                 for i, e in typeTuple {
                   ids[i] = (ids[i].0, e)
                 }
-              _ => panic()
+              _ => {
+                println("type_annotation is not a tuple")
+                panic()
+              }
             }
-            @types.Syntax::LetTuple(
-              [(identifier, @types.Type::Unit), ..ids],
-              expr,
-              stmt,
-            )
+            @types.Syntax::LetTuple(ids, expr, stmt)
           }
           None => @types.Syntax::LetTuple(ids, expr, stmt)
         }
       }
-      _ =>
-        // println("Invalid let statement")
+      _ => {
+        println("Invalid let statement")
         panic()
+      }
     },
   )
   .parse(tokens)
@@ -721,19 +722,20 @@ fn getOrApplyLevelExpr(
         let result = list.fold(
           init=expr,
           fn {
-            e, ((l, None), _) => {
+            e, ((l, None), _) =>
               match l {
                 LBRACKET => {
-                  println("getExpr LBRACKET not empty - token :" +
-                  tokens.to_string())
+                  println(
+                    "getExpr LBRACKET not empty - token :" + tokens.to_string(),
+                  )
                   panic()
                 }
                 LPAREN => App(e, [])
                 _ => {
                   println("Invalid getExpr need [ or (")
-                  panic()}
+                  panic()
+                }
               }
-            }
             e, ((l, Some((expr1, list))), _) => {
               let tails = list.map(fn { (_, e2) => e2 })
               // println("applyExpr tails: " + tails.to_string())
@@ -1511,10 +1513,7 @@ test {
   let test1 =
     #| fn main {
     // #|  let x = c[i][j];
-    #|    let a = make_arr(2, 3, dummy);b[2][0] = 11.0; b[2][1] = 12.0;
-    #| let _ = mul(2,3,2,a,b,c);
-    #|let _ = print_int(truncate(c[0][0]));
-    #|let _ = print_endline();
+    #|    let (x, _, _) = v;
     // #|let _ = print_int(truncate(c[0][1]));
     // #| let _ = print_endline();
     // #| let _ = print_int(truncate(c[1][0]));
