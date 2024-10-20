@@ -287,7 +287,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
       unify!(t, Fun(params_ty, body_ty))
       infer!(env_with_f, rest)
     }
-    LetTuple(arr, s1, s2) => 
+    LetTuple(arr, s1, s2) =>
       match arr[0].1 {
         Var({ val: None }) =>
           match s1 {
@@ -310,8 +310,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
                   }
                   infer!(ctx, s2)
                 }
-                _ =>
-                  raise TyErr("Tuple expected, found {}")
+                _ => raise TyErr("Tuple expected, found {}")
               }
             }
             _ =>
@@ -340,14 +339,41 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
           }
       }
     Put(name, n, value) =>
-      match name {
-        Get(_, _) =>
-          if infer!(ctx, name) == infer!(ctx, n) {
-            infer!(ctx, value)
-          } else {
-            raise TyErr("The operand of Put should have same type")
+      match infer!(ctx, n) {
+        Int =>
+          match infer!(ctx, name) {
+            Array(t) =>
+              if t == infer!(ctx, value) {
+                t
+              } else {
+                raise TyErr(
+                  "The operand of Put should have same type: " +
+                  "\n" +
+                  (name, n, value).to_string() +
+                  "\n" +
+                  infer!(ctx, name).to_string() +
+                  "\n" +
+                  infer!(ctx, n).to_string() +
+                  "\n" +
+                  infer!(ctx, value).to_string() +
+                  "\n t: " +
+                  t.to_string(),
+                )
+              }
+            _ =>
+              raise TyErr(
+                "The type of name should be Array, but got: " +
+                infer!(ctx, name).to_string(),
+              )
           }
-        _ => raise TyErr("The operand of Put should be Get")
+        _ =>
+          raise TyErr(
+            "The operand of Put Index should be Int" +
+            "\n n: " +
+            n.to_string() +
+            "\n infer!(ctx, n): " +
+            infer!(ctx, n).to_string(),
+          )
       }
   }
 }

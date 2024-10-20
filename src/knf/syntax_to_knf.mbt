@@ -474,6 +474,10 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       }
     }
     Put(syn1, syn2, syn3) => {
+      // println("Put: ")
+      // println(syn1)
+      // println(syn2)
+      // println(syn3) 
       let (name1, s1_ty, knf1) = get_knf!(self, syn1)
       let (name2, s2_ty, knf2) = get_knf!(self, syn2)
       let (name3, s3_ty, knf3) = get_knf!(self, syn3)
@@ -570,8 +574,12 @@ test {
   // println(parse)
   try {
     let typed = @typing.typing!(parse)
-    println(typed)
-    let knf = to_knf!(KnfEnv::new(@immut/hashmap.new()), typed)
+    // println(typed)
+    
+    let env = KnfEnv::new(@immut/hashmap.new())
+    let pre = syntax_preprocess(env, typed)
+
+    let knf = to_knf!(env, pre)
     println(knf)
   } catch {
     @typing.TyErr(s) => {

@@ -268,7 +268,14 @@ pub fn ClosureInterpreter::eval(
       let v = find!(env, v)
       match (arr, idx) {
         (Array(arr), Int(idx)) => arr[idx] = v
-        _ => fail!("type mismatch, put expects Array and Int")
+        _ =>
+          fail!(
+            "type mismatch, put expects Array and Int" +
+            "arrayput got arr: " +
+            arr.to_string() +
+            ", and idx: " +
+            idx.to_string(),
+          )
       }
       Unit
     }
