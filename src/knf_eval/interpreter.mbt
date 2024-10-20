@@ -245,7 +245,9 @@ pub fn KnfInterpreter::eval(
       let idx = find!(env, idx)
       match (arr, idx) {
         (Array(arr), Int(idx)) => arr[idx]
-        _ => fail!("type mismatch, get expects Array and Int")
+        _ => fail!("type mismatch, get expects Array and Int" + 
+          " got arr: " + arr.to_string() +", and idx: " + idx.to_string()
+        )
       }
     }
     Put(arr, idx, v) => {
