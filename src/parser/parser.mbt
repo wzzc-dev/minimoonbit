@@ -1501,6 +1501,7 @@ let parser : Parser[@types.Syntax] = Parser(program)
 pub type! ParserErr String derive(ToJson)
 
 pub fn parse_from_string(str : String) -> @types.Syntax {
+  println("parsing: \n" + str)
   let tokens = []
   @lex.lex({ str, offset: 0, array: tokens })
   // println(tokens)
