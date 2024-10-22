@@ -257,7 +257,7 @@ pub fn KnfInterpreter::eval(
       match (arr, idx) {
         (Array(arr), Int(idx)) => arr[idx] = v
         _ => fail!("type mismatch, put expects Array and Int" +
-          "put got arr: " + arr.to_string() +", and idx: " + idx.to_string()
+          " put got arr: " + arr.to_string() +", and idx: " + idx.to_string()
         )
       }
       Unit

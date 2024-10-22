@@ -479,7 +479,15 @@ fn assignStmt(
   .map(
     fn {
       ((((get_expr, _), expr), _), stmt) =>
-        @types.Syntax::Put(get_expr, expr, stmt)
+       match get_expr {
+        Get(arr, idx) => {
+          @types.Syntax::Let(("_", Var({val: None})), Put(arr, idx, expr), stmt)
+        }
+        _ => {
+          println("Invalid assign statement")
+          @types.Syntax::Let(("_", Var({val: None})), get_expr, stmt)
+        }
+       }
     },
   )
   .parse(tokens)
@@ -1535,7 +1543,7 @@ test {
 
 test {
   let tokens = []
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/adder.mbt").unwrap()
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/shuffle.mbt").unwrap()
   @lex.lex({ str: _test2, offset: 0, array: tokens })
   // println(tokens)
   let (prog, _) = parser.parse(tokens[:]).unwrap()
