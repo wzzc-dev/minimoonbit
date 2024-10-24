@@ -4,7 +4,7 @@ fn add_interpreter_fns(interpreter : @knf_eval.KnfInterpreter) -> Unit {
     fn(args) {
       match args[0] {
         Int(i) => @io.print(i)
-        _ => @util.die("print_int expects Int")
+        _ => @util.die("print_int expects Int" + args[0].to_string())
       }
       Unit
     },
@@ -98,7 +98,7 @@ fn add_closure_interpreter_fns(
     fn(args) {
       match args[0] {
         Int(i) => @io.print(i)
-        _ => @util.die("print_int expects Int")
+        _ => @util.die("\n -------------------- \n print_int expects Int: " + args.to_string())
       }
       Unit
     },

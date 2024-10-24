@@ -54,6 +54,10 @@ pub fn ClosureInterpreter::eval_full(
     self.functions.set(f.name._, f)
   }
   let env = InterpreterLocalVars::new()
+  // println("eval_full: " + expr.body.to_string())
+  // for f in self.functions {
+  //   println("fundef: " + f.to_string())
+  // }
   self.eval!(env, expr.body)
 }
 
