@@ -4,7 +4,7 @@ pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type]
 ) -> Program {
-  println("knf_program_to_closure: " + prog.to_string())
+  // println("knf_program_to_closure: " + prog.to_string())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
   extern_env.each(
@@ -146,9 +146,9 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         },
       )
       // println("env: " + env.to_string())
-      println(
-        "Apply: " + name.to_string() + " , closure: " + closure.to_string(),
-      )
+      // println(
+      //   "Apply: " + name.to_string() + " , closure: " + closure.to_string(),
+      // )
       match closure {
         None => CallDirect(name.to_string(), arr_name)
         Some(_) => CallClosure(name, arr_name)
