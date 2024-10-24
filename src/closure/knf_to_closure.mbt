@@ -34,11 +34,11 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  for i in fundefs {
-    println("fundef: " + i.to_string())
-  }
-  println("==========================")
-  println("body: " + body.to_string())
+  // for i in fundefs {
+  //   println("fundef: " + i.to_string())
+  // }
+  // println("==========================")
+  // println("body: " + body.to_string())
   { fundefs, body }
 }
 
@@ -62,21 +62,43 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       IfEq(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
     IfLe(a, b, ka, kb) =>
       IfLe(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
-    Let((x, ty), e, cont) =>
+    Let((x, ty), e, cont) => {
+      // 记录变量的类型信息
+      let low_ty = ty_to_low_type(ty)
+      
+      // 检查是否是闭包类型
+      let is_closure = match ty {
+        Fun(_, _) => true
+        _ => false
+      }
+      
+      // 如果是闭包类型，将变量添加到环境中
+      if is_closure {
+        env.push({
+          name: x.to_string(),
+          old_name: x,
+          is_closure: true,
+          ty: low_ty,
+          args: [],
+          formal_free_vars: [],
+          body: Unit,
+        })
+      }
+      
       Let(
-        (x, ty_to_low_type(ty)),
+        (x, low_ty),
         knf_to_closure(env, e),
         knf_to_closure(env, cont),
       )
+    }
     LetRec({ name, ty, args, body }, cont) => {
       // println("LetRec: " + e.to_string())
       // let mut args_ty = []
       let mut return_ty : Type = Unit
       match ty {
-        Fun(_, ty) => {
+        Fun(_, ty) =>
           // args_ty = arr_ty
           return_ty = ty
-        }
         _ => @util.die("LetRec: " + ty.to_string())
       }
       // println("LetRec: " + name.to_string())
@@ -116,9 +138,17 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     Apply(name, arr_name) => {
       // 检查是否是函数定义中的函数
       let closure = env.search_by(
-        fn(def) { def.old_name == name && def.is_closure },
+        fn(def) {
+          // println("def.old_name: " + def.old_name.to_string() +
+          // " , name: " + def.name.to_string() +
+          // " , def.is_closure: " + def.is_closure.to_string())
+          def.old_name == name && def.is_closure
+        },
       )
-      // println("Apply: " + name.to_string() + " , closure: " + closure.to_string())
+      // println("env: " + env.to_string())
+      println(
+        "Apply: " + name.to_string() + " , closure: " + closure.to_string(),
+      )
       match closure {
         None => CallDirect(name.to_string(), arr_name)
         Some(_) => CallClosure(name, arr_name)
