@@ -28,7 +28,7 @@ fn Stages::next(self : Stages) -> Stages {
     Stages::Typecheck => Stages::Knf
     Stages::Knf => Stages::KnfOpt
     Stages::KnfOpt => Stages::Closure
-    Stages::Closure => @util.die("TODO")
+    Stages::Closure => Stages::Asm
     Stages::Asm => Stages::Finished
     Stages::Finished => Stages::Finished
   }
