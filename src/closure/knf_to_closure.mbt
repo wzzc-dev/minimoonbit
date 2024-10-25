@@ -119,7 +119,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       let initial_def : FuncDef = {
         name: name.to_string(),
         old_name: name,
-        is_closure: closure,  // 临时设置为 false
+        is_closure: closure,
         ty: ty_to_low_type(return_ty),
         args: args.map(fn { (name, ty) => (name, ty_to_low_type(ty)) }),
         formal_free_vars: [],
@@ -127,6 +127,14 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       }
       env.push(initial_def)
 
+      let free_vars = fv(body)
+      for arg in args {
+        free_vars.remove(arg.0)
+      }
+      // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
+      free_vars.remove(name)
+      // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
+      let closure = if free_vars.is_empty() { false } else { true }
       let def : FuncDef = {
         name: name.to_string(),
         old_name: name,
@@ -136,7 +144,8 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         formal_free_vars: to_array(free_vars).map(fn { name => (name, Int) }),
         body: knf_to_closure(env, body),
       }
-      let _ = env.filter(fn(def) { def.old_name != name })
+      let index = env.search_by(fn(def) { def.old_name == name }).unwrap()
+      let _ = env.remove(index)
       env.push(def)
       // println("LetRec: " + name.to_string() + " , def: " + def.to_string())
       let closure : Closure = {
@@ -154,22 +163,36 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       // }
     }
     Apply(name, arr_name) => {
+      // println("Apply: " + name.to_string() + " , arr_name: " + arr_name.to_string())
+      // for i in env {
+      //   println("env: " + i.name.to_string())
+      // }
+      let is_capture = match env.filter(fn(def) {
+        // println("def: " + def.to_string())
+        match def.args.search_by(fn(var) { var.0 == name }) {
+          Some(_) => true
+          None => false
+        }
+      }) {
+        [] => false
+        _ => true
+      }
+      // println("is_capture: " + is_capture.to_string())
       // 检查是否是函数定义中的函数
-      let closure = env.search_by(
+      let closure = match env.search_by(
         fn(def) {
           // println("def.old_name: " + def.old_name.to_string() +
           // " , name: " + def.name.to_string() +
           // " , def.is_closure: " + def.is_closure.to_string())
-          def.old_name == name && def.is_closure
+          (def.old_name == name && def.is_closure)
         },
-      )
-      // println("env: " + env.to_string())
-      // println(
-      //   "Apply: " + name.to_string() + " , closure: " + closure.to_string(),
-      // )
-      match closure {
-        None => CallDirect(name.to_string(), arr_name)
-        Some(_) => CallClosure(name, arr_name)
+      ) {
+        None => false
+        Some(_) => true
+      }
+      match closure && is_capture {
+        true => CallDirect(name.to_string(), arr_name)
+        false => CallClosure(name, arr_name)
       }
     }
     Var(n) => Var(n)
