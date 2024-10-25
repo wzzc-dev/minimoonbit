@@ -297,7 +297,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       let rest = to_knf!({ counter: self.counter, externals: env_fun }, rest)
       LetRec({ name: fun_name, ty, args: fun_args, body: fun_body }, rest)
     }
-    App(syn, args) => {
+    App(syn, syns) => {
       // println("app: syn: " + syn.to_string())
       // println("app: args: " + args.to_string())
       // let args_names = Array::new()
@@ -337,7 +337,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       fn let_app(
         self : KnfEnv,
         f : Name,
-        nm : Array[Name],
+        args_names : Array[Name],
         s : Array[@types.Syntax]
       ) -> Knf!KnfErr {
         let ss = s.pop()
@@ -349,24 +349,24 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
             if not(f.name.is_empty()) &&
               @typing.extenv.contains(f.name.unwrap()) {
               // println("external")
-              ExternalFunctionApplication("minimbt_" + f.name.unwrap(), nm)
+              ExternalFunctionApplication("minimbt_" + f.name.unwrap(), args_names)
             } else {
               // println("app")
-              Apply(f, nm)
+              Apply(f, args_names)
             }
           Some(ss) => {
             let ty = get_type!(self.externals, ss)
             match ss {
               Var(str) => {
                 let x = @types.from_string?(str).unwrap()
-                nm.insert(0, x)
-                let_app!(self, f, nm, s)
+                args_names.insert(0, x)
+                let_app!(self, f, args_names, s)
               }
               _ => {
                 let x = self.new_temp()
                 let k = to_knf!(self, ss)
-                nm.insert(0, x)
-                Let((x, ty), k, let_app!(self, f, nm, s))
+                args_names.insert(0, x)
+                Let((x, ty), k, let_app!(self, f, args_names, s))
               }
             }
           }
@@ -376,18 +376,18 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       fn let_args(
         self : KnfEnv,
         syn : @types.Syntax,
-        args : Array[@types.Syntax]
+        syns : Array[@types.Syntax]
       ) -> Knf!KnfErr {
         let ty_s = get_type!(self.externals, syn)
         match syn {
           Var(str) => {
             let x = @types.from_string?(str).unwrap()
-            let_app!(self, x, [], args)
+            let_app!(self, x, [], syns)
           }
           _ => {
             let x = self.new_temp()
             let k = to_knf!(self, syn)
-            Let((x, ty_s), k, let_app!(self, x, [], args))
+            Let((x, ty_s), k, let_app!(self, x, [], syns))
           }
         }
       }
@@ -395,11 +395,11 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       match syn {
         Var(f) =>
           if @typing.extenv.contains(f) {
-            let_app!(self, @types.from_string?(f).unwrap(), [], args)
+            let_app!(self, @types.from_string?(f).unwrap(), [], syns)
           } else {
-            let_args!(self, syn, args)
+            let_args!(self, syn, syns)
           }
-        _ => let_args!(self, syn, args)
+        _ => let_args!(self, syn, syns)
       }
     }
     Tuple(syns) => {

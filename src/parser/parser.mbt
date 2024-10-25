@@ -772,63 +772,63 @@ fn getOrApplyLevelExpr(
   .parse(tokens)
 }
 
-fn getExpr(
-  tokens : ArrayView[@lex.Token]
-) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // println("getExpr: " + tokens.to_string())
-  // Parser(valueExpr)
-  // .and(lbracket)
-  // .and(expr)
-  // .and(rbracket)
-  // .map(
-  //   fn { (((value_expr, _), expr), _) => @types.Syntax::Get(value_expr, expr) },
-  // )
-  // .parse(tokens)
-  Parser(valueExpr)
-  .and(lbracket.and(expr).and(rbracket).many())
-  .map(
-    fn {
-      (e, list) => {
-        let result = list.fold(init=e, fn { e, ((_, expr), _) => Get(e, expr) })
-        result
-      }
-    },
-  )
-  .parse(tokens)
-}
+// fn getExpr(
+//   tokens : ArrayView[@lex.Token]
+// ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+//   // println("getExpr: " + tokens.to_string())
+//   // Parser(valueExpr)
+//   // .and(lbracket)
+//   // .and(expr)
+//   // .and(rbracket)
+//   // .map(
+//   //   fn { (((value_expr, _), expr), _) => @types.Syntax::Get(value_expr, expr) },
+//   // )
+//   // .parse(tokens)
+//   Parser(valueExpr)
+//   .and(lbracket.and(expr).and(rbracket).many())
+//   .map(
+//     fn {
+//       (e, list) => {
+//         let result = list.fold(init=e, fn { e, ((_, expr), _) => Get(e, expr) })
+//         result
+//       }
+//     },
+//   )
+//   .parse(tokens)
+// }
 
-fn applyExpr(
-  tokens : ArrayView[@lex.Token]
-) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // println("applyExpr: " + tokens.to_string())
-  // Parser(noEmptyApplyExpr).or(emptyApplyExpr).parse(tokens)
-  Parser(valueExpr)
-  .and(
-    lparen
-    .zeroOrOnce(Parser(expr).zeroOrOnce(comma.and(expr).many()))
-    .and(rparen)
-    .many(),
-  )
-  .map(
-    fn {
-      (e, list) => {
-        let result = list.fold(
-          init=e,
-          fn {
-            e, ((_, None), _) => App(e, [])
-            e, ((_, Some((expr1, None))), _) => App(e, [expr1])
-            e, ((_, Some((expr1, Some(arr)))), _) => {
-              let arr_t = arr.map(fn { (_, t) => t })
-              App(e, [expr1, ..arr_t])
-            }
-          },
-        )
-        result
-      }
-    },
-  )
-  .parse(tokens)
-}
+// fn applyExpr(
+//   tokens : ArrayView[@lex.Token]
+// ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+//   // println("applyExpr: " + tokens.to_string())
+//   // Parser(noEmptyApplyExpr).or(emptyApplyExpr).parse(tokens)
+//   Parser(valueExpr)
+//   .and(
+//     lparen
+//     .zeroOrOnce(Parser(expr).zeroOrOnce(comma.and(expr).many()))
+//     .and(rparen)
+//     .many(),
+//   )
+//   .map(
+//     fn {
+//       (e, list) => {
+//         let result = list.fold(
+//           init=e,
+//           fn {
+//             e, ((_, None), _) => App(e, [])
+//             e, ((_, Some((expr1, None))), _) => App(e, [expr1])
+//             e, ((_, Some((expr1, Some(arr)))), _) => {
+//               let arr_t = arr.map(fn { (_, t) => t })
+//               App(e, [expr1, ..arr_t])
+//             }
+//           },
+//         )
+//         result
+//       }
+//     },
+//   )
+//   .parse(tokens)
+// }
 
 // fn emptyApplyExpr(
 //   tokens : ArrayView[@lex.Token]
