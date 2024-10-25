@@ -297,7 +297,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       let rest = to_knf!({ counter: self.counter, externals: env_fun }, rest)
       LetRec({ name: fun_name, ty, args: fun_args, body: fun_body }, rest)
     }
-    App(syn, syns) => {
+    App(syn, args_syns) => {
       // println("app: syn: " + syn.to_string())
       // println("app: args: " + args.to_string())
       // let args_names = Array::new()
@@ -395,11 +395,11 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       match syn {
         Var(f) =>
           if @typing.extenv.contains(f) {
-            let_app!(self, @types.from_string?(f).unwrap(), [], syns)
+            let_app!(self, @types.from_string?(f).unwrap(), [], args_syns)
           } else {
-            let_args!(self, syn, syns)
+            let_args!(self, syn, args_syns)
           }
-        _ => let_args!(self, syn, syns)
+        _ => let_args!(self, syn, args_syns)
       }
     }
     Tuple(syns) => {
