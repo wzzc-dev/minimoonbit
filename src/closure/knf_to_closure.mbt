@@ -4,7 +4,7 @@ pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type]
 ) -> Program {
-  // println("knf_program_to_closure: " + prog.to_string())
+  println("knf_program_to_closure: " + prog.to_string())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
   extern_env.each(
@@ -34,11 +34,13 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  // for i in fundefs {
-  //   println("fundef: " + i.to_string())
-  // }
-  // println("==========================")
-  // println("body: " + body.to_string())
+  for i in fundefs {
+    if not(extern_env.contains(i.old_name.to_string())) {
+      println("fundef: " + i.to_string())
+    }
+  }
+  println("==========================")
+  println("body: " + body.to_string())
   { fundefs, body }
 }
 
@@ -92,7 +94,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       )
     }
     LetRec({ name, ty, args, body }, cont) => {
-      // println("LetRec: " + e.to_string())
+      println("LetRec: " + e.to_string())
       // let mut args_ty = []
       let mut return_ty : Type = Unit
       match ty {
@@ -110,6 +112,8 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       free_vars.remove(name)
       // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
       let closure = if free_vars.is_empty() { false } else { true }
+      println("args: " + args.to_string())
+      println("free_vars: " + free_vars.to_string())
       let def : FuncDef = {
         name: name.to_string(),
         old_name: name,
@@ -125,15 +129,15 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         name: name.to_string(),
         actual_free_vars: to_array(free_vars),
       }
-      if closure.actual_free_vars.is_empty() {
-        knf_to_closure(env, cont)
-      } else {
+      // if closure.actual_free_vars.is_empty() {
+      //   knf_to_closure(env, cont)
+      // } else {
         MakeClosure(
           (name, ty_to_low_type(ty)),
           closure,
           knf_to_closure(env, cont),
         )
-      }
+      // }
     }
     Apply(name, arr_name) => {
       // 检查是否是函数定义中的函数
