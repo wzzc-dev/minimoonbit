@@ -201,7 +201,7 @@ pub fn ClosureInterpreter::eval(
     MakeClosure((n, _), c, e) => {
       let closure = self.functions
         .get(c.name._)
-        .or_error!(Failure("closure not found"))
+        .or_error!(Failure("closure not found: " + n.to_string()))
       let fv = []
       // println("env: " + env.to_string())
       for x in c.actual_free_vars {

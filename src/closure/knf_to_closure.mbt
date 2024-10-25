@@ -103,6 +103,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
           return_ty = ty
         _ => @util.die("LetRec: " + ty.to_string())
       }
+
       // println("LetRec: " + name.to_string())
       let free_vars = fv(body)
       for arg in args {
@@ -114,15 +115,28 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       let closure = if free_vars.is_empty() { false } else { true }
       // println("args: " + args.to_string())
       // println("free_vars: " + free_vars.to_string())
+
+      let initial_def : FuncDef = {
+        name: name.to_string(),
+        old_name: name,
+        is_closure: closure,  // 临时设置为 false
+        ty: ty_to_low_type(return_ty),
+        args: args.map(fn { (name, ty) => (name, ty_to_low_type(ty)) }),
+        formal_free_vars: [],
+        body: Unit,  // 临时设置为 Unit
+      }
+      env.push(initial_def)
+
       let def : FuncDef = {
         name: name.to_string(),
         old_name: name,
         is_closure: closure,
         ty: ty_to_low_type(return_ty),
         args: args.map(fn { (name, ty) => (name, ty_to_low_type(ty)) }),
-        formal_free_vars: to_array(free_vars).map(fn { name => (name, Unit) }),
+        formal_free_vars: to_array(free_vars).map(fn { name => (name, Int) }),
         body: knf_to_closure(env, body),
       }
+      let _ = env.filter(fn(def) { def.old_name != name })
       env.push(def)
       // println("LetRec: " + name.to_string() + " , def: " + def.to_string())
       let closure : Closure = {
