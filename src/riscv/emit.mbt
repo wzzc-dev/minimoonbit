@@ -4,6 +4,10 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
 
   // 为每个函数定义生成汇编代码
   for fundef in input.fundefs {
+    if extenv.contains(fundef.name._) {
+      continue
+    }
+
     let body = []
 
     // 函数序言（Function Prologue）
@@ -87,55 +91,55 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
       instrs
     }
     Add(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
+      instrs.push(Li(A0, name1.name.to_string()))
+      instrs.push(Li(A1, name2.name.to_string()))
       instrs.push(Add(A0, A0, A1))
       instrs
     }
     Sub(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
+      instrs.push(Li(A0, name1.name.to_string()))
+      instrs.push(Li(A1, name2.name.to_string()))
       instrs.push(Sub(A0, A0, A1))
       instrs
     }
     Mul(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
+      instrs.push(Li(A0, name1.name.to_string()))
+      instrs.push(Li(A1, name2.name.to_string()))
       instrs.push(Mul(A0, A0, A1))
       instrs
     }
     Div(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
+      instrs.push(Li(A0, name1.name.to_string()))
+      instrs.push(Li(A1, name2.name.to_string()))
       instrs.push(Div(A0, A0, A1))
       instrs
     }
     FNeg(name) => {
-      instrs.push(Li(A0, name.to_string()))
+      instrs.push(Li(A0, name.name.to_string()))
       instrs.push(FnegD(Fa0, Fa0))
       instrs
     }
     FAdd(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
+      instrs.push(Li(A0, name1.name.to_string()))
+      instrs.push(Li(A1, name2.name.to_string()))
       instrs.push(FaddD(Fa0, Fa0, Fa0))
       instrs
     }
     FSub(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
+      instrs.push(Li(A0, name1.name.to_string()))
+      instrs.push(Li(A1, name2.name.to_string()))
       instrs.push(FsubD(Fa0, Fa0, Fa0))
       instrs
     }
     FMul(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
+      instrs.push(Li(A0, name1.name.to_string()))
+      instrs.push(Li(A1, name2.name.to_string()))
       instrs.push(FmulD(Fa0, Fa0, Fa0))
       instrs
     }
     FDiv(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
+      instrs.push(Li(A0, name1.name.to_string()))
+      instrs.push(Li(A1, name2.name.to_string()))
       instrs.push(FdivD(Fa0, Fa0, Fa0))
       instrs
     }
@@ -277,3 +281,9 @@ fn gen_label(~counter : Ref[Int] = default_counter) -> Label {
   counter.val = counter.val + 1
   Label("label_" + counter.val.to_string())
 }
+
+pub let extenv = [
+  "read_int", "print_int", "read_char", "print_char", "print_newline", "print_endline",
+  "int_of_float", "float_of_int", "truncate", "floor", "abs_float", "sqrt", "sin",
+  "cos", "atan", "create_array", "create_float_array", "create_ptr_array"
+]
