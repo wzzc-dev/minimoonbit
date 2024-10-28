@@ -7,7 +7,6 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     if extenv.contains(fundef.name._) {
       continue
     }
-
     let body = []
 
     // 函数序言（Function Prologue）
@@ -91,55 +90,55 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
       instrs
     }
     Add(name1, name2) => {
-      instrs.push(Li(A0, name1.name.to_string()))
-      instrs.push(Li(A1, name2.name.to_string()))
+      instrs.push(Li(A0, name1.to_string()))
+      instrs.push(Li(A1, name2.to_string()))
       instrs.push(Add(A0, A0, A1))
       instrs
     }
     Sub(name1, name2) => {
-      instrs.push(Li(A0, name1.name.to_string()))
-      instrs.push(Li(A1, name2.name.to_string()))
+      instrs.push(Li(A0, name1.to_string()))
+      instrs.push(Li(A1, name2.to_string()))
       instrs.push(Sub(A0, A0, A1))
       instrs
     }
     Mul(name1, name2) => {
-      instrs.push(Li(A0, name1.name.to_string()))
-      instrs.push(Li(A1, name2.name.to_string()))
+      instrs.push(Li(A0, name1.to_string()))
+      instrs.push(Li(A1, name2.to_string()))
       instrs.push(Mul(A0, A0, A1))
       instrs
     }
     Div(name1, name2) => {
-      instrs.push(Li(A0, name1.name.to_string()))
-      instrs.push(Li(A1, name2.name.to_string()))
+      instrs.push(Li(A0, name1.to_string()))
+      instrs.push(Li(A1, name2.to_string()))
       instrs.push(Div(A0, A0, A1))
       instrs
     }
     FNeg(name) => {
-      instrs.push(Li(A0, name.name.to_string()))
+      instrs.push(Li(A0, name.to_string()))
       instrs.push(FnegD(Fa0, Fa0))
       instrs
     }
     FAdd(name1, name2) => {
-      instrs.push(Li(A0, name1.name.to_string()))
-      instrs.push(Li(A1, name2.name.to_string()))
+      instrs.push(Li(A0, name1.to_string()))
+      instrs.push(Li(A1, name2.to_string()))
       instrs.push(FaddD(Fa0, Fa0, Fa0))
       instrs
     }
     FSub(name1, name2) => {
-      instrs.push(Li(A0, name1.name.to_string()))
-      instrs.push(Li(A1, name2.name.to_string()))
+      instrs.push(Li(A0, name1.to_string()))
+      instrs.push(Li(A1, name2.to_string()))
       instrs.push(FsubD(Fa0, Fa0, Fa0))
       instrs
     }
     FMul(name1, name2) => {
-      instrs.push(Li(A0, name1.name.to_string()))
-      instrs.push(Li(A1, name2.name.to_string()))
+      instrs.push(Li(A0, name1.to_string()))
+      instrs.push(Li(A1, name2.to_string()))
       instrs.push(FmulD(Fa0, Fa0, Fa0))
       instrs
     }
     FDiv(name1, name2) => {
-      instrs.push(Li(A0, name1.name.to_string()))
-      instrs.push(Li(A1, name2.name.to_string()))
+      instrs.push(Li(A0, name1.to_string()))
+      instrs.push(Li(A1, name2.to_string()))
       instrs.push(FdivD(Fa0, Fa0, Fa0))
       instrs
     }
@@ -148,8 +147,8 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
       let label_end = gen_label()
 
       // 加载两个比较操作数
-      instrs.push(Li(A0, lhs.name.to_string()))
-      instrs.push(Li(A1, rhs.name.to_string()))
+      instrs.push(Li(A0, lhs.to_string()))
+      instrs.push(Li(A1, rhs.to_string()))
 
       // 比较 A0 和 A1 的值，如果相等则跳转到 label_true
       instrs.push(Beq(A0, A1, label_true))
@@ -172,8 +171,8 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
       let label_end = gen_label()
 
       // 加载两个比较操作数
-      instrs.push(Li(A0, lhs.name.to_string()))
-      instrs.push(Li(A1, rhs.name.to_string()))
+      instrs.push(Li(A0, lhs.to_string()))
+      instrs.push(Li(A1, rhs.to_string()))
 
       // 如果 A0 <= A1，跳转到 label_true
       instrs.push(Ble(A0, A1, label_true._))
@@ -206,11 +205,11 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
       instrs.push(Addi(Sp, Sp, 4)) // Adjust the stack pointer back
       instrs
     }
-    Var(name) => [Li(A0, name.name.to_string())]
+    Var(name) => [Li(A0, name.to_string())]
     MakeClosure((name, low_type), closure, expr) => {
       // 假设 `closure` 包含捕获变量的列表，将它们逐一存储
       for i, var in closure.actual_free_vars {
-        instrs.push(Li(A0, var.name.to_string()))
+        instrs.push(Li(A0, var.to_string()))
         instrs.push(Sw(A0, { base: Sp, offset: -4 * (i + 1) }))
       }
       // 将闭包的环境地址（起始地址）放入 A0，并为后续表达式提供访问
@@ -223,16 +222,16 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
       // 处理闭包调用相关的汇编生成
       // 加载参数等操作
       for arg_name in arg_names {
-        instrs.push(Li(A0, arg_name.name.to_string()))
+        instrs.push(Li(A0, arg_name.to_string()))
       }
-      instrs.push(Call(name.name.unwrap()))
+      instrs.push(Call(name.to_string()))
       instrs
     }
     CallDirect(label, arg_names) => {
       // 处理直接调用相关的汇编生成
       // 加载参数等操作
       for arg_name in arg_names {
-        instrs.push(Li(A0, arg_name.name.to_string()))
+        instrs.push(Li(A0, arg_name.to_string()))
       }
       instrs.push(Call(label._))
       instrs
@@ -240,7 +239,7 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
     MakeTuple(names) => {
       // 处理元组创建相关的汇编（可能需要根据具体架构处理数据存储等）
       for name in names {
-        instrs.push(Li(A0, name.name.to_string()))
+        instrs.push(Li(A0, name.to_string()))
       }
       instrs
     }
@@ -254,16 +253,16 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
     }
     ArrayGet(array_name, index_name) => {
       // 处理数组获取元素相关的汇编
-      instrs.push(Li(A0, array_name.name.to_string()))
-      instrs.push(Li(A1, index_name.name.to_string()))
+      instrs.push(Li(A0, array_name.to_string()))
+      instrs.push(Li(A1, index_name.to_string()))
       // 这里假设存在加载数组元素的指令，可能需要更多处理
       instrs
     }
     ArrayPut(array_name, index_name, value_name) => {
       // 处理数组设置元素相关的汇编
-      instrs.push(Li(A0, array_name.name.to_string()))
-      instrs.push(Li(A1, index_name.name.to_string()))
-      instrs.push(Li(A2, value_name.name.to_string()))
+      instrs.push(Li(A0, array_name.to_string()))
+      instrs.push(Li(A1, index_name.to_string()))
+      instrs.push(Li(A2, value_name.to_string()))
       // 这里假设存在存储数组元素的指令，可能需要更多处理
       instrs
     }
@@ -285,5 +284,5 @@ fn gen_label(~counter : Ref[Int] = default_counter) -> Label {
 pub let extenv = [
   "read_int", "print_int", "read_char", "print_char", "print_newline", "print_endline",
   "int_of_float", "float_of_int", "truncate", "floor", "abs_float", "sqrt", "sin",
-  "cos", "atan", "create_array", "create_float_array", "create_ptr_array"
+  "cos", "atan", "create_array", "create_float_array", "create_ptr_array",
 ]
