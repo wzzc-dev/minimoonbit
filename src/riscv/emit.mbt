@@ -223,7 +223,7 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
       // 处理闭包调用相关的汇编生成
       // 加载参数等操作
       for arg_name in arg_names {
-        instrs.push(Li(A0, arg_name.to_string()))
+        instrs.push(Li(A0, arg_name.name.to_string()))
       }
       instrs.push(Call(name.name.unwrap()))
       instrs
@@ -232,7 +232,7 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
       // 处理直接调用相关的汇编生成
       // 加载参数等操作
       for arg_name in arg_names {
-        instrs.push(Li(A0, arg_name.to_string()))
+        instrs.push(Li(A0, arg_name.name.to_string()))
       }
       instrs.push(Call(label._))
       instrs
@@ -240,7 +240,7 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
     MakeTuple(names) => {
       // 处理元组创建相关的汇编（可能需要根据具体架构处理数据存储等）
       for name in names {
-        instrs.push(Li(A0, name.to_string()))
+        instrs.push(Li(A0, name.name.to_string()))
       }
       instrs
     }
@@ -254,16 +254,16 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
     }
     ArrayGet(array_name, index_name) => {
       // 处理数组获取元素相关的汇编
-      instrs.push(Li(A0, array_name.to_string()))
-      instrs.push(Li(A1, index_name.to_string()))
+      instrs.push(Li(A0, array_name.name.to_string()))
+      instrs.push(Li(A1, index_name.name.to_string()))
       // 这里假设存在加载数组元素的指令，可能需要更多处理
       instrs
     }
     ArrayPut(array_name, index_name, value_name) => {
       // 处理数组设置元素相关的汇编
-      instrs.push(Li(A0, array_name.to_string()))
-      instrs.push(Li(A1, index_name.to_string()))
-      instrs.push(Li(A2, value_name.to_string()))
+      instrs.push(Li(A0, array_name.name.to_string()))
+      instrs.push(Li(A1, index_name.name.to_string()))
+      instrs.push(Li(A2, value_name.name.to_string()))
       // 这里假设存在存储数组元素的指令，可能需要更多处理
       instrs
     }
