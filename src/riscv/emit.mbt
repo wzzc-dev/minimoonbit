@@ -206,11 +206,11 @@ fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
       instrs.push(Addi(Sp, Sp, 4)) // Adjust the stack pointer back
       instrs
     }
-    Var(name) => [Li(A0, name.to_string())]
+    Var(name) => [Li(A0, name.name.to_string())]
     MakeClosure((name, low_type), closure, expr) => {
       // 假设 `closure` 包含捕获变量的列表，将它们逐一存储
       for i, var in closure.actual_free_vars {
-        instrs.push(Li(A0, var.to_string()))
+        instrs.push(Li(A0, var.name.to_string()))
         instrs.push(Sw(A0, { base: Sp, offset: -4 * (i + 1) }))
       }
       // 将闭包的环境地址（起始地址）放入 A0，并为后续表达式提供访问
