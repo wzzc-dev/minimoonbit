@@ -1,57 +1,199 @@
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  // println("emit: " + input.to_string())
-  let functions = []
-
-  // 为每个函数定义生成汇编代码
   for fundef in input.fundefs {
     if extenv.contains(fundef.name._) {
       continue
     }
-    let body = []
-
-    // 函数序言（Function Prologue）
-    // 保存返回地址(ra)和帧指针(fp)
-    body.push(Sw(Ra, { base: Sp, offset: -4 }))
-    body.push(Sw(Fp, { base: Sp, offset: -8 }))
-    // 设置新的帧指针并调整栈指针
-    body.push(Addi(Fp, Sp, -8))
-    body.push(Addi(Sp, Sp, -16)) // 根据栈帧大小调整
-
-    // 保存被调用者保存的寄存器（callee-saved registers）
-    // TODO: 只保存实际使用的寄存器
-    for i, reg in reg_callee_saved_list {
-      body.push(Sw(reg, { base: Fp, offset: -4 * (i + 3) }))
-    }
-
-    // 函数主体
-    // TODO: 实现表达式编译
-
-    body.append(compile_expr(fundef.body))
-
-    // 函数收尾（Function Epilogue）
-    // 恢复被调用者保存的寄存器
-    for i, reg in reg_callee_saved_list {
-      body.push(Lw(reg, { base: Fp, offset: -4 * (i + 3) }))
-    }
-
-    // 恢复帧指针和返回地址
-    body.push(Lw(Ra, { base: Fp, offset: 4 }))
-    body.push(Lw(Fp, { base: Fp, offset: 0 }))
-    body.push(Addi(Sp, Fp, 8))
-    body.push(Jr(Ra))
-    functions.push(
-      {
-        name: fundef.name._,
-        export: false, // 对于导出的函数设为 true
-        body,
-      },
-    )
+    println("fundef: " + fundef.to_string())
   }
-  // 编译主程序体
-  functions.push(
-    { name: "minimbt_main", export: true, body: compile_expr(input.body) },
-  )
+  println("minimbt_main: " + input.body.to_string())
+  let functions = []
+
+  // 为每个函数定义生成汇编代码
+  for fundef in input.fundefs {
+    // println("fundef: " + fundef.name._.to_string())
+    if extenv.contains(fundef.name._) {
+      continue
+    }
+    // println("fundef: " + fundef.to_string())
+    let body = []
+    let framesize = calculate_framesize(fundef)
+    // println("framesize: " + framesize.to_string())
+    // 函数序言
+    body.push(Addi(Sp, Sp, -framesize))
+    body.push(Sd(Ra, { base: Sp, offset: framesize - 8 }))
+    body.push(Sd(Fp, { base: Sp, offset: framesize - 16 }))
+    body.push(Addi(Fp, Sp, framesize))
+    
+    // // 保存调用者保存的寄存器
+    // for i, reg in reg_callee_saved_list {
+    //   body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
+    // }
+    
+    // 保存参数
+    let env = { vars: Map::new(), current_offset: - (fundef.args.length() + 3) * 8  }
+    for i, arg in fundef.args {
+      // println("arg: " + arg.0.to_string())
+      // println("i: " + i.to_string())
+      // println("offset: " +  (-(i + 3) * 8).to_string())
+      body.push(Sd(
+        reg_arg_list.get(i).unwrap(),
+        { base: Fp, offset: -(i + 3) * 8 }
+      ))
+      env.vars.set(arg.0.to_string(), -(i + 3) * 8)
+    }
+    // println("fundef.body: " + fundef.body.to_string())
+    // 编译函数体
+    body.append(compile_expr(fundef.body, env))
+    
+    // 函数尾声
+    // 恢复调用者保存的寄存器
+    // for i, reg in reg_callee_saved_list {
+    //   body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
+    // }
+    
+    body.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
+    body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
+    body.push(Addi(Sp, Sp, framesize))
+    body.push(Ret)
+    
+    functions.push({
+      name: fundef.name._,
+      export: false,
+      body,
+    })
+  }
+
+  // 主函数
+  let main = []
+  let main_framesize = calculate_framesize_expr(input.body)  // 增加主函数的栈帧大小
+  
+  // 主函数序言
+  main.push(Addi(Sp, Sp, -main_framesize))
+  main.push(Sd(Ra, { base: Sp, offset: main_framesize - 8 }))
+  main.push(Sd(Fp, { base: Sp, offset: main_framesize - 16 }))
+  main.push(Addi(Fp, Sp, main_framesize))
+  
+  // // 保存调用者保存的寄存器
+  // for i, reg in reg_callee_saved_list {
+  //   main.push(Sd(reg, { base: Sp, offset: main_framesize - (i + 3) * 8 }))
+  // }
+  
+  // 编译主体
+  let main_env = { vars: Map::new(), current_offset: main_framesize }
+  main.append(compile_expr(input.body, main_env))
+  
+  // 主函数尾声
+  // // 恢复调用者保存的寄存器
+  // for i, reg in reg_callee_saved_list {
+  //   main.push(Ld(reg, { base: Sp, offset: main_framesize - (i + 3) * 8 }))
+  // }
+  
+  main.push(Ld(Ra, { base: Sp, offset: main_framesize - 8 }))
+  main.push(Ld(Fp, { base: Sp, offset: main_framesize - 16 }))
+  main.push(Addi(Sp, Sp, main_framesize))
+  main.push(Ret)
+  
+  functions.push({ name: "minimbt_main", export: true, body: main })
+  // println("functions: " + functions.to_string())
   functions
+}
+
+fn getTypeSize(ty : @closure.LowType) -> Int {
+  match ty {
+    Int => 8 // 整数类型占用8字节
+    Double => 8 // 双精度浮点数占用8字节
+    Bool => 1 // 布尔类型占用1字节
+    ClosureFn(arr_t, t) => {
+      let mut arr_t_size = 0
+      for elem_type in arr_t {
+        arr_t_size += getTypeSize(elem_type)
+      }
+      arr_t_size + getTypeSize(t)
+    }
+    DirectFn(arr_t, t) => {
+      let mut arr_t_size = 0
+      for elem_type in arr_t {
+        arr_t_size += getTypeSize(elem_type)
+      }
+      arr_t_size + getTypeSize(t)
+    }
+    Tuple(arr_t) => {
+      // 假设元组的大小是其元素大小的总和
+      let mut tuple_size = 0
+      for elem_type in arr_t {
+        tuple_size += getTypeSize(elem_type)
+      }
+      tuple_size
+    }
+    Array(t) => {
+      let element_size = getTypeSize(t)
+      // 假设数组长度为 10（可以根据实际情况调整）
+      let array_length = 10
+      element_size * array_length
+    }
+    Ptr => 8
+    Unit => 0 // 其他类型不占用空间
+  }
+}
+
+fn calculate_framesize(fundef : @closure.FuncDef) -> Int {
+  // 基础大小：返回地址 + 帧指针 + 调用者保存寄存器 + 参数 + 局部变量
+  let base_size = 16  // Ra + Fp
+  let callee_saved_size = reg_callee_saved_list.length() * 8
+  let args_size = fundef.args.length() * 8
+  let locals_size = 32  // 为局部变量预留空间
+  
+  return base_size + callee_saved_size + args_size + locals_size
+}
+
+fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
+  match expr {
+    Unit => 0
+    Int(_) => 8
+    Double(_) => 8
+    Neg(_) => 8
+    Add(_, _) => 8
+    Sub(_, _) => 8
+    Mul(_, _) => 8
+    Div(_, _) => 8
+    FNeg(_) => 8
+    FAdd(_, _) => 8
+    FSub(_, _) => 8
+    FMul(_, _) => 8
+    FDiv(_, _) => 8
+    IfEq(_, _, e1, e2) => {
+      let size1 = calculate_framesize_expr(e1)
+      let size2 = calculate_framesize_expr(e2)
+      if size1 > size2 {
+        size1
+      } else {
+        size2
+      }
+    }
+    IfLe(_, _, e1, e2) => {
+      let size1 = calculate_framesize_expr(e1)
+      let size2 = calculate_framesize_expr(e2)
+      if size1 > size2 {
+        size1
+      } else {
+        size2
+      }
+    }
+    Let((_, _), e1, e2) => {
+      let size1 = calculate_framesize_expr(e1)
+      let size2 = calculate_framesize_expr(e2)
+      size1 + size2
+    }
+    Var(_) => 8
+    MakeClosure(_, _, e) => calculate_framesize_expr(e)
+    CallClosure(_, _) => 8
+    CallDirect(_, _) => 8
+    MakeTuple(_) => 8
+    LetTuple(_, _, _) => 8
+    ArrayGet(_, _) => 8
+    ArrayPut(_, _, _) => 8
+    ExternalArray(_) => 8
+  }
 }
 
 pub struct AssemblyFunction {
@@ -75,210 +217,311 @@ pub fn AssemblyFunction::output(
   }
 }
 
-fn compile_expr(expr : @closure.Expr) -> Array[RvAsm] {
+fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
+  // println("compile_expr: " + expr.to_string())
+  // println("env: " + env.vars.to_string())
+  // println("env.current_offset: " + env.current_offset.to_string())
   let instrs = []
   match expr {
-    Unit => instrs
-    Int(i) => [Li(A0, i.to_string())]
-    Double(d) => {
-      let str_d = d.to_string()
-      [Li(A0, str_d)]
+    Unit => instrs.clear()
+    Int(i) => instrs.push(Li(reg_ret, i.to_string()))
+    Double(d) => instrs.push(Li(reg_ret, d.to_string()))
+    Neg(x) => {
+      instrs.push(
+        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
+      instrs.push(Neg(reg_ret, reg_ret))
     }
-    Neg(i) => {
-      instrs.push(Li(A0, i.to_string()))
-      instrs.push(Neg(A0, A0))
-      instrs
+    Add(x, y) => {
+      // println("Add: " + x.to_string() + " " + y.to_string())
+      instrs.push(
+        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
+      instrs.push(
+        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
+      )
+      instrs.push(Add(reg_ret, A0, A1))
     }
-    Add(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
-      instrs.push(Add(A0, A0, A1))
-      instrs
+    Sub(x, y) => {
+      instrs.push(
+        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
+      instrs.push(
+        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
+      )
+      instrs.push(Sub(reg_ret, A0, A1))
     }
-    Sub(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
-      instrs.push(Sub(A0, A0, A1))
-      instrs
+    Mul(x, y) => {
+      instrs.push(
+        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      ) 
+      instrs.push(
+        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
+      )
+      instrs.push(Mul(reg_ret, A0, A1))
     }
-    Mul(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
-      instrs.push(Mul(A0, A0, A1))
-      instrs
+    Div(x, y) => {
+      instrs.push(
+        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
+      instrs.push(
+        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
+      )
+      instrs.push(Div(reg_ret, A0, A1))
     }
-    Div(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
-      instrs.push(Div(A0, A0, A1))
-      instrs
-    }
-    FNeg(name) => {
-      instrs.push(Li(A0, name.to_string()))
+    FNeg(x) => {
+      instrs.push(
+        Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
       instrs.push(FnegD(Fa0, Fa0))
-      instrs
     }
-    FAdd(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
-      instrs.push(FaddD(Fa0, Fa0, Fa0))
-      instrs
+    FAdd(x, y) => {
+      instrs.push(
+        Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
+      instrs.push(
+        Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
+      )
+      instrs.push(FaddD(Fa0, Fa0, Fa1))
     }
-    FSub(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
-      instrs.push(FsubD(Fa0, Fa0, Fa0))
-      instrs
+    FSub(x, y) => {
+      instrs.push(
+        Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
+      instrs.push(
+        Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
+      )
+      instrs.push(FsubD(Fa0, Fa0, Fa1))
     }
-    FMul(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
-      instrs.push(FmulD(Fa0, Fa0, Fa0))
-      instrs
+    FMul(x, y) => {
+      instrs.push(
+        Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
+      instrs.push(
+        Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
+      )
+      instrs.push(FmulD(Fa0, Fa0, Fa1))
     }
-    FDiv(name1, name2) => {
-      instrs.push(Li(A0, name1.to_string()))
-      instrs.push(Li(A1, name2.to_string()))
-      instrs.push(FdivD(Fa0, Fa0, Fa0))
-      instrs
+    FDiv(x, y) => {
+      instrs.push(
+        Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
+      instrs.push(
+        Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
+      )
+      instrs.push(FdivD(Fa0, Fa0, Fa1))
     }
-    IfEq(lhs, rhs, expr1, expr2) => {
-      let label_true = gen_label()
-      let label_end = gen_label()
-
-      // 加载两个比较操作数
-      instrs.push(Li(A0, lhs.to_string()))
-      instrs.push(Li(A1, rhs.to_string()))
-
-      // 比较 A0 和 A1 的值，如果相等则跳转到 label_true
-      instrs.push(Beq(A0, A1, label_true))
-
-      // 否则执行 expr2
-      instrs.append(compile_expr(expr2))
-      // 跳转到 label_end 跳过 true 分支
-      instrs.push(J(label_end._))
-
-      // label_true: 执行 expr1
-      instrs.push(Label(label_true._))
-      instrs.append(compile_expr(expr1))
-
-      // label_end:
+    IfEq(x, y, e1, e2) => {
+      instrs.push(
+        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
+      instrs.push(
+        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
+      )
+      // 相等比较分支
+      let label_else = gen_label("else")
+      let label_end = gen_label("end")
+      instrs.push(Bne(A0, A1, label_else))
+      instrs.append(compile_expr(e1, env))
+      instrs.push(J(label_end))
+      instrs.push(Label(label_else._))
+      instrs.append(compile_expr(e2, env))
       instrs.push(Label(label_end._))
-      instrs
     }
-    IfLe(lhs, rhs, expr1, expr2) => {
-      let label_true = gen_label()
-      let label_end = gen_label()
-
-      // 加载两个比较操作数
-      instrs.push(Li(A0, lhs.to_string()))
-      instrs.push(Li(A1, rhs.to_string()))
-
-      // 如果 A0 <= A1，跳转到 label_true
-      instrs.push(Ble(A0, A1, label_true._))
-
-      // 否则执行 expr2
-      instrs.append(compile_expr(expr2))
-      // 跳转到 label_end 跳过 true 分支
-      instrs.push(J(label_end._))
-
-      // label_true: 执行 expr1
-      instrs.push(Label(label_true._))
-      instrs.append(compile_expr(expr1))
-
-      // label_end:
+    IfLe(x, y, e1, e2) => {
+      // println("IfLe: " + x.to_string() + " " + y.to_string() + " " + e1.to_string() + " " + e2.to_string())
+      // println("env: " + env.vars.to_string())
+      instrs.push(
+        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
+      )
+      instrs.push(
+        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
+      )
+      // println("A0: " + A0.to_string() + " A1: " + A1.to_string())
+      // 小于等于比较分支
+      let label_else = gen_label("else")
+      let label_end = gen_label("end")
+      instrs.push(Bgt(A0, A1, label_else))
+      instrs.append(compile_expr(e1, env))
+      instrs.push(J(label_end))
+      instrs.push(Label(label_else._))
+      instrs.append(compile_expr(e2, env))
       instrs.push(Label(label_end._))
-      instrs
     }
-    Let((name, low_type), expr1, expr2) => {
-      // Step 1: Compile expr1 and get the instructions
-      instrs.append(compile_expr(expr1))
+    Let((name, ty), e1, e2) => {
+      // println("Let: " + expr.to_string())
+      // println("Let: " + name.to_string() + " " + ty.to_string() + " " + e1.to_string() + " " + e2.to_string())
+      // 计算 e1
+      instrs.append(compile_expr(e1, env))
+      let size = getTypeSize(ty)
+      // println("size: " + size.to_string())
+      let offset = env.current_offset - size
 
-      // Step 2: Store the result of expr1 in the stack
-      // Assuming the result of expr1 is in A0
-      instrs.push(Sw(A0, { base: Sp, offset: -4 })) // Store the value at the top of the stack
+      // 为新变量分配栈空间
+      
+      // println("env.current_offset: " + env.current_offset.to_string() + " size: " + size.to_string())
+      // println("offset = env.current_offset - size: " + offset.to_string())
+      // 保存结果到栈上
+      instrs.push(Sd(reg_ret, { base: Fp, offset}))
+      env.vars.set(name.to_string(), offset)
+      // 更新环境
+      let new_env = { vars: env.vars, current_offset: offset }
 
-      // Step 3: Compile expr2
-      instrs.append(compile_expr(expr2))
+      // 计算 e2,使用更新后的环境
+      instrs.append(compile_expr(e2, new_env))
+    }
+    Var(name) =>
+      // println("Var: " + name.to_string())
+      // 从环境中查找变量的偏移
+      match env.vars.get(name.to_string()) {
+        Some(offset) => instrs.push(Ld(reg_ret, { base: Fp, offset }))
+        None =>
+          // 变量未找到,报错
+          @util.die("Undefined variable: " + expr.to_string())
+      }
+    MakeClosure((_name, _ty), closure, e) => {
+       
+      // 闭包创建
+      // 保存闭包对象
+      for i, free_var in closure.actual_free_vars {
+        instrs.push(Ld(T0, { base: Fp, offset: env.vars.get(free_var.name.to_string()).unwrap() }))
+        instrs.push(Sd(T0, { base: Sp, offset: (i + 1) * 8 }))
+      }
 
-      // Step 4: Clean up the stack (optional if you only push and pop on the stack)
-      instrs.push(Addi(Sp, Sp, 4)) // Adjust the stack pointer back
-      instrs
+      // 继续编译剩余表达式
+     instrs.append(compile_expr(e, env))
     }
-    Var(name) => [Li(A0, name.to_string())]
-    MakeClosure((name, low_type), closure, expr) => {
-      // 假设 `closure` 包含捕获变量的列表，将它们逐一存储
-      for i, var in closure.actual_free_vars {
-        instrs.push(Li(A0, var.to_string()))
-        instrs.push(Sw(A0, { base: Sp, offset: -4 * (i + 1) }))
+    CallClosure(f, args) => {
+      // 闭包调用
+      println("env: " + env.vars.to_string())
+      // 保存参数到参数寄存器
+      for i, arg in args {
+        if i < reg_arg_list.length() {
+          instrs.push(
+            Ld(
+              reg_arg_list.get(i).unwrap(),
+              { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
+            ),
+          )
+          
+        } else {
+          // 超出寄存器数量的参数压栈
+          instrs.push(
+            Ld(T0, { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() }),
+          )
+          instrs.push(
+            Sw(T0, { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 }),
+          )
+          env.vars.set(
+            arg.to_string(),
+            env.vars.get(arg.to_string()).unwrap() + 8,
+          )
+        }
       }
-      // 将闭包的环境地址（起始地址）放入 A0，并为后续表达式提供访问
-      instrs.push(Addi(A0, Sp, -16))
-      // 编译 expr，将生成的汇编添加到指令集
-      instrs.append(compile_expr(expr))
-      instrs
+
+      
+      // // 加载闭包对象
+      // instrs.push(Ld(reg_closure, { base: f, offset: 0 }))
+      // // 调用函数
+      // instrs.push(Jalr(reg_closure))
+      instrs.push(Call(f.name.unwrap()))
     }
-    CallClosure(name, arg_names) => {
-      // 处理闭包调用相关的汇编生成
-      // 加载参数等操作
-      for arg_name in arg_names {
-        instrs.push(Li(A0, arg_name.to_string()))
+    CallDirect(label, args) => {
+      // 直接函数调用
+      // 保存参数到参数寄存器
+      for i, arg in args {
+        if i < reg_arg_list.length() {
+          instrs.push(
+            Ld(
+              reg_arg_list.get(i).unwrap(),
+              { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
+            ),
+          )
+        } else {
+          instrs.push(
+            Ld(T0, { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() }),
+          )
+          instrs.push(
+            Sw(T0, { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 }),
+          )
+        }
       }
-      instrs.push(Call(name.to_string()))
-      instrs
-    }
-    CallDirect(label, arg_names) => {
-      // 处理直接调用相关的汇编生成
-      // 加载参数等操作
-      for arg_name in arg_names {
-        instrs.push(Li(A0, arg_name.to_string()))
-      }
+
+      // 调用函数
       instrs.push(Call(label._))
-      instrs
     }
-    MakeTuple(names) => {
-      // 处理元组创建相关的汇编（可能需要根据具体架构处理数据存储等）
-      for name in names {
-        instrs.push(Li(A0, name.to_string()))
+    MakeTuple(elems) => {
+      // 创建元组
+      // 分配元组空间
+      let size = elems.length() * 8
+      instrs.push(Addi(reg_ret, Sp, -size))
+
+      // 存储元素
+      for i, elem in elems {
+        instrs.push(
+          Lw(T0, { base: Fp, offset: env.vars.get(elem.to_string()).unwrap() }),
+        )
+        instrs.push(Sd(T0, { base: reg_ret, offset: i * 8 }))
       }
-      instrs
     }
-    LetTuple(names, name, expr) => {
-      // 处理元组解构相关的汇编
-      instrs.append(compile_expr(expr))
-      for n, _ in names {
-        instrs.push(Li(A0, n.to_string()))
+    LetTuple(names, tuple, e) => {
+      // println("LetTuple: " + names.to_string() + " " + tuple.to_string() + " " + e.to_string())
+      // 元组解构
+      // 从元组加载各个字段
+      for i, _name_ty in names {
+        instrs.push(
+          Lw(T0, { base: Fp, offset: env.vars.get(tuple.to_string()).unwrap() }),
+        )
+        instrs.push(Ld(T0, { base: T0, offset: i * 8 }))
+        instrs.push(Sd(T0, { base: Fp, offset: -(i + 1) * 8 }))
       }
-      instrs
+      instrs.append(compile_expr(e, env))
     }
-    ArrayGet(array_name, index_name) => {
-      // 处理数组获取元素相关的汇编
-      instrs.push(Li(A0, array_name.to_string()))
-      instrs.push(Li(A1, index_name.to_string()))
-      // 这里假设存在加载数组元素的指令，可能需要更多处理
-      instrs
+    ArrayGet(array, index) => {
+      // 数组访问
+      instrs.push(
+        Lw(T0, { base: Fp, offset: env.vars.get(array.to_string()).unwrap() }),
+      )
+      instrs.push(Slli(T0, T0, 3)) // 计算偏移(乘8)
+      instrs.push(
+        Lw(T1, { base: Fp, offset: env.vars.get(index.to_string()).unwrap() }),
+      )
+      instrs.push(Add(T0, T1, T0))
+      instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))
+      // instrs.push(Lw(A0, { base: Sp, offset: 0 })) // Load array base address
+      // instrs.push(Lw(A1, { base: Sp, offset: 4 })) // Load index
+      // instrs.push(Slli(A1, A1, 2)) // Multiply index by 4 (assuming 4 bytes per element)
+      // instrs.push(Add(A0, A0, A1)) // Calculate address of the element
+      // instrs.push(Lw(A0, { base: A0, offset: 0 })) // Load the element
     }
-    ArrayPut(array_name, index_name, value_name) => {
-      // 处理数组设置元素相关的汇编
-      instrs.push(Li(A0, array_name.to_string()))
-      instrs.push(Li(A1, index_name.to_string()))
-      instrs.push(Li(A2, value_name.to_string()))
-      // 这里假设存在存储数组元素的指令，可能需要更多处理
-      instrs
+    ArrayPut(array, index, value) => {
+      // 数组赋值
+      instrs.push(
+        Lw(T0, { base: Fp, offset: env.vars.get(array.to_string()).unwrap() }),
+      )
+      instrs.push(Slli(T0, T0, 3))
+      instrs.push(
+        Lw(T1, { base: Fp, offset: env.vars.get(index.to_string()).unwrap() }),
+      )
+      instrs.push(Add(T0, T1, T0))
+      instrs.push(
+        Lw(T1, { base: Fp, offset: env.vars.get(value.to_string()).unwrap() }),
+      )
+      instrs.push(Sd(T1, { base: T0, offset: 0 }))
+      // instrs.push(Mv(reg_ret, Unit)) // 返回Unit
+      // instrs.push(Lw(A0, { base: Sp, offset: 0 })) // Load array base address
+      // instrs.push(Lw(A1, { base: Sp, offset: 4 })) // Load index
+      // instrs.push(Lw(A2, { base: Sp, offset: 8 })) // Load value to store
+      // instrs.push(Slli(A1, A1, 2)) // Multiply index by 4 (assuming 4 bytes per element)
+      // instrs.push(Add(A0, A0, A1)) // Calculate address of the element
+      // instrs.push(Sw(A2, { base: A0, offset: 0 })) // Store the value
     }
-    ExternalArray(label) => {
-      // 处理外部数组相关的汇编（可能涉及外部函数调用等）
-      instrs.push(Call(label._))
-      instrs
-    }
+    ExternalArray(label) =>
+      // 外部数组
+      instrs.push(La(reg_ret, label._))
   }
-}
-
-let default_counter : Ref[Int] = { val: 0 }
-
-fn gen_label(~counter : Ref[Int] = default_counter) -> Label {
-  counter.val = counter.val + 1
-  Label("label_" + counter.val.to_string())
+  // println("instrs: " + instrs.to_string())
+  instrs
 }
 
 pub let extenv = [
@@ -286,3 +529,16 @@ pub let extenv = [
   "int_of_float", "float_of_int", "truncate", "floor", "abs_float", "sqrt", "sin",
   "cos", "atan", "create_array", "create_float_array", "create_ptr_array",
 ]
+
+let _default_counter : Ref[Int] = { val: 0 }
+
+fn gen_label(name : String, ~counter : Ref[Int] = _default_counter) -> Label {
+  counter.val = counter.val + 1
+  Label("label_" + name + "_" + counter.val.to_string())
+}
+
+// 添加一个环境结构来跟踪变量位置
+struct Env {
+  vars : Map[String, Int] // 变量名到栈偏移的映射
+  mut current_offset : Int // 当前可用的栈偏移
+}
