@@ -1,11 +1,11 @@
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  for fundef in input.fundefs {
-    if extenv.contains(fundef.name._) {
-      continue
-    }
-    println("fundef: " + fundef.to_string())
-  }
-  println("minimbt_main: " + input.body.to_string())
+  // for fundef in input.fundefs {
+  //   if extenv.contains(fundef.name._) {
+  //     continue
+  //   }
+  //   println("fundef: " + fundef.to_string())
+  // }
+  // println("minimbt_main: " + input.body.to_string())
   let functions = []
 
   // 为每个函数定义生成汇编代码
