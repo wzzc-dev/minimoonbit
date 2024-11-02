@@ -4,7 +4,7 @@ pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type]
 ) -> Program {
-  println("knf_program_to_closure: " + prog.to_string())
+  // println("knf_program_to_closure: " + prog.to_string())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
   extern_env.each(
@@ -34,14 +34,14 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  println("==========================")
-  for i in fundefs {
-    if not(extern_env.contains(i.old_name.to_string())) {
-      println("fundef: " + i.to_string())
-    }
-  }
-  println("==========================")
-  println("body: " + body.to_string())
+  // println("==========================")
+  // for i in fundefs {
+  //   if not(extern_env.contains(i.old_name.to_string())) {
+  //     println("fundef: " + i.to_string())
+  //   }
+  // }
+  // println("==========================")
+  // println("body: " + body.to_string())
   { fundefs, body }
 }
 
