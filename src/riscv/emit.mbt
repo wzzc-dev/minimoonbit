@@ -23,76 +23,78 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     body.push(Sd(Ra, { base: Sp, offset: framesize - 8 }))
     body.push(Sd(Fp, { base: Sp, offset: framesize - 16 }))
     body.push(Addi(Fp, Sp, framesize))
-    
+
     // // 保存调用者保存的寄存器
     // for i, reg in reg_callee_saved_list {
     //   body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
     // }
-    
+
     // 保存参数
-    let env = { vars: Map::new(), current_offset: - (fundef.args.length() + 3) * 8  }
+    let env = {
+      vars: Map::new(),
+      current_offset: -(fundef.args.length() + fundef.formal_free_vars.length() + 3) * 8,
+    }
+    for i, arg in fundef.formal_free_vars {
+      body.push(
+        Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset: -(i + 3) * 8 }),
+      )
+      env.vars.set(arg.0.to_string(), -(i + 3) * 8)
+    }
     for i, arg in fundef.args {
       // println("arg: " + arg.0.to_string())
       // println("i: " + i.to_string())
       // println("offset: " +  (-(i + 3) * 8).to_string())
-      body.push(Sd(
-        reg_arg_list.get(i).unwrap(),
-        { base: Fp, offset: -(i + 3) * 8 }
-      ))
-      env.vars.set(arg.0.to_string(), -(i + 3) * 8)
+      body.push(
+        Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset: -(i + 3 + fundef.formal_free_vars.length()) * 8 }),
+      )
+      env.vars.set(arg.0.to_string(), -(i + 3 + fundef.formal_free_vars.length()) * 8)
     }
     // println("fundef.body: " + fundef.body.to_string())
     // 编译函数体
     body.append(compile_expr(fundef.body, env))
-    
+
     // 函数尾声
     // 恢复调用者保存的寄存器
     // for i, reg in reg_callee_saved_list {
     //   body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
     // }
-    
+
     body.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
     body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
     body.push(Addi(Sp, Sp, framesize))
     body.push(Ret)
-    
-    functions.push({
-      name: fundef.name._,
-      export: false,
-      body,
-    })
+    functions.push({ name: fundef.name._, export: false, body })
   }
 
   // 主函数
   let main = []
-  let main_framesize = calculate_framesize_expr(input.body)  // 增加主函数的栈帧大小
-  
+  let main_framesize = calculate_framesize_expr(input.body) // 增加主函数的栈帧大小
+
   // 主函数序言
   main.push(Addi(Sp, Sp, -main_framesize))
   main.push(Sd(Ra, { base: Sp, offset: main_framesize - 8 }))
   main.push(Sd(Fp, { base: Sp, offset: main_framesize - 16 }))
   main.push(Addi(Fp, Sp, main_framesize))
-  
+
   // // 保存调用者保存的寄存器
   // for i, reg in reg_callee_saved_list {
   //   main.push(Sd(reg, { base: Sp, offset: main_framesize - (i + 3) * 8 }))
   // }
-  
+
   // 编译主体
   let main_env = { vars: Map::new(), current_offset: main_framesize }
   main.append(compile_expr(input.body, main_env))
-  
+
   // 主函数尾声
   // // 恢复调用者保存的寄存器
   // for i, reg in reg_callee_saved_list {
   //   main.push(Ld(reg, { base: Sp, offset: main_framesize - (i + 3) * 8 }))
   // }
-  
+
   main.push(Ld(Ra, { base: Sp, offset: main_framesize - 8 }))
   main.push(Ld(Fp, { base: Sp, offset: main_framesize - 16 }))
   main.push(Addi(Sp, Sp, main_framesize))
   main.push(Ret)
-  
   functions.push({ name: "minimbt_main", export: true, body: main })
   // println("functions: " + functions.to_string())
   functions
@@ -138,11 +140,10 @@ fn getTypeSize(ty : @closure.LowType) -> Int {
 
 fn calculate_framesize(fundef : @closure.FuncDef) -> Int {
   // 基础大小：返回地址 + 帧指针 + 调用者保存寄存器 + 参数 + 局部变量
-  let base_size = 16  // Ra + Fp
+  let base_size = 16 // Ra + Fp
   let callee_saved_size = reg_callee_saved_list.length() * 8
   let args_size = fundef.args.length() * 8
-  let locals_size = 32  // 为局部变量预留空间
-  
+  let locals_size = 32 // 为局部变量预留空间
   return base_size + callee_saved_size + args_size + locals_size
 }
 
@@ -234,6 +235,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     Add(x, y) => {
       // println("Add: " + x.to_string() + " " + y.to_string())
+      // println("env x: " + env.vars.get(x.to_string()).to_string())
+      // println("env y: " + env.vars.get(y.to_string()).to_string())
       instrs.push(
         Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
       )
@@ -254,7 +257,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     Mul(x, y) => {
       instrs.push(
         Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
-      ) 
+      )
       instrs.push(
         Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap() }),
       )
@@ -358,11 +361,11 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       let offset = env.current_offset - size
 
       // 为新变量分配栈空间
-      
+
       // println("env.current_offset: " + env.current_offset.to_string() + " size: " + size.to_string())
       // println("offset = env.current_offset - size: " + offset.to_string())
       // 保存结果到栈上
-      instrs.push(Sd(reg_ret, { base: Fp, offset}))
+      instrs.push(Sd(reg_ret, { base: Fp, offset }))
       env.vars.set(name.to_string(), offset)
       // 更新环境
       let new_env = { vars: env.vars, current_offset: offset }
@@ -380,20 +383,27 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           @util.die("Undefined variable: " + expr.to_string())
       }
     MakeClosure((_name, _ty), closure, e) => {
-       
       // 闭包创建
       // 保存闭包对象
       for i, free_var in closure.actual_free_vars {
-        instrs.push(Ld(T0, { base: Fp, offset: env.vars.get(free_var.name.to_string()).unwrap() }))
+        instrs.push(
+          Ld(
+            T0,
+            {
+              base: Fp,
+              offset: env.vars.get(free_var.name.unwrap()).unwrap(),
+            },
+          ),
+        )
         instrs.push(Sd(T0, { base: Sp, offset: (i + 1) * 8 }))
       }
 
       // 继续编译剩余表达式
-     instrs.append(compile_expr(e, env))
+      instrs.append(compile_expr(e, env))
     }
     CallClosure(f, args) => {
       // 闭包调用
-      println("env: " + env.vars.to_string())
+      // println("env: " + env.vars.to_string())
       // 保存参数到参数寄存器
       for i, arg in args {
         if i < reg_arg_list.length() {
@@ -403,7 +413,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
             ),
           )
-          
         } else {
           // 超出寄存器数量的参数压栈
           instrs.push(
@@ -419,7 +428,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         }
       }
 
-      
       // // 加载闭包对象
       // instrs.push(Ld(reg_closure, { base: f, offset: 0 }))
       // // 调用函数

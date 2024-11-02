@@ -530,7 +530,7 @@ test "typing" {
 
 test {
   // let x = Array::make(10, 0);
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/inprod.mbt").unwrap()
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/adder.mbt").unwrap()
   let parse = @parser.parse_from_string(_test2)
   println(parse)
   try {
