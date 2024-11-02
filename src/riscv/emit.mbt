@@ -37,26 +37,29 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
       3) *
       8,
     }
-    for i, arg in fundef.formal_free_vars {
+    let mut j = 0
+    for _i, arg in fundef.formal_free_vars {
       body.push(
-        Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset: -(i + 3) * 8 }),
+        Sd(reg_arg_list.get(j).unwrap(), { base: Fp, offset: -(j + 3) * 8 }),
       )
-      env.vars.set(arg.0.to_string(), -(i + 3) * 8)
+      env.vars.set(arg.0.to_string(), -(j + 3) * 8)
+      j += 1
     }
-    for i, arg in fundef.args {
+    for _i, arg in fundef.args {
       // println("arg: " + arg.0.to_string())
       // println("i: " + i.to_string())
       // println("offset: " +  (-(i + 3) * 8).to_string())
       body.push(
         Sd(
-          reg_arg_list.get(i).unwrap(),
-          { base: Fp, offset: -(i + 3 + fundef.formal_free_vars.length()) * 8 },
+          reg_arg_list.get(j).unwrap(),
+          { base: Fp, offset: -(j + 3 + fundef.formal_free_vars.length()) * 8 },
         ),
       )
       env.vars.set(
         arg.0.to_string(),
-        -(i + 3 + fundef.formal_free_vars.length()) * 8,
+        -(j + 3 + fundef.formal_free_vars.length()) * 8,
       )
+      j += 1
     }
     // println("fundef.body: " + fundef.body.to_string())
     // 编译函数体
@@ -74,6 +77,8 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     body.push(Ret)
     functions.push({ name: fundef.name._, export: false, body })
   }
+
+  // println("functions: " + functions.to_string())
 
   // 主函数
   let main = []
@@ -393,22 +398,21 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         None => instrs.push(Call(Label(name.to_string())))
       }
     MakeClosure((_name, _ty), closure, e) => {
-      println("MakeClosure: " + expr.to_string())
+      // println("MakeClosure: " + expr.to_string())
       // 闭包创建
       // 保存闭包对象
       let mut j = 0
       for _i, free_var in closure.actual_free_vars {
         // println("free_var: " + free_var.to_string())
-        
         // println("env " + env.vars.to_string())
         if not(env.vars.get(free_var.to_string()).is_empty()) {
           instrs.push(
             Ld(
-              T0,
+              reg_arg_list.get(j).unwrap(),
               { base: Fp, offset: env.vars.get(free_var.to_string()).unwrap() },
             ),
           )
-          instrs.push(Sd(T0, { base: Sp, offset: (j + 1) * 8 }))
+          // instrs.push(Sd(T0, { base: Fp, offset: -(j + 1) * 8 }))
           j += 1
         }
       }
@@ -428,6 +432,14 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
             ),
           )
+          if arg.to_string() == "_4" {
+            instrs.push(
+            Ld(
+              reg_arg_list.get(i+1).unwrap(),
+              { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
+            ),
+          )
+          }
         } else {
           // 超出寄存器数量的参数压栈
           instrs.push(
@@ -442,9 +454,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           )
         }
       }
-
-      // // 加载闭包对象
-      // instrs.push(Ld(reg_closure, { base: f, offset: 0 }))
       // // 调用函数
       // instrs.push(Jalr(reg_closure))
       instrs.push(Call(f.to_string()))
