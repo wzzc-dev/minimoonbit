@@ -84,7 +84,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
             ty: low_ty,
             args: [],
             formal_free_vars: [],
-            body: Unit,
+            body: knf_to_closure(env, e),
           },
         )
       }

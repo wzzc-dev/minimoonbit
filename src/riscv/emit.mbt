@@ -386,24 +386,31 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 计算 e2,使用更新后的环境
       instrs.append(compile_expr(e2, new_env))
     }
-    Var(name) => {
+    Var(name) =>
       // 从环境中查找变量的偏移
       match env.vars.get(name.to_string()) {
         Some(offset) => instrs.push(Ld(reg_ret, { base: Fp, offset }))
         None => instrs.push(Call(Label(name.to_string())))
       }
-    }
     MakeClosure((_name, _ty), closure, e) => {
+      println("MakeClosure: " + expr.to_string())
       // 闭包创建
       // 保存闭包对象
-      for i, free_var in closure.actual_free_vars {
-        instrs.push(
-          Ld(
-            T0,
-            { base: Fp, offset: env.vars.get(free_var.name.unwrap()).unwrap() },
-          ),
-        )
-        instrs.push(Sd(T0, { base: Sp, offset: (i + 1) * 8 }))
+      let mut j = 0
+      for _i, free_var in closure.actual_free_vars {
+        // println("free_var: " + free_var.to_string())
+        
+        // println("env " + env.vars.to_string())
+        if not(env.vars.get(free_var.to_string()).is_empty()) {
+          instrs.push(
+            Ld(
+              T0,
+              { base: Fp, offset: env.vars.get(free_var.to_string()).unwrap() },
+            ),
+          )
+          instrs.push(Sd(T0, { base: Sp, offset: (j + 1) * 8 }))
+          j += 1
+        }
       }
 
       // 继续编译剩余表达式
