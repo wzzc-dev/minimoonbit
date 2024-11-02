@@ -4,7 +4,7 @@ pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type]
 ) -> Program {
-  // println("knf_program_to_closure: " + prog.to_string())
+  println("knf_program_to_closure: " + prog.to_string())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
   extern_env.each(
@@ -34,13 +34,14 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  // for i in fundefs {
-  //   if not(extern_env.contains(i.old_name.to_string())) {
-  //     println("fundef: " + i.to_string())
-  //   }
-  // }
-  // println("==========================")
-  // println("body: " + body.to_string())
+  println("==========================")
+  for i in fundefs {
+    if not(extern_env.contains(i.old_name.to_string())) {
+      println("fundef: " + i.to_string())
+    }
+  }
+  println("==========================")
+  println("body: " + body.to_string())
   { fundefs, body }
 }
 
@@ -69,26 +70,35 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       let low_ty = ty_to_low_type(ty)
 
       // 检查是否是闭包类型
-      let is_closure = match ty {
-        Fun(_, _) => true
-        _ => false
+      let (is_closure, args_ty, return_ty) = match ty {
+        Fun(args, return_ty) => (true, args.map(fn { ty => (gen_name(), ty_to_low_type(ty)) }), ty_to_low_type(return_ty))
+        _ => (false, [], Unit)
       }
+      // Let((x, low_ty), knf_to_closure(env, e), knf_to_closure(env, cont))
+      match is_closure {
+        true => {
+          // 如果是闭包类型，将变量添加到环境中
+          env.push(
+            {
+              name: x.to_string(),
+              old_name: x,
+              is_closure: true,
+              ty: return_ty,
+              args: args_ty,
+              formal_free_vars: [],
+              body: knf_to_closure(env, e),
+            },
+          )
 
-      // 如果是闭包类型，将变量添加到环境中
-      if is_closure {
-        env.push(
-          {
-            name: x.to_string(),
-            old_name: x,
-            is_closure: true,
-            ty: low_ty,
-            args: [],
-            formal_free_vars: [],
-            body: knf_to_closure(env, e),
-          },
-        )
+          MakeClosure(
+            (x, low_ty),
+            { name: x.to_string(), actual_free_vars: [] },
+            knf_to_closure(env, cont),
+          )
+        }
+        false =>
+          Let((x, low_ty), knf_to_closure(env, e), knf_to_closure(env, cont))
       }
-      Let((x, low_ty), knf_to_closure(env, e), knf_to_closure(env, cont))
     }
     LetRec({ name, ty, args, body }, cont) => {
       // println("LetRec: " + e.to_string())
@@ -137,7 +147,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         is_closure: closure,
         ty: ty_to_low_type(return_ty),
         args: args.map(fn { (name, ty) => (name, ty_to_low_type(ty)) }),
-        formal_free_vars: to_array(free_vars).map(fn { name => (name, Int) }),
+        formal_free_vars: to_array(free_vars).map(fn { name => (name, Unit) }),
         body: knf_to_closure(env, body),
       }
       let index = env.search_by(fn(def) { def.old_name == name }).unwrap()
@@ -151,11 +161,11 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       // if closure.actual_free_vars.is_empty() {
       //   knf_to_closure(env, cont)
       // } else {
-        MakeClosure(
-          (name, ty_to_low_type(ty)),
-          closure,
-          knf_to_closure(env, cont),
-        )
+      MakeClosure(
+        (name, ty_to_low_type(ty)),
+        closure,
+        knf_to_closure(env, cont),
+      )
       // }
     }
     Apply(name, arr_name) => {
@@ -288,4 +298,10 @@ fn ty_to_low_type(ty : Type) -> LowType {
     Var(ty) => @util.die("ty_to_low_type: Var" + ty.to_string())
     Ptr => Ptr
   }
+}
+
+let _default_counter : Ref[Int] = { val: 0 }
+fn gen_name(~counter : Ref[Int] = _default_counter) -> Name {
+  counter.val = counter.val + 1
+  Name::from_string?("_" + counter.val.to_string() + "_closure").unwrap()
 }
