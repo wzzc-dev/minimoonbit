@@ -148,15 +148,15 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         name: name.to_string(),
         actual_free_vars: to_array(free_vars),
       }
-      if closure.actual_free_vars.is_empty() {
-        knf_to_closure(env, cont)
-      } else {
+      // if closure.actual_free_vars.is_empty() {
+      //   knf_to_closure(env, cont)
+      // } else {
         MakeClosure(
           (name, ty_to_low_type(ty)),
           closure,
           knf_to_closure(env, cont),
         )
-      }
+      // }
     }
     Apply(name, arr_name) => {
       // println("Apply: " + name.to_string() + " , arr_name: " + arr_name.to_string())

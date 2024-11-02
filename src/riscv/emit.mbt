@@ -32,7 +32,10 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     // 保存参数
     let env = {
       vars: Map::new(),
-      current_offset: -(fundef.args.length() + fundef.formal_free_vars.length() + 3) * 8,
+      current_offset: -(fundef.args.length() +
+      fundef.formal_free_vars.length() +
+      3) *
+      8,
     }
     for i, arg in fundef.formal_free_vars {
       body.push(
@@ -45,9 +48,15 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
       // println("i: " + i.to_string())
       // println("offset: " +  (-(i + 3) * 8).to_string())
       body.push(
-        Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset: -(i + 3 + fundef.formal_free_vars.length()) * 8 }),
+        Sd(
+          reg_arg_list.get(i).unwrap(),
+          { base: Fp, offset: -(i + 3 + fundef.formal_free_vars.length()) * 8 },
+        ),
       )
-      env.vars.set(arg.0.to_string(), -(i + 3 + fundef.formal_free_vars.length()) * 8)
+      env.vars.set(
+        arg.0.to_string(),
+        -(i + 3 + fundef.formal_free_vars.length()) * 8,
+      )
     }
     // println("fundef.body: " + fundef.body.to_string())
     // 编译函数体
@@ -226,7 +235,11 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
   match expr {
     Unit => instrs.clear()
     Int(i) => instrs.push(Li(reg_ret, i.to_string()))
-    Double(d) => instrs.push(Li(reg_ret, d.to_string()))
+    Double(d) => {
+      let bits = @double/internal/ryu.ryu_to_string(d)
+      instrs.push(Li(T0, bits))
+      instrs.push(FmvDX(Fa0, T0))
+    }
     Neg(x) => {
       instrs.push(
         Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap() }),
@@ -373,15 +386,13 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 计算 e2,使用更新后的环境
       instrs.append(compile_expr(e2, new_env))
     }
-    Var(name) =>
-      // println("Var: " + name.to_string())
+    Var(name) => {
       // 从环境中查找变量的偏移
       match env.vars.get(name.to_string()) {
         Some(offset) => instrs.push(Ld(reg_ret, { base: Fp, offset }))
-        None =>
-          // 变量未找到,报错
-          @util.die("Undefined variable: " + expr.to_string())
+        None => instrs.push(Call(Label(name.to_string())))
       }
+    }
     MakeClosure((_name, _ty), closure, e) => {
       // 闭包创建
       // 保存闭包对象
@@ -389,10 +400,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         instrs.push(
           Ld(
             T0,
-            {
-              base: Fp,
-              offset: env.vars.get(free_var.name.unwrap()).unwrap(),
-            },
+            { base: Fp, offset: env.vars.get(free_var.name.unwrap()).unwrap() },
           ),
         )
         instrs.push(Sd(T0, { base: Sp, offset: (i + 1) * 8 }))
@@ -432,7 +440,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // instrs.push(Ld(reg_closure, { base: f, offset: 0 }))
       // // 调用函数
       // instrs.push(Jalr(reg_closure))
-      instrs.push(Call(f.name.unwrap()))
+      instrs.push(Call(f.to_string()))
     }
     CallDirect(label, args) => {
       // 直接函数调用
