@@ -36,6 +36,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
       fundef.formal_free_vars.length() +
       3) *
       8,
+      fundefs: input.fundefs,
     }
     let mut j = 0
     for _i, arg in fundef.formal_free_vars {
@@ -96,7 +97,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   // }
 
   // 编译主体
-  let main_env = { vars: Map::new(), current_offset: main_framesize }
+  let main_env = { vars: Map::new(), current_offset: main_framesize, fundefs: input.fundefs}
   main.append(compile_expr(input.body, main_env))
 
   // 主函数尾声
@@ -386,7 +387,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Sd(reg_ret, { base: Fp, offset }))
       env.vars.set(name.to_string(), offset)
       // 更新环境
-      let new_env = { vars: env.vars, current_offset: offset }
+      let new_env = { vars: env.vars, current_offset: offset, fundefs: env.fundefs }
 
       // 计算 e2,使用更新后的环境
       instrs.append(compile_expr(e2, new_env))
@@ -423,30 +424,30 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     CallClosure(f, args) => {
       // 闭包调用
       // println("env: " + env.vars.to_string())
+      // println("f: " + f.to_string())
+      // println("args: " + args.to_string())
+      // println("env.vars: " + env.vars.to_string())
+      // let closure_free_vars_count = env.vars.get(f.to_string()).unwrap()
+      let funcdef_index = env.fundefs.search_by(fn (funcdef) {  funcdef.name._ == f.to_string() }).unwrap()
+      let funcdef = env.fundefs.get(funcdef_index).unwrap()
+      let args_count = funcdef.args.length()
+      
       // 保存参数到参数寄存器
       for i, arg in args {
-        if i < reg_arg_list.length() {
+        if i + args_count < reg_arg_list.length() {
           instrs.push(
             Ld(
-              reg_arg_list.get(i).unwrap(),
+              reg_arg_list.get(i + args_count).unwrap(),
               { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
             ),
           )
-          if arg.to_string() == "_4" {
-            instrs.push(
-            Ld(
-              reg_arg_list.get(i+1).unwrap(),
-              { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
-            ),
-          )
-          }
         } else {
           // 超出寄存器数量的参数压栈
           instrs.push(
             Ld(T0, { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() }),
           )
           instrs.push(
-            Sw(T0, { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 }),
+            Sw(T0, { base: Sp, offset: -(i + args_count - reg_arg_list.length() + 1) * 8 }),
           )
           env.vars.set(
             arg.to_string(),
@@ -573,4 +574,5 @@ fn gen_label(name : String, ~counter : Ref[Int] = _default_counter) -> Label {
 struct Env {
   vars : Map[String, Int] // 变量名到栈偏移的映射
   mut current_offset : Int // 当前可用的栈偏移
+  fundefs : Array[@closure.FuncDef] // 函数定义
 }
