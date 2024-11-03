@@ -70,35 +70,26 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       let low_ty = ty_to_low_type(ty)
 
       // 检查是否是闭包类型
-      let (is_closure, args_ty, return_ty) = match ty {
-        Fun(args, return_ty) => (true, args.map(fn { ty => (gen_name(), ty_to_low_type(ty)) }), ty_to_low_type(return_ty))
-        _ => (false, [], Unit)
+      let is_closure = match ty {
+        Fun(_, _) => true
+        _ => false
       }
-      // Let((x, low_ty), knf_to_closure(env, e), knf_to_closure(env, cont))
-      match is_closure {
-        true => {
+
           // 如果是闭包类型，将变量添加到环境中
+      if is_closure {
           env.push(
             {
               name: x.to_string(),
               old_name: x,
               is_closure: true,
-              ty: return_ty,
-              args: args_ty,
+            ty: low_ty,
+            args: [],
               formal_free_vars: [],
               body: knf_to_closure(env, e),
             },
           )
-
-          MakeClosure(
-            (x, low_ty),
-            { name: x.to_string(), actual_free_vars: [] },
-            knf_to_closure(env, cont),
-          )
-        }
-        false =>
-          Let((x, low_ty), knf_to_closure(env, e), knf_to_closure(env, cont))
       }
+          Let((x, low_ty), knf_to_closure(env, e), knf_to_closure(env, cont))
     }
     LetRec({ name, ty, args, body }, cont) => {
       // println("LetRec: " + e.to_string())
@@ -300,8 +291,8 @@ fn ty_to_low_type(ty : Type) -> LowType {
   }
 }
 
-let _default_counter : Ref[Int] = { val: 0 }
-fn gen_name(~counter : Ref[Int] = _default_counter) -> Name {
-  counter.val = counter.val + 1
-  Name::from_string?("_" + counter.val.to_string() + "_closure").unwrap()
-}
+// let _default_counter : Ref[Int] = { val: 0 }
+// fn gen_name(~counter : Ref[Int] = _default_counter) -> Name {
+//   counter.val = counter.val + 1
+//   Name::from_string?("_" + counter.val.to_string() + "_closure").unwrap()
+// }
