@@ -578,7 +578,7 @@ test {
     
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = syntax_preprocess(env, typed)
-
+    println(pre)
     let knf = to_knf!(env, pre)
     println(knf)
   } catch {
