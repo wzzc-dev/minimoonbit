@@ -4,7 +4,7 @@ pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type]
 ) -> Program {
-  // println("knf_program_to_closure: " + prog.to_string())
+  println("knf_program_to_closure: " + prog.to_string())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
   extern_env.each(
@@ -34,14 +34,14 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  // println("==========================")
-  // for i in fundefs {
-  //   if not(extern_env.contains(i.old_name.to_string())) {
-  //     println("fundef: " + i.to_string())
-  //   }
-  // }
-  // println("==========================")
-  // println("body: " + body.to_string())
+  println("==========================")
+  for i in fundefs {
+    if not(extern_env.contains(i.old_name.to_string())) {
+      println("fundef: " + i.to_string())
+    }
+  }
+  println("==========================")
+  println("body: " + body.to_string())
   { fundefs, body }
 }
 
@@ -128,12 +128,15 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       // println("LetRec: " + name.to_string())
       // let free_vars = fv_with_type(body)
       let free_vars = fv(body)
+      // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
       for arg in args {
         // free_vars.remove(arg.0)
         free_vars.remove(new_fv(arg.0, Unit))
       }
       // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
       free_vars.remove(new_fv(name, Unit))
+      // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
+
       // free_vars.remove(name)
       // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
       let closure = if free_vars.is_empty() { false } else { true }
@@ -150,16 +153,16 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         body: Unit, // 临时设置为 Unit
       }
       env.push(initial_def)
-      let free_vars = fv(body)
-      for arg in args {
-        free_vars.remove(new_fv(arg.0, Unit))
-        // free_vars.remove(arg.0)
-      }
-      // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
-      free_vars.remove(new_fv(name, Unit))
-      // free_vars.remove(name)
-      // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
-      let closure = if free_vars.is_empty() { false } else { true }
+      // let free_vars = fv(body)
+      // for arg in args {
+      //   free_vars.remove(new_fv(arg.0, Unit))
+      //   // free_vars.remove(arg.0)
+      // }
+      // // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
+      // free_vars.remove(new_fv(name, Unit))
+      // // free_vars.remove(name)
+      // // println("LetRec: " + name.to_string() + " , free_vars: " + free_vars.to_string())
+      // let closure = if free_vars.is_empty() { false } else { true }
       let def : FuncDef = {
         name: name.to_string(),
         old_name: name,
@@ -348,14 +351,12 @@ fn gen_name(~counter : Ref[Int] = _default_counter) -> Name {
 pub struct FreeVarWithType {
   name : @types.Name
   ty : LowType
-}
+} derive(Show)
 
-impl Hash for FreeVarWithType with hash_combine(self, state) {
-  fn hash_combine(self : FreeVarWithType, state : Hasher) -> Unit {
+impl Hash for FreeVarWithType with hash_combine(_self, _state) {
+  fn _hash_combine(self : FreeVarWithType, state : Hasher) -> Unit {
     self.name.hash_combine(state)
   }
-
-
 }
 
 impl Hash for FreeVarWithType with hash(self) {
