@@ -401,7 +401,11 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     MakeClosure((_name, _ty), closure, e) => {
       // println("MakeClosure: " + expr.to_string())
       // 闭包创建
+      
       // 保存闭包对象
+      // let label = gen_label("closure_" + _name.to_string())
+      // instrs.push(Label(label._))
+
       let mut j = 0
       for _i, free_var in closure.actual_free_vars {
         // println("free_var: " + free_var.to_string())
@@ -424,20 +428,40 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     CallClosure(f, args) => {
       // 闭包调用
       // println("env: " + env.vars.to_string())
-      // println("f: " + f.to_string())
+      println("f: " + f.to_string())
       // println("args: " + args.to_string())
       // println("env.vars: " + env.vars.to_string())
       // let closure_free_vars_count = env.vars.get(f.to_string()).unwrap()
-      let funcdef_index = env.fundefs.search_by(fn (funcdef) {  funcdef.name._ == f.to_string() }).unwrap()
-      let funcdef = env.fundefs.get(funcdef_index).unwrap()
-      let args_count = funcdef.args.length()
-      
+      let funcdef_index = env.fundefs.search_by(fn (funcdef) {  funcdef.name._ == f.to_string() })
+      println("funcdef_index: " + funcdef_index.to_string())
+      let mut j = 0
+      match funcdef_index {
+        Some(index) => {
+          println("index: " + index.to_string())
+          // println("env.fundefs: " + env.fundefs.to_string())
+          let funcdef = env.fundefs.get(index).unwrap()
+          println("funcdef: " + funcdef.to_string())
+          let closure_free_vars = funcdef.formal_free_vars.map(fn { (name, _) => name })
+          println("closure_free_vars: " + closure_free_vars.to_string())
+          for free_var in closure_free_vars {
+            if not(env.vars.get(free_var.to_string()).is_empty()) {
+              instrs.push(Ld(reg_arg_list.get(j).unwrap(), { base: Fp, offset: env.vars.get(free_var.to_string()).unwrap() }))
+              j += 1
+            }
+          }
+          println("j: " + j.to_string())
+        }
+        None => {
+          @util.die("CallClosure: " + f.to_string() + " not found")
+        }
+      }
+
       // 保存参数到参数寄存器
-      for i, arg in args {
-        if i + args_count < reg_arg_list.length() {
+      for _, arg in args {
+        if j < reg_arg_list.length() {
           instrs.push(
             Ld(
-              reg_arg_list.get(i + args_count).unwrap(),
+              reg_arg_list.get(j).unwrap(),
               { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
             ),
           )
@@ -447,13 +471,14 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             Ld(T0, { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() }),
           )
           instrs.push(
-            Sw(T0, { base: Sp, offset: -(i + args_count - reg_arg_list.length() + 1) * 8 }),
+            Sw(T0, { base: Sp, offset: -(j - reg_arg_list.length() + 1) * 8 }),
           )
           env.vars.set(
             arg.to_string(),
             env.vars.get(arg.to_string()).unwrap() + 8,
           )
         }
+        j += 1
       }
       // // 调用函数
       // instrs.push(Jalr(reg_closure))

@@ -34,14 +34,14 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  // println("==========================")
-  // for i in fundefs {
-  //   if not(extern_env.contains(i.old_name.to_string())) {
-  //     println("fundef: " + i.to_string())
-  //   }
-  // }
-  // println("==========================")
-  // println("body: " + body.to_string())
+  println("==========================")
+  for i in fundefs {
+    if not(extern_env.contains(i.old_name.to_string())) {
+      println("fundef: " + i.to_string())
+    }
+  }
+  println("body: " + body.to_string())
+  println("==========================")
   { fundefs, body }
 }
 
@@ -165,7 +165,21 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         false => CallDirect(name.to_string(), arr_name)
       }
     }
-    Var(n) => Var(n)
+    Var(n) =>{
+      Var(n)
+      // let def_index = env.search_by(fn(def) { def.old_name == n })
+      // match def_index {
+      //   Some(index) => {
+      //     let def = env.get(index).unwrap()
+      //     println("def: " + def.to_string())
+      //     match def.is_closure {
+      //       true => CallClosure(n, def.args.map(fn { (name, _) => name }))
+      //       false => CallDirect(n.to_string(), def.args.map(fn { (name, _) => name }))
+      //     }
+      //   }
+      //   None => Var(n)
+      // }
+    }
     Tuple(arr_name) => MakeTuple(arr_name)
     LetTuple(arr_name_ty, name, cont) => {
       let arr_name = arr_name_ty.map(
@@ -219,6 +233,8 @@ let _default_counter : Ref[Int] = { val: 0 }
 fn gen_name(~counter : Ref[Int] = _default_counter) -> Name {
   counter.val = counter.val + 1
   Name::from_string?("_" + counter.val.to_string() + "_closure").unwrap()
+  // Name::from_string?("x").unwrap()
+
 }
 
 pub struct FreeVarWithType {
