@@ -4,7 +4,7 @@ pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type]
 ) -> Program {
-  // println("knf_program_to_closure: " + prog.to_string())
+  println("knf_program_to_closure: " + prog.to_string())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
   extern_env.each(
@@ -34,14 +34,14 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  // println("==========================")
-  // for i in fundefs {
-  //   if not(extern_env.contains(i.old_name.to_string())) {
-  //     println("fundef: " + i.to_string())
-  //   }
-  // }
-  // println("body: " + body.to_string())
-  // println("==========================")
+  println("==========================")
+  for i in fundefs {
+    if not(extern_env.contains(i.old_name.to_string())) {
+      println("fundef: " + i.to_string())
+    }
+  }
+  println("body: " + body.to_string())
+  println("==========================")
   { fundefs, body }
 }
 
@@ -120,6 +120,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         free_vars.remove(new_fv(arg.0, Unit))
       }
       free_vars.remove(new_fv(name, Unit))
+
       let is_closure = not(free_vars.is_empty())
       // 创建函数定义的通用部分
       let make_def = fn(body : Expr) -> FuncDef {
@@ -142,15 +143,15 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         name: name.to_string(),
         actual_free_vars: fv_to_array(free_vars).map(fn { fv => fv.0 }),
       }
-      if is_closure {
+      // if is_closure {
         MakeClosure(
           (name, ty_to_low_type(ty, true)),
           closure,
           knf_to_closure(env, cont),
         )
-      } else {
-        knf_to_closure(env, cont)
-      }
+      // } else {
+        // knf_to_closure(env, cont)
+      // }
     }
     Apply(name, arr_name) => {
       // 参数是函数类型
@@ -323,8 +324,8 @@ fn fv_with_type(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       r.remove(new_fv(x, Unit))
       fv_with_type(e).union(r)
     }
-    // Var(x) => @hashset.of([new_fv(x, Unit)])
-    Var(_) => @hashset.new()
+    Var(x) => @hashset.of([new_fv(x, Unit)])
+    // Var(_) => @hashset.new()
     LetRec({ name, ty: _, args, body }, cont) => {
       let x = fv_with_type(body)
       for i in args {
@@ -334,10 +335,10 @@ fn fv_with_type(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       result.remove(new_fv(name, Unit))
       result
     }
-    Apply(_f, a) =>
-      // @hashset.of([new_fv(f, DirectFn([], Unit))]).union(
+    Apply(f, a) =>
+      @hashset.of([new_fv(f, DirectFn([], Unit))]).union(
         @hashset.from_array(a.map(fn { name => new_fv(name, Unit) }))
-      // )
+      )
     Tuple(arr_name) =>
       @hashset.from_array(arr_name.map(fn { name => new_fv(name, Ptr) }))
     LetTuple(arr_name_ty, name, cont) => {
