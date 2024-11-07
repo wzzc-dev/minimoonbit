@@ -422,10 +422,14 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // }
     }
     CallClosure(f, args) => {
-      // 1. 加载闭包指针到 s11
-      instrs.push(
-        Ld(S11, { base: Fp, offset: env.vars.get(f.to_string()).unwrap() }),
-      )
+      // println("CallClosure: " + f.to_string() + " " + args.to_string())
+      // println("env: " + env.vars.to_string())
+      match env.vars.get(f.to_string()) {
+        Some(offset) =>
+          // 1. 加载闭包指针到 s11
+          instrs.push(Ld(S11, { base: Fp, offset }))
+        None => println("CallClosure: " + f.to_string() + " not found")
+      }
 
       // 2. 准备参数
       for i, arg in args {
@@ -457,12 +461,53 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 保存参数到参数寄存器
       for i, arg in args {
         if i < reg_arg_list.length() {
-          instrs.push(
-            Ld(
-              reg_arg_list.get(i).unwrap(),
-              { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
-            ),
-          )
+          // instrs.push(
+          //   Ld(
+          //     reg_arg_list.get(i).unwrap(),
+          //     { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
+          //   ),
+          // )
+          match env.vars.get(arg.to_string()) {
+            Some(offset) =>
+              instrs.push(
+                Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
+              )
+            None => {
+              // 检查是否是函数名
+              let def_index = env.fundefs.search_by(
+                fn(fundef) { fundef.name._ == arg.to_string() }
+              )
+
+              match def_index {
+                Some(index) => {
+                  let fundef = env.fundefs.get(index).unwrap()
+                  // 计算闭包大小
+                  let size = 8 + fundef.formal_free_vars.length() * 8
+
+                  // 分配闭包内存
+                  instrs.push(Li(A0, size.to_string()))
+                  instrs.push(Call(Label("minimbt_malloc")))
+                  instrs.push(Mv(T0, A0))
+
+                  // 存储函数指针
+                  instrs.push(La(T1, fundef.name._))
+                  instrs.push(Sd(T1, { base: T0, offset: 0 }))
+
+                  // 存储自由变量
+                  for j, _free_var in fundef.formal_free_vars {
+                    instrs.push(
+                      Ld(T1, { base: S11, offset: (j + 1) * 8 }), // 从当前闭包加载
+                    )
+                    instrs.push(Sd(T1, { base: T0, offset: (j + 1) * 8 }))
+                  }
+
+                  // 将闭包指针移到参数寄存器
+                  instrs.push(Mv(reg_arg_list.get(i).unwrap(), T0))
+                }
+                None => println("CallDirect: " + arg.to_string() + " not found")
+              }
+            }
+          }
         } else {
           instrs.push(
             Ld(T0, { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() }),
@@ -510,34 +555,35 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.append(compile_expr(e, env))
     }
     ArrayGet(array, index) => {
-      // 数组访问
+      // 1. 加载数组基地址
       instrs.push(
-        Lw(T0, { base: Fp, offset: env.vars.get(array.to_string()).unwrap() }),
+        Ld(T0, { base: Fp, offset: env.vars.get(array.to_string()).unwrap() }),
       )
-      instrs.push(Slli(T0, T0, 3)) // 计算偏移(乘8)
+
+      // 2. 计算索引偏移
+
+      // 加载索引值
       instrs.push(
-        Lw(T1, { base: Fp, offset: env.vars.get(index.to_string()).unwrap() }),
+        Ld(T1, { base: Fp, offset: env.vars.get(index.to_string()).unwrap() }),
       )
-      instrs.push(Add(T0, T1, T0))
+      instrs.push(Slli(T1, T1, 3)) // 乘以8 (左移3位)
+
+      // 3. 计算元素地址并加载值
+      instrs.push(Add(T0, T0, T1)) // 基地址 + 偏移
       instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))
-      // instrs.push(Lw(A0, { base: Sp, offset: 0 })) // Load array base address
-      // instrs.push(Lw(A1, { base: Sp, offset: 4 })) // Load index
-      // instrs.push(Slli(A1, A1, 2)) // Multiply index by 4 (assuming 4 bytes per element)
-      // instrs.push(Add(A0, A0, A1)) // Calculate address of the element
-      // instrs.push(Lw(A0, { base: A0, offset: 0 })) // Load the element
     }
     ArrayPut(array, index, value) => {
       // 数组赋值
       instrs.push(
-        Lw(T0, { base: Fp, offset: env.vars.get(array.to_string()).unwrap() }),
+        Ld(T0, { base: Fp, offset: env.vars.get(array.to_string()).unwrap() }),
       )
       instrs.push(Slli(T0, T0, 3))
       instrs.push(
-        Lw(T1, { base: Fp, offset: env.vars.get(index.to_string()).unwrap() }),
+        Ld(T1, { base: Fp, offset: env.vars.get(index.to_string()).unwrap() }),
       )
       instrs.push(Add(T0, T1, T0))
       instrs.push(
-        Lw(T1, { base: Fp, offset: env.vars.get(value.to_string()).unwrap() }),
+        Ld(T1, { base: Fp, offset: env.vars.get(value.to_string()).unwrap() }),
       )
       instrs.push(Sd(T1, { base: T0, offset: 0 }))
       // instrs.push(Mv(reg_ret, Unit)) // 返回Unit
