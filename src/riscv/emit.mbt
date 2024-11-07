@@ -97,7 +97,11 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   // }
 
   // 编译主体
-  let main_env = { vars: Map::new(), current_offset: main_framesize, fundefs: input.fundefs}
+  let main_env = {
+    vars: Map::new(),
+    current_offset: main_framesize,
+    fundefs: input.fundefs,
+  }
   main.append(compile_expr(input.body, main_env))
 
   // 主函数尾声
@@ -384,10 +388,17 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // println("env.current_offset: " + env.current_offset.to_string() + " size: " + size.to_string())
       // println("offset = env.current_offset - size: " + offset.to_string())
       // 保存结果到栈上
-      instrs.push(Sd(reg_ret, { base: Fp, offset }))
+      match ty {
+        Double => instrs.push(Fsd(Fa0, { base: Fp, offset }))
+        _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
+      }
       env.vars.set(name.to_string(), offset)
       // 更新环境
-      let new_env = { vars: env.vars, current_offset: offset, fundefs: env.fundefs }
+      let new_env = {
+        vars: env.vars,
+        current_offset: offset,
+        fundefs: env.fundefs,
+      }
 
       // 计算 e2,使用更新后的环境
       instrs.append(compile_expr(e2, new_env))
@@ -395,93 +406,99 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     Var(name) =>
       // 从环境中查找变量的偏移
       match env.vars.get(name.to_string()) {
-        Some(offset) => instrs.push(Ld(reg_ret, { base: Fp, offset }))
+        Some(offset) =>
+          match get_var_type(name, env) {
+            Double => instrs.push(Fld(Fa0, { base: Fp, offset }))
+            _ => instrs.push(Ld(reg_ret, { base: Fp, offset }))
+          }
         None => instrs.push(Call(Label(name.to_string())))
       }
     MakeClosure((_name, _ty), closure, e) => {
-      // println("MakeClosure: " + expr.to_string())
-      // 闭包创建
-      
-      // 保存闭包对象
-      // let label = gen_label("closure_" + _name.to_string())
-      // instrs.push(Label(label._))
-
-      let mut j = 0
-      for _i, free_var in closure.actual_free_vars {
-        // println("free_var: " + free_var.to_string())
-        // println("env " + env.vars.to_string())
-        if not(env.vars.get(free_var.to_string()).is_empty()) {
-          instrs.push(
-            Ld(
-              reg_arg_list.get(j).unwrap(),
-              { base: Fp, offset: env.vars.get(free_var.to_string()).unwrap() },
-            ),
-          )
-          // instrs.push(Sd(T0, { base: Fp, offset: -(j + 1) * 8 }))
-          j += 1
+      let def_index = env.fundefs.search_by(
+        fn(def) { def.name._ == _name.to_string() },
+      )
+      println("make_closure _name: " + _name.to_string())
+      match def_index {
+        Some(index) => {
+          let def = env.fundefs.get(index).unwrap()
+          let mut args = def.args.map(fn(arg) { arg.0 })
+          if def.is_closure {
+            // 闭包函数
+            // 参数 + 自由变量
+            args = args + def.formal_free_vars.map(fn(fv) { fv.0 })
+            println("make_closure name: " + _name.to_string())
+            println(
+              "make_closure actual_free_vars: " +
+              closure.actual_free_vars.to_string(),
+            )
+            println(
+              "make_closure formal_free_vars: " +
+              def.formal_free_vars.to_string(),
+            )
+            println("make_closure args: " + args.to_string())
+          }
+          for index, arg in args {
+            if index < reg_arg_list.length() {
+              // instrs.push(
+              //   Ld(
+              //     reg_arg_list.get(index).unwrap(),
+              //     { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
+              //   ),
+              // )
+            } else {
+              // 通过栈传递 TODO
+              instrs.push(
+                Ld(
+                  T0,
+                  { base: Sp, offset: -(index - reg_arg_list.length() + 1) * 8 },
+                ),
+              )
+            }
+          }
         }
+        None => @util.die("closure not found")
       }
-
-      // 继续编译剩余表达式
       instrs.append(compile_expr(e, env))
     }
     CallClosure(f, args) => {
-      // 闭包调用
-      // println("env: " + env.vars.to_string())
-      println("f: " + f.to_string())
-      // println("args: " + args.to_string())
-      // println("env.vars: " + env.vars.to_string())
-      // let closure_free_vars_count = env.vars.get(f.to_string()).unwrap()
-      let funcdef_index = env.fundefs.search_by(fn (funcdef) {  funcdef.name._ == f.to_string() })
-      println("funcdef_index: " + funcdef_index.to_string())
-      let mut j = 0
-      match funcdef_index {
-        Some(index) => {
-          println("index: " + index.to_string())
-          // println("env.fundefs: " + env.fundefs.to_string())
-          let funcdef = env.fundefs.get(index).unwrap()
-          println("funcdef: " + funcdef.to_string())
-          let closure_free_vars = funcdef.formal_free_vars.map(fn { (name, _) => name })
-          println("closure_free_vars: " + closure_free_vars.to_string())
-          for free_var in closure_free_vars {
-            if not(env.vars.get(free_var.to_string()).is_empty()) {
-              instrs.push(Ld(reg_arg_list.get(j).unwrap(), { base: Fp, offset: env.vars.get(free_var.to_string()).unwrap() }))
-              j += 1
-            }
-          }
-          println("j: " + j.to_string())
-        }
-        None => {
-          @util.die("CallClosure: " + f.to_string() + " not found")
+      println("CallClosure: " + f.to_string() + " " + args.to_string())
+      // 1. 先加载闭包函数对象
+
+      let def_index = env.fundefs.search_by(
+        fn(def) { def.name._ == f.to_string() },
+      )
+      let def = env.fundefs.get(def_index.unwrap()).unwrap()
+      let args = args + def.formal_free_vars.map(fn(fv) { fv.0 })
+      for index, arg in args {
+        if index < reg_arg_list.length() {
+          // 通过寄存器传递
+          // println(
+          //   "call_closure index: " +
+          //   index.to_string() +
+          //   " arg: " +
+          //   arg.to_string(),
+          // )
+          // instrs.push(
+          //   Ld(
+          //     reg_arg_list.get(index).unwrap(),
+          //     { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
+          //   ),
+          // )
+          println(
+            "call_closure Ld: " +
+            reg_arg_list.get(index).unwrap().to_string() +
+            " " +
+            env.vars.get(arg.to_string()).unwrap().to_string(),
+          )
+        } else {
+          instrs.push(
+            Ld(T1, { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() }),
+          )
+          instrs.push(Sd(T1, { base: Sp, offset: index * 8 }))
         }
       }
 
-      // 保存参数到参数寄存器
-      for _, arg in args {
-        if j < reg_arg_list.length() {
-          instrs.push(
-            Ld(
-              reg_arg_list.get(j).unwrap(),
-              { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
-            ),
-          )
-        } else {
-          // 超出寄存器数量的参数压栈
-          instrs.push(
-            Ld(T0, { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() }),
-          )
-          instrs.push(
-            Sw(T0, { base: Sp, offset: -(j - reg_arg_list.length() + 1) * 8 }),
-          )
-          env.vars.set(
-            arg.to_string(),
-            env.vars.get(arg.to_string()).unwrap() + 8,
-          )
-        }
-        j += 1
-      }
-      // // 调用函数
-      // instrs.push(Jalr(reg_closure))
+      // 4. 调用函数
       instrs.push(Call(f.to_string()))
     }
     CallDirect(label, args) => {
@@ -489,18 +506,18 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 保存参数到参数寄存器
       for i, arg in args {
         if i < reg_arg_list.length() {
-          instrs.push(
-            Ld(
-              reg_arg_list.get(i).unwrap(),
-              { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
-            ),
-          )
+          // instrs.push(
+          //   Ld(
+          //     reg_arg_list.get(i).unwrap(),
+          //     { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
+          //   ),
+          // )
         } else {
           instrs.push(
             Ld(T0, { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() }),
           )
           instrs.push(
-            Sw(T0, { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 }),
+            Sd(T0, { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 }),
           )
         }
       }
@@ -509,18 +526,24 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Call(label._))
     }
     MakeTuple(elems) => {
-      // 创建元组
-      // 分配元组空间
+      // 1. 分配元组空间
       let size = elems.length() * 8
-      instrs.push(Addi(reg_ret, Sp, -size))
+      instrs.push(Li(A0, size.to_string()))
+      instrs.push(Call("minimbt_malloc")) // 使用堆分配
+      instrs.push(Mv(T0, A0)) // 保存元组地址
 
-      // 存储元素
+      // 2. 存储元素
       for i, elem in elems {
+        // 加载元素值（使用Ld而不是Lw）
         instrs.push(
-          Lw(T0, { base: Fp, offset: env.vars.get(elem.to_string()).unwrap() }),
+          Ld(T1, { base: Fp, offset: env.vars.get(elem.to_string()).unwrap() }),
         )
-        instrs.push(Sd(T0, { base: reg_ret, offset: i * 8 }))
+        // 存储到元组中
+        instrs.push(Sd(T1, { base: T0, offset: i * 8 }))
       }
+
+      // 3. 将元组地址放入返回寄存器
+      instrs.push(Mv(reg_ret, T0))
     }
     LetTuple(names, tuple, e) => {
       // println("LetTuple: " + names.to_string() + " " + tuple.to_string() + " " + e.to_string())
@@ -580,6 +603,26 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
   }
   // println("instrs: " + instrs.to_string())
   instrs
+}
+
+fn get_var_type(name : @typing.Name, env : Env) -> @closure.LowType {
+  // 在函数定义中查找变量类型
+  for fundef in env.fundefs {
+    // 检查参数
+    for _index, arg in fundef.args {
+      if arg.0 == name {
+        return arg.1
+      }
+    }
+    // 检查自由变量
+    for _index, free_var in fundef.formal_free_vars {
+      if free_var.0 == name {
+        return free_var.1
+      }
+    }
+  }
+  // 默认返回整数类型
+  Int
 }
 
 pub let extenv = [

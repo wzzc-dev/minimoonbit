@@ -53,16 +53,7 @@ pub fn ClosureInterpreter::eval_full(
   for f in expr.fundefs {
     self.functions.set(f.name._, f)
   }
-  // for i in self.functions {
-  //   println("fundef: " + i.to_string())
-  // }
   let env = InterpreterLocalVars::new()
-  // println("eval_full: " + expr.body.to_string())
-  // for f in self.functions {
-  //   println("fundef: " + f.to_string())
-  // }
-  // println("==========================")
-  // println("env: " + env.to_string())
   self.eval!(env, expr.body)
 }
 
@@ -203,7 +194,6 @@ pub fn ClosureInterpreter::eval(
         .get(c.name._)
         .or_error!(Failure("closure not found: " + n.to_string()))
       let fv = []
-      // println("env: " + env.to_string())
       for x in c.actual_free_vars {
         fv.push(find!(env, x))
       }
