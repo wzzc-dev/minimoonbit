@@ -219,8 +219,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     Unit => instrs.clear()
     Int(i) => instrs.push(Li(reg_ret, i.to_string()))
     Double(d) => {
-      let bits = @double/internal/ryu.ryu_to_string(d)
-      instrs.push(Li(T0, bits))
+      let bits = d.reinterpret_as_u64()
+      instrs.push(Li(T0, bits.to_string()))
       instrs.push(FmvDX(Fa0, T0))
     }
     Neg(x) => {
