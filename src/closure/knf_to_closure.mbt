@@ -184,27 +184,27 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       }
     }
     Var(n) =>
-      match env.search_by(fn(def) { def.old_name == n }) {
-        Some(index) => {
-          let def = env.get(index).unwrap()
-          // match def.is_closure {
-          //   true =>{
-              let closure : Closure = {
-                name: def.old_name.to_string(),
-                actual_free_vars: def.formal_free_vars.map(fn { fv => fv.0 }),
-              }
-              MakeClosure(
-                (def.old_name, def.ty),
-                closure,
-                Var(n),
-              )}
-          //   false =>
-          //     def.body
-          // }
-        // }
-        None => Var(n)
-      }
-      // Var(n)
+      // match env.search_by(fn(def) { def.old_name == n }) {
+      //   Some(index) => {
+      //     let def = env.get(index).unwrap()
+      //     // match def.is_closure {
+      //     //   true =>{
+      //         let closure : Closure = {
+      //           name: def.old_name.to_string(),
+      //           actual_free_vars: def.formal_free_vars.map(fn { fv => fv.0 }),
+      //         }
+      //         MakeClosure(
+      //           (def.old_name, def.ty),
+      //           closure,
+      //           Var(n),
+      //         )}
+      //     //   false =>
+      //     //     def.body
+      //     // }
+      //   // }
+      //   None => Var(n)
+      // }
+      Var(n)
     Tuple(arr_name) => MakeTuple(arr_name)
     LetTuple(arr_name_ty, name, cont) => {
       let arr_name = arr_name_ty.map(
