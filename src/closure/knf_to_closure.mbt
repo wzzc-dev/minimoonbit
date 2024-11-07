@@ -34,14 +34,14 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  println("==========================")
-  for i in fundefs {
-    if not(extern_env.contains(i.old_name.to_string())) {
-      println("fundef: " + i.to_string())
-    }
-  }
-  println("body: " + body.to_string())
-  println("==========================")
+  // println("==========================")
+  // for i in fundefs {
+  //   if not(extern_env.contains(i.old_name.to_string())) {
+  //     println("fundef: " + i.to_string())
+  //   }
+  // }
+  // println("body: " + body.to_string())
+  // println("==========================")
   { fundefs, body }
 }
 
@@ -67,9 +67,6 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       IfLe(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
     Let((x, ty), e, cont) => {
       // 记录变量的类型信息
-      let low_ty = ty_to_low_type(ty, false)
-
-      // 检查是否是闭包类型
       let (args, is_func, _) = match ty {
         Fun(args, return_ty) => (args, true, return_ty)
         _ => ([], false, Unit)
@@ -77,23 +74,40 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
 
       // 如果是闭包类型，将变量添加到环境中
       if is_func {
-        let args = args.map(
+        let _args = args.map(
           fn { ty => (gen_name(), ty_to_low_type(ty, false)) },
         )
         let fv = fv(e)
         let free_vars = fv_to_array(fv)
-        let def : FuncDef = {
-          name: x.to_string(),
-          old_name: x,
-          is_closure: not(free_vars.is_empty()),
-          ty: ty_to_low_type(ty, false),
-          args,
-          formal_free_vars: free_vars,
-          body: knf_to_closure(env, e),
-        }
-        env.push(def)
+        // println("free_vars: " + free_vars.to_string())
+        let is_closure = not(free_vars.is_empty())
+        // let def : FuncDef = {
+        //   name: x.to_string(),
+        //   old_name: x,
+        //   is_closure,
+        //   ty: ty_to_low_type(ty, is_closure),
+        //   args: [],
+        //   formal_free_vars: free_vars,
+        //   body: knf_to_closure(env, e),
+        // }
+        // env.push(def)
+        // let closure : Closure = {
+        //   name: x.to_string(),
+        //   actual_free_vars: free_vars.map(fn { fv => fv.0 }),
+        // }
+        // println("free_vars: " + free_vars.to_string())
+        Let(
+          (x, ty_to_low_type(ty, is_closure)),
+          knf_to_closure(env, e),
+          knf_to_closure(env, cont),
+        )
+      } else {
+        Let(
+          (x, ty_to_low_type(ty, false)),
+          knf_to_closure(env, e),
+          knf_to_closure(env, cont),
+        )
       }
-      Let((x, low_ty), knf_to_closure(env, e), knf_to_closure(env, cont))
     }
     LetRec({ name, ty, args, body }, cont) => {
       let mut return_ty : Type = Unit
@@ -106,26 +120,21 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         free_vars.remove(new_fv(arg.0, Unit))
       }
       free_vars.remove(new_fv(name, Unit))
-      let closure = if free_vars.is_empty() { false } else { true }
-      let initial_def : FuncDef = {
-        name: name.to_string(),
-        old_name: name,
-        is_closure: closure,
-        ty: ty_to_low_type(ty, closure),
-        args: args.map(fn { (name, ty) => (name, ty_to_low_type(ty, false)) }),
-        formal_free_vars: [],
-        body: Unit, // 临时设置为 Unit
+      let is_closure = not(free_vars.is_empty())
+      // 创建函数定义的通用部分
+      let make_def = fn(body : Expr) -> FuncDef {
+        {
+          name: name.to_string(),
+          old_name: name,
+          is_closure,
+          ty: ty_to_low_type(ty, is_closure),
+          args: args.map(fn { (name, ty) => (name, ty_to_low_type(ty, false)) }),
+          formal_free_vars: fv_to_array(free_vars),
+          body,
+        }
       }
-      env.push(initial_def)
-      let def : FuncDef = {
-        name: name.to_string(),
-        old_name: name,
-        is_closure: closure,
-        ty: ty_to_low_type(ty, closure),
-        args: args.map(fn { (name, ty) => (name, ty_to_low_type(ty, false)) }),
-        formal_free_vars: fv_to_array(free_vars),
-        body: knf_to_closure(env, body),
-      }
+      env.push(make_def(Unit))
+      let def = make_def(knf_to_closure(env, body))
       let index = env.search_by(fn(def) { def.old_name == name }).unwrap()
       let _ = env.remove(index)
       env.push(def)
@@ -133,11 +142,15 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         name: name.to_string(),
         actual_free_vars: fv_to_array(free_vars).map(fn { fv => fv.0 }),
       }
-      MakeClosure(
-        (name, ty_to_low_type(ty, true)),
-        closure,
-        knf_to_closure(env, cont),
-      )
+      if is_closure {
+        MakeClosure(
+          (name, ty_to_low_type(ty, true)),
+          closure,
+          knf_to_closure(env, cont),
+        )
+      } else {
+        knf_to_closure(env, cont)
+      }
     }
     Apply(name, arr_name) => {
       // 参数是函数类型
@@ -155,31 +168,42 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         _ => true
       }
       // 检查是否是函数定义中的函数
-      let closure = match
-        env.search_by(fn(def) { def.old_name == name && def.is_closure }) {
-        None => false
-        Some(_) => true
+      let closure = match env.search_by(fn(def) { def.old_name == name }) {
+        None => true
+        Some(index) => {
+          match env.get(index) {
+            Some(def) => def.is_closure
+            None => false
+          }
+        }
       }
       match closure || is_capture {
         true => CallClosure(name, arr_name)
         false => CallDirect(name.to_string(), arr_name)
       }
     }
-    Var(n) =>{
-      Var(n)
-      // let def_index = env.search_by(fn(def) { def.old_name == n })
-      // match def_index {
-      //   Some(index) => {
-      //     let def = env.get(index).unwrap()
-      //     println("def: " + def.to_string())
-      //     match def.is_closure {
-      //       true => CallClosure(n, def.args.map(fn { (name, _) => name }))
-      //       false => CallDirect(n.to_string(), def.args.map(fn { (name, _) => name }))
-      //     }
-      //   }
-      //   None => Var(n)
-      // }
-    }
+    Var(n) =>
+      match env.search_by(fn(def) { def.old_name == n }) {
+        Some(index) => {
+          let def = env.get(index).unwrap()
+          // match def.is_closure {
+          //   true =>{
+              let closure : Closure = {
+                name: def.old_name.to_string(),
+                actual_free_vars: def.formal_free_vars.map(fn { fv => fv.0 }),
+              }
+              MakeClosure(
+                (def.old_name, def.ty),
+                closure,
+                Var(n),
+              )}
+          //   false =>
+          //     def.body
+          // }
+        // }
+        None => Var(n)
+      }
+      // Var(n)
     Tuple(arr_name) => MakeTuple(arr_name)
     LetTuple(arr_name_ty, name, cont) => {
       let arr_name = arr_name_ty.map(
@@ -299,7 +323,8 @@ fn fv_with_type(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       r.remove(new_fv(x, Unit))
       fv_with_type(e).union(r)
     }
-    Var(x) => @hashset.of([new_fv(x, Ptr)])
+    // Var(x) => @hashset.of([new_fv(x, Unit)])
+    Var(_) => @hashset.new()
     LetRec({ name, ty: _, args, body }, cont) => {
       let x = fv_with_type(body)
       for i in args {
@@ -309,10 +334,10 @@ fn fv_with_type(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       result.remove(new_fv(name, Unit))
       result
     }
-    Apply(f, a) =>
-      @hashset.of([new_fv(f, Ptr)]).union(
-        @hashset.from_array(a.map(fn { name => new_fv(name, Ptr) })),
-      )
+    Apply(_f, a) =>
+      // @hashset.of([new_fv(f, DirectFn([], Unit))]).union(
+        @hashset.from_array(a.map(fn { name => new_fv(name, Unit) }))
+      // )
     Tuple(arr_name) =>
       @hashset.from_array(arr_name.map(fn { name => new_fv(name, Ptr) }))
     LetTuple(arr_name_ty, name, cont) => {
