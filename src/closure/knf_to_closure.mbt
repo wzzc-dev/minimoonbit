@@ -77,7 +77,9 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         let _args = args.map(
           fn { ty => (gen_name(), ty_to_low_type(ty, false)) },
         )
-        let fv = fv(e)
+        let fv = fv(e).difference(@hashset.from_array(
+          env.map(fn(def) { new_fv(def.old_name, Unit) })
+        ))
         let free_vars = fv_to_array(fv)
         // println("free_vars: " + free_vars.to_string())
         let is_closure = not(free_vars.is_empty())
@@ -115,12 +117,13 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         Fun(_, ty) => return_ty = ty
         _ => @util.die("LetRec: " + ty.to_string())
       }
-      let free_vars = fv(body)
+      let free_vars = fv(body).difference(@hashset.from_array(
+        env.map(fn(def) { new_fv(def.old_name, Unit) })
+      ))
       for arg in args {
         free_vars.remove(new_fv(arg.0, Unit))
       }
       free_vars.remove(new_fv(name, Unit))
-
       let is_closure = not(free_vars.is_empty())
       // 创建函数定义的通用部分
       let make_def = fn(body : Expr) -> FuncDef {
@@ -139,19 +142,19 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       let index = env.search_by(fn(def) { def.old_name == name }).unwrap()
       let _ = env.remove(index)
       env.push(def)
-      let closure : Closure = {
-        name: name.to_string(),
-        actual_free_vars: fv_to_array(free_vars).map(fn { fv => fv.0 }),
-      }
-      // if is_closure {
+      if is_closure {
+        let closure : Closure = {
+          name: name.to_string(),
+          actual_free_vars: fv_to_array(free_vars).map(fn { fv => fv.0 }),
+        }
         MakeClosure(
           (name, ty_to_low_type(ty, true)),
           closure,
           knf_to_closure(env, cont),
         )
-      // } else {
-        // knf_to_closure(env, cont)
-      // }
+      } else {
+        knf_to_closure(env, cont)
+      }
     }
     Apply(name, arr_name) => {
       // 参数是函数类型
@@ -171,12 +174,11 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       // 检查是否是函数定义中的函数
       let closure = match env.search_by(fn(def) { def.old_name == name }) {
         None => true
-        Some(index) => {
+        Some(index) =>
           match env.get(index) {
             Some(def) => def.is_closure
             None => false
           }
-        }
       }
       match closure || is_capture {
         true => CallClosure(name, arr_name)
@@ -337,7 +339,7 @@ fn fv_with_type(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
     }
     Apply(f, a) =>
       @hashset.of([new_fv(f, DirectFn([], Unit))]).union(
-        @hashset.from_array(a.map(fn { name => new_fv(name, Unit) }))
+        @hashset.from_array(a.map(fn { name => new_fv(name, Unit) })),
       )
     Tuple(arr_name) =>
       @hashset.from_array(arr_name.map(fn { name => new_fv(name, Ptr) }))
