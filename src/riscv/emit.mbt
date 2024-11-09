@@ -422,9 +422,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           instrs.push(La(reg_ret, name.to_string()))
       }
     MakeClosure((name, _ty), closure, e) =>
-      if closure.actual_free_vars.length() == 0 {
-        instrs.append(compile_expr(e, env))
-      } else {
+      // if closure.actual_free_vars.length() == 0 {
+      //   instrs.append(compile_expr(e, env))
+      // } else 
+      {
         // 1. 计算需要的内存大小 (函数指针 + 自由变量)
         let size = 8 + closure.actual_free_vars.length() * 8
 
@@ -467,7 +468,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           instrs.push(Ld(S11, { base: Fp, offset }))
         None =>
           // 如果找不到闭包指针，可能是外部函数
-          instrs.push(La(S11, f.to_string()))
+          // instrs.push(La(S11, f.to_string()))
+          println("CallClosure: " + f.to_string() + " not found")
+
       }
 
       // 2. 准备参数
