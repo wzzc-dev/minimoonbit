@@ -34,15 +34,15 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  // println("==========================")
-  // println("closure ir:")
-  // for i in fundefs {
-  //   if not(extern_env.contains(i.old_name.to_string())) {
-  //     println("fundef: " + i.to_string())
-  //   }
-  // }
-  // println("body: " + body.to_string())
-  // println("==========================")
+  println("==========================")
+  println("closure ir:")
+  for i in fundefs {
+    if not(extern_env.contains(i.old_name.to_string())) {
+      println("fundef: " + i.to_string())
+    }
+  }
+  println("body: " + body.to_string())
+  println("==========================")
   { fundefs, body }
 }
 
@@ -150,7 +150,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       env.push(def)
       
       // 处理后续代码
-      if is_closure {
+      // if is_closure {
         let closure : Closure = {
           name: name.to_string(),
           actual_free_vars: fv_to_array(free_vars).map(fn { fv => fv.0 }),
@@ -160,9 +160,9 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
           closure,
           knf_to_closure(env, cont),
         )
-      } else {
-        knf_to_closure(env, cont)
-      }
+      // } else {
+      //   knf_to_closure(env, cont)
+      // }
     }
     Apply(name, arr_name) => {
       // 参数是函数类型
