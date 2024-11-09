@@ -382,9 +382,20 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         Some(offset) =>
           match get_var_type(name, env) {
             Double => instrs.push(Fld(Fa0, { base: Fp, offset }))
+            DirectFn(_, _) => {
+              // 对于直接函数，我们需要加载函数地址
+              instrs.push(La(reg_ret, name.to_string()))
+            }
+            ClosureFn(_, _) => {
+              // 对于闭包函数，我们需要加载闭包对象
+              instrs.push(Ld(reg_ret, { base: Fp, offset }))
+            }
             _ => instrs.push(Ld(reg_ret, { base: Fp, offset }))
           }
-        None => instrs.push(Call(Label(name.to_string())))
+        None => {
+          // 如果在环境中找不到，可能是外部函数或全局函数
+          instrs.push(La(reg_ret, name.to_string()))
+        }
       }
     MakeClosure((name, _ty), closure, e) => {
       // 1. 计算需要的内存大小 (函数指针 + 自由变量)
@@ -457,58 +468,60 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Jalr(T1)) // 调用闭包函数
     }
     CallDirect(label, args) => {
-      // 直接函数调用
-      // 保存参数到参数寄存器
+      // 准备参数
       for i, arg in args {
         if i < reg_arg_list.length() {
-          // instrs.push(
-          //   Ld(
-          //     reg_arg_list.get(i).unwrap(),
-          //     { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() },
-          //   ),
-          // )
           match env.vars.get(arg.to_string()) {
-            Some(offset) =>
+            Some(offset) => {
+              // 正常的变量参数
               instrs.push(
                 Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
               )
+            }
             None => {
-              // 检查是否是函数名
+              // 如果是函数名，需要特殊处理
               let def_index = env.fundefs.search_by(
                 fn(fundef) { fundef.name._ == arg.to_string() }
               )
-
+              
               match def_index {
                 Some(index) => {
                   let fundef = env.fundefs.get(index).unwrap()
-                  // 计算闭包大小
-                  let size = 8 + fundef.formal_free_vars.length() * 8
-
-                  // 分配闭包内存
-                  instrs.push(Li(A0, size.to_string()))
-                  instrs.push(Call(Label("minimbt_malloc")))
-                  instrs.push(Mv(T0, A0))
-
-                  // 存储函数指针
-                  instrs.push(La(T1, fundef.name._))
-                  instrs.push(Sd(T1, { base: T0, offset: 0 }))
-
-                  // 存储自由变量
-                  for j, _free_var in fundef.formal_free_vars {
-                    instrs.push(
-                      Ld(T1, { base: S11, offset: (j + 1) * 8 }), // 从当前闭包加载
-                    )
-                    instrs.push(Sd(T1, { base: T0, offset: (j + 1) * 8 }))
+                  if fundef.is_closure {
+                    // 如果是闭包函数，需要创建闭包对象
+                    let size = 8 + fundef.formal_free_vars.length() * 8
+                    
+                    // 分配闭包内存
+                    instrs.push(Li(A0, size.to_string()))
+                    instrs.push(Call(Label("minimbt_malloc")))
+                    instrs.push(Mv(T0, A0))
+                    
+                    // 存储函数指针
+                    instrs.push(La(T1, fundef.name._))
+                    instrs.push(Sd(T1, { base: T0, offset: 0 }))
+                    
+                    // 存储自由变量
+                    for j, _free_var in fundef.formal_free_vars {
+                      instrs.push(Ld(T1, { base: S11, offset: (j + 1) * 8 }))
+                      instrs.push(Sd(T1, { base: T0, offset: (j + 1) * 8 }))
+                    }
+                    
+                    // 将闭包指针移到参数寄存器
+                    instrs.push(Mv(reg_arg_list.get(i).unwrap(), T0))
+                  } else {
+                    // 如果是直接函数，只需要加载函数地址
+                    instrs.push(La(reg_arg_list.get(i).unwrap(), fundef.name._))
                   }
-
-                  // 将闭包指针移到参数寄存器
-                  instrs.push(Mv(reg_arg_list.get(i).unwrap(), T0))
                 }
-                None => println("CallDirect: " + arg.to_string() + " not found")
+                None => {
+                  // 如果找不到函数定义，可能是外部函数
+                  instrs.push(La(reg_arg_list.get(i).unwrap(), arg.to_string()))
+                }
               }
             }
           }
         } else {
+          // 超出寄存器数量的参数存入栈
           instrs.push(
             Ld(T0, { base: Fp, offset: env.vars.get(arg.to_string()).unwrap() }),
           )

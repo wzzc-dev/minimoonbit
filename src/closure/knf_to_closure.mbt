@@ -4,7 +4,7 @@ pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type]
 ) -> Program {
-  // println("knf_program_to_closure: " + prog.to_string())
+  println("knf ir: " + prog.to_string())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
   extern_env.each(
@@ -34,14 +34,15 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  // println("==========================")
-  // for i in fundefs {
-  //   if not(extern_env.contains(i.old_name.to_string())) {
-  //     println("fundef: " + i.to_string())
-  //   }
-  // }
-  // println("body: " + body.to_string())
-  // println("==========================")
+  println("==========================")
+  println("closure ir:")
+  for i in fundefs {
+    if not(extern_env.contains(i.old_name.to_string())) {
+      println("fundef: " + i.to_string())
+    }
+  }
+  println("body: " + body.to_string())
+  println("==========================")
   { fundefs, body }
 }
 
@@ -125,6 +126,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       }
       free_vars.remove(new_fv(name, Unit))
       let is_closure = not(free_vars.is_empty())
+      
       // 创建函数定义的通用部分
       let make_def = fn(body : Expr) -> FuncDef {
         {
@@ -137,11 +139,17 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
           body,
         }
       }
+      
+      // 先将函数定义添加到环境中，这样在处理函数体时可以引用到该函数
       env.push(make_def(Unit))
+      
+      // 处理函数体
       let def = make_def(knf_to_closure(env, body))
       let index = env.search_by(fn(def) { def.old_name == name }).unwrap()
       let _ = env.remove(index)
       env.push(def)
+      
+      // 处理后续代码
       if is_closure {
         let closure : Closure = {
           name: name.to_string(),
@@ -186,27 +194,27 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       }
     }
     Var(n) =>
-      // match env.search_by(fn(def) { def.old_name == n }) {
-      //   Some(index) => {
-      //     let def = env.get(index).unwrap()
-      //     // match def.is_closure {
-      //     //   true =>{
-      //         let closure : Closure = {
-      //           name: def.old_name.to_string(),
-      //           actual_free_vars: def.formal_free_vars.map(fn { fv => fv.0 }),
-      //         }
-      //         MakeClosure(
-      //           (def.old_name, def.ty),
-      //           closure,
-      //           Var(n),
-      //         )}
-      //     //   false =>
-      //     //     def.body
-      //     // }
-      //   // }
-      //   None => Var(n)
-      // }
-      Var(n)
+      match env.search_by(fn(def) { def.old_name == n }) {
+        Some(index) => {
+          let def = env.get(index).unwrap()
+          // match def.is_closure {
+          //   true => {
+              // 如果变量引用的是一个闭包函数，需要创建闭包对象
+              let closure : Closure = {
+                name: def.name,
+                actual_free_vars: def.formal_free_vars.map(fn { fv => fv.0 }),
+              }
+              MakeClosure(
+                (def.old_name, def.ty),
+                closure,
+                Var(n)
+              )
+            // }
+            // false => Var(n) // 如果不是闭包，调用 CallDirect
+          // }
+        }
+        None => Var(n)  // 如果在环境中找不到，直接返回变量引用
+      }
     Tuple(arr_name) => MakeTuple(arr_name)
     LetTuple(arr_name_ty, name, cont) => {
       let arr_name = arr_name_ty.map(
