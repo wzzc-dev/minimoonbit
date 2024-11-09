@@ -45,6 +45,7 @@ struct CompileStatus {
   mut opt_knf : @knf.Knf?
   mut closure_ir : @closure.Program?
   mut asm : Array[@riscv.AssemblyFunction]?
+  mut js : String?
 }
 
 fn CompileStatus::initialize(
@@ -63,6 +64,7 @@ fn CompileStatus::initialize(
     opt_knf: None,
     closure_ir: None,
     asm: None,
+    js: None,
   }
   match start_stage {
     Parse => v.source_code = Some(file)
@@ -82,7 +84,7 @@ fn CompileStatus::initialize(
 }
 
 /// Run the next stage of compilation. Returns true if the compilation is finished.
-fn CompileStatus::step(self : CompileStatus) -> Bool {
+fn CompileStatus::step(self : CompileStatus, js : Bool) -> Bool {
   if self.curr_stage >= self.end_stage {
     return true
   }
@@ -114,8 +116,14 @@ fn CompileStatus::step(self : CompileStatus) -> Bool {
       self.closure_ir = Some(closure_ir)
     }
     Asm => {
-      let real_asm = @riscv.emit(self.closure_ir.unwrap())
-      self.asm = Some(real_asm)
+      if js {
+        // 添加生成 JavaScript 代码的逻辑
+        let js_code = @js.emit(self.closure_ir.unwrap())
+        self.js = Some(js_code)
+      } else {
+        let real_asm = @riscv.emit(self.closure_ir.unwrap())
+        self.asm = Some(real_asm)
+      }
     }
     Finished => ()
   }
@@ -123,7 +131,7 @@ fn CompileStatus::step(self : CompileStatus) -> Bool {
   self.curr_stage >= self.end_stage
 }
 
-fn CompileStatus::output(self : CompileStatus, json : Bool) -> String {
+fn CompileStatus::output(self : CompileStatus, json : Bool, js : Bool) -> String {
   if json {
     match self.curr_stage {
       Parse => self.source_code.unwrap()
@@ -141,8 +149,15 @@ fn CompileStatus::output(self : CompileStatus, json : Bool) -> String {
       Knf => self.typechecked.unwrap().to_string()
       KnfOpt => self.knf.unwrap().to_string()
       Closure => self.opt_knf.unwrap().to_string()
-      Asm =>self.closure_ir.unwrap().to_string()
-      Finished => @riscv.print_functions(self.asm.unwrap())
+      Asm => self.closure_ir.unwrap().to_string()
+      Finished => {
+        if js {
+          // 如果是生成 JavaScript，直接返回生成的代码
+          self.js.unwrap()
+        } else {
+          @riscv.print_functions(self.asm.unwrap())
+        }
+      }
     }
   }
 }
@@ -161,7 +176,7 @@ fn main {
   let closure_interpreter = Ref::new(false)
   let out_file = Ref::new("-")
   let print = Ref::new([])
-
+  let js = Ref::new(false)
   // 
   @ArgParser.parse(
     [
@@ -246,6 +261,12 @@ fn main {
         ),
         "Inline threshold for KNF optimization",
       ),
+      (
+        "--js",
+        "",
+        @ArgParser.Set(js),
+        "Generate JavaScript code",
+      ),
     ],
     fn(s) {
       if file.is_empty().not() {
@@ -294,10 +315,10 @@ fn main {
   // Run stages
   while true {
     let stg = status.curr_stage
-    let stop = status.step()
+    let stop = status.step(js.val)
     if stages_to_print.contains(stg) {
       println("Stage: \{stg}")
-      println(status.output(json.val))
+      println(status.output(json.val, js.val))
     }
     if stop {
       break
@@ -326,7 +347,7 @@ fn main {
       }
     }
   } else {
-    let out_string = status.output(json.val)
+    let out_string = status.output(json.val, js.val)
     if out_file.val == "-" {
       println(out_string)
     } else {
