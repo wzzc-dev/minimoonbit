@@ -34,15 +34,15 @@ pub fn knf_program_to_closure(
     },
   )
   let body : Expr = knf_to_closure(fundefs, prog)
-  println("==========================")
-  println("closure ir:")
-  for i in fundefs {
-    if not(extern_env.contains(i.old_name.to_string())) {
-      println("fundef: " + i.to_string())
-    }
-  }
-  println("body: " + body.to_string())
-  println("==========================")
+  // println("==========================")
+  // println("closure ir:")
+  // for i in fundefs {
+  //   if not(extern_env.contains(i.old_name.to_string())) {
+  //     println("fundef: " + i.to_string())
+  //   }
+  // }
+  // println("body: " + body.to_string())
+  // println("==========================")
   { fundefs, body }
 }
 
