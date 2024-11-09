@@ -156,7 +156,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
           actual_free_vars: fv_to_array(free_vars).map(fn { fv => fv.0 }),
         }
         MakeClosure(
-          (name, ty_to_low_type(ty, true)),
+          (name, ty_to_low_type(ty, is_closure)),
           closure,
           knf_to_closure(env, cont),
         )

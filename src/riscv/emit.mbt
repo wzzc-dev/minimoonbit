@@ -19,9 +19,13 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     let framesize = calculate_framesize(fundef)
     // println("framesize: " + framesize.to_string())
     // 函数序言
+    // 分配栈空间
     body.push(Addi(Sp, Sp, -framesize))
+    // 保存返回地址
     body.push(Sd(Ra, { base: Sp, offset: framesize - 8 }))
+    // 保存帧指针
     body.push(Sd(Fp, { base: Sp, offset: framesize - 16 }))
+    // 更新帧指针
     body.push(Addi(Fp, Sp, framesize))
 
     // 保存参数
@@ -32,6 +36,9 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     }
     // 如果是闭包函数，先处理自由变量
     if fundef.is_closure {
+      // 保存旧的闭包指针
+      body.push(Sd(S11, { base: Sp, offset: -8 }))
+      env.current_offset -= 8 // 为保存的 S11 分配栈空间
       for i, arg in fundef.formal_free_vars {
         let offset = env.current_offset
         // 从闭包对象(s11)中加载自由变量，偏移为8*i+8 (第一个8字节是函数指针)
@@ -44,10 +51,18 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     }
     // 处理普通参数
     for i, arg in fundef.args {
-      let offset = env.current_offset
-      body.push(Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
-      env.vars.set(arg.0.to_string(), offset)
-      env.current_offset -= 8
+      if i < reg_arg_list.length() {
+        let offset = env.current_offset
+        body.push(Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
+        env.vars.set(arg.0.to_string(), offset)
+        env.current_offset -= 8
+      } else {
+        // 如果参数超过8个，则需要从栈上读取
+        let offset = env.current_offset
+        body.push(Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
+        env.vars.set(arg.0.to_string(), offset)
+        env.current_offset -= 8
+      }
     }
 
     // 编译函数体
@@ -56,12 +71,18 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
     body.push(Addi(Sp, Sp, framesize))
     body.push(Ret)
+
+    // 函数尾声
+    if fundef.is_closure {
+      // 恢复旧的闭包指针
+      body.push(Ld(S11, { base: Sp, offset: -8 }))
+    }
     functions.push({ name: fundef.name._, export: false, body })
   }
 
   // 主函数
   let main = []
-  let main_framesize = calculate_framesize_expr(input.body) // 增加主函数的栈帧大小
+  let main_framesize = calculate_framesize_expr(input.body) + 24 // 增加主函数的栈帧大小
 
   // 主函数序言
   main.push(Addi(Sp, Sp, -main_framesize))
@@ -179,10 +200,16 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
     }
     Var(_) => 8
     MakeClosure(_, _, e) => calculate_framesize_expr(e)
-    CallClosure(_, _) => 8
-    CallDirect(_, _) => 8
+    CallClosure(_, args) => args.length() * 8
+    CallDirect(_, args) => args.length() * 8
     MakeTuple(_) => 8
-    LetTuple(_, _, _) => 8
+    LetTuple(names_tys, _, _) => {
+      let mut size = 0
+      for name_ty in names_tys {
+        size += getTypeSize(name_ty.1)
+      }
+      size
+    }
     ArrayGet(_, _) => 8
     ArrayPut(_, _, _) => 8
     ExternalArray(_) => 8
@@ -382,64 +409,65 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         Some(offset) =>
           match get_var_type(name, env) {
             Double => instrs.push(Fld(Fa0, { base: Fp, offset }))
-            DirectFn(_, _) => {
+            DirectFn(_, _) =>
               // 对于直接函数，我们需要加载函数地址
               instrs.push(La(reg_ret, name.to_string()))
-            }
-            ClosureFn(_, _) => {
+            ClosureFn(_, _) =>
               // 对于闭包函数，我们需要加载闭包对象
               instrs.push(Ld(reg_ret, { base: Fp, offset }))
-            }
             _ => instrs.push(Ld(reg_ret, { base: Fp, offset }))
           }
-        None => {
+        None =>
           // 如果在环境中找不到，可能是外部函数或全局函数
           instrs.push(La(reg_ret, name.to_string()))
+      }
+    MakeClosure((name, _ty), closure, e) =>
+      if closure.actual_free_vars.length() == 0 {
+        instrs.append(compile_expr(e, env))
+      } else {
+        // 1. 计算需要的内存大小 (函数指针 + 自由变量)
+        let size = 8 + closure.actual_free_vars.length() * 8
+
+        // 2. 调用 malloc 分配内存
+        instrs.push(Li(A0, size.to_string()))
+        instrs.push(Call(Label("minimbt_malloc")))
+        instrs.push(Mv(T0, A0)) // 保存闭包指针到 t0
+
+        // 3. 存储函数指针
+        instrs.push(La(T1, closure.name._))
+        instrs.push(Sd(T1, { base: T0, offset: 0 }))
+
+        // 4. 存储捕获的变量
+        for i, var in closure.actual_free_vars {
+          instrs.push(
+            Ld(T1, { base: Fp, offset: env.vars.get(var.to_string()).unwrap() }),
+          )
+          instrs.push(Sd(T1, { base: T0, offset: (i + 1) * 8 }))
         }
+
+        // 5. 将闭包指针移到返回寄存器
+        instrs.push(Mv(reg_ret, T0))
+        let offset = env.current_offset - 8
+        instrs.push(Sd(reg_ret, { base: Fp, offset }))
+
+        // 6. 更新环境
+        env.vars.set(name.to_string(), offset)
+        env.current_offset = offset
+
+        // 7. 编译剩余表达式，使用新环境
+        instrs.append(compile_expr(e, env))
       }
-    MakeClosure((name, _ty), closure, e) => {
-      // 1. 计算需要的内存大小 (函数指针 + 自由变量)
-      let size = 8 + closure.actual_free_vars.length() * 8
-
-      // 2. 调用 malloc 分配内存
-      instrs.push(Li(A0, size.to_string()))
-      instrs.push(Call(Label("minimbt_malloc")))
-      instrs.push(Mv(T0, A0)) // 保存闭包指针到 t0
-
-      // 3. 存储函数指针
-      instrs.push(La(T1, closure.name._))
-      instrs.push(Sd(T1, { base: T0, offset: 0 }))
-
-      // 4. 存储捕获的变量
-      for i, var in closure.actual_free_vars {
-        instrs.push(
-          Ld(T1, { base: Fp, offset: env.vars.get(var.to_string()).unwrap() }),
-        )
-        instrs.push(Sd(T1, { base: T0, offset: (i + 1) * 8 }))
-      }
-
-      // 5. 将闭包指针移到返回寄存器
-      instrs.push(Mv(reg_ret, T0))
-      let offset = env.current_offset - 8
-      instrs.push(Sd(reg_ret, { base: Fp, offset }))
-
-      // 6. 更新环境
-      env.vars.set(name.to_string(), offset)
-      env.current_offset = offset
-
-      // 7. 编译剩余表达式，使用新环境
-      // if e != Var(name) { // 避免重复处理
-      instrs.append(compile_expr(e, env))
-      // }
-    }
     CallClosure(f, args) => {
       // println("CallClosure: " + f.to_string() + " " + args.to_string())
       // println("env: " + env.vars.to_string())
-      match env.vars.get(f.to_string()) {
+      let offset = env.vars.get(f.to_string())
+      match offset {
         Some(offset) =>
-          // 1. 加载闭包指针到 s11
+          // 如果找到闭包指针，使用闭包指针
           instrs.push(Ld(S11, { base: Fp, offset }))
-        None => println("CallClosure: " + f.to_string() + " not found")
+        None =>
+          // 如果找不到闭包指针，可能是外部函数
+          instrs.push(La(S11, f.to_string()))
       }
 
       // 2. 准备参数
@@ -472,40 +500,38 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       for i, arg in args {
         if i < reg_arg_list.length() {
           match env.vars.get(arg.to_string()) {
-            Some(offset) => {
+            Some(offset) =>
               // 正常的变量参数
               instrs.push(
                 Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
               )
-            }
             None => {
               // 如果是函数名，需要特殊处理
               let def_index = env.fundefs.search_by(
-                fn(fundef) { fundef.name._ == arg.to_string() }
+                fn(fundef) { fundef.name._ == arg.to_string() },
               )
-              
               match def_index {
                 Some(index) => {
                   let fundef = env.fundefs.get(index).unwrap()
                   if fundef.is_closure {
                     // 如果是闭包函数，需要创建闭包对象
                     let size = 8 + fundef.formal_free_vars.length() * 8
-                    
+
                     // 分配闭包内存
                     instrs.push(Li(A0, size.to_string()))
                     instrs.push(Call(Label("minimbt_malloc")))
                     instrs.push(Mv(T0, A0))
-                    
+
                     // 存储函数指针
                     instrs.push(La(T1, fundef.name._))
                     instrs.push(Sd(T1, { base: T0, offset: 0 }))
-                    
+
                     // 存储自由变量
                     for j, _free_var in fundef.formal_free_vars {
                       instrs.push(Ld(T1, { base: S11, offset: (j + 1) * 8 }))
                       instrs.push(Sd(T1, { base: T0, offset: (j + 1) * 8 }))
                     }
-                    
+
                     // 将闭包指针移到参数寄存器
                     instrs.push(Mv(reg_arg_list.get(i).unwrap(), T0))
                   } else {
@@ -513,10 +539,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                     instrs.push(La(reg_arg_list.get(i).unwrap(), fundef.name._))
                   }
                 }
-                None => {
+                None =>
                   // 如果找不到函数定义，可能是外部函数
                   instrs.push(La(reg_arg_list.get(i).unwrap(), arg.to_string()))
-                }
               }
             }
           }
@@ -558,12 +583,14 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // println("LetTuple: " + names.to_string() + " " + tuple.to_string() + " " + e.to_string())
       // 元组解构
       // 从元组加载各个字段
-      for i, _name_ty in names {
-        instrs.push(
-          Lw(T0, { base: Fp, offset: env.vars.get(tuple.to_string()).unwrap() }),
-        )
-        instrs.push(Ld(T0, { base: T0, offset: i * 8 }))
-        instrs.push(Sd(T0, { base: Fp, offset: -(i + 1) * 8 }))
+      instrs.push(
+        Ld(T0, { base: Fp, offset: env.vars.get(tuple.to_string()).unwrap() }),
+      )
+      for i, name_ty in names {
+        instrs.push(Ld(T1, { base: T0, offset: i * 8 }))
+        instrs.push(Sd(T1, { base: Fp, offset: env.current_offset }))
+        env.vars.set(name_ty.0.to_string(), env.current_offset)
+        env.current_offset -= 8
       }
       instrs.append(compile_expr(e, env))
     }
