@@ -172,10 +172,10 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
         size2
       }
     }
-    Let((_, _), e1, e2) => {
+    Let((_, ty), e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      size1 + size2
+      size1 + size2 + getTypeSize(ty)
     }
     Var(_) => 8
     MakeClosure(_, _, e) => calculate_framesize_expr(e)
