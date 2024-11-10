@@ -1,11 +1,11 @@
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  for fundef in input.fundefs {
-    if extenv.contains(fundef.name._) {
-      continue
-    }
-    println("fundef: " + fundef.to_string())
-  }
-  println("minimbt_main: " + input.body.to_string())
+  // for fundef in input.fundefs {
+  //   if extenv.contains(fundef.name._) {
+  //     continue
+  //   }
+  //   println("fundef: " + fundef.to_string())
+  // }
+  // println("minimbt_main: " + input.body.to_string())
   let functions = []
 
   // 为每个函数定义生成汇编代码
@@ -415,13 +415,13 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Label(label_end._))
     }
     Let((name, ty), e1, e2) => {
-      println("Let: " + expr.to_string())
+      // println("Let: " + expr.to_string())
       // println("Let: " + name.to_string() + " " + ty.to_string() + " " + e1.to_string() + " " + e2.to_string())
       // 计算 e1
       instrs.append(compile_expr(e1, env))
-      let size = getTypeSize(ty)
-      println("size: " + size.to_string())
-      println("ty: " + ty.to_string())
+      let size = getTypeSize(ty) // TODO: 计算需要优化
+      // println("size: " + size.to_string())
+      // println("ty: " + ty.to_string())
       let offset = env.current_offset - size
 
       // 为新变量分配栈空间
@@ -433,8 +433,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         Double => instrs.push(Fsd(Fa0, { base: Fp, offset }))
         _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
       }
-      println("name: " + name.to_string())
-      println("offset: " + offset.to_string())
+      // println("name: " + name.to_string())
+      // println("offset: " + offset.to_string())
       env.vars.set(name.to_string(), (offset, ty))
       // 更新环境
       let new_env = {
@@ -455,12 +455,12 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               // println("Var Double: " + name.to_string())
               instrs.push(Fld(Fa0, { base: Fp, offset }))
             }
-            DirectFn(_, _) =>
-              // 对于直接函数，我们需要加载函数地址
-              instrs.push(La(reg_ret, name.to_string()))
-            ClosureFn(_, _) =>
-              // 对于闭包函数，我们需要加载闭包对象
-              instrs.push(Ld(reg_ret, { base: Fp, offset }))
+            // DirectFn(_, _) =>
+            //   // 对于直接函数，我们需要加载函数地址
+            //   instrs.push(La(reg_ret, name.to_string()))
+            // ClosureFn(_, _) =>
+            //   // 对于闭包函数，我们需要加载闭包对象
+            //   instrs.push(Ld(reg_ret, { base: Fp, offset }))
             _ => instrs.push(Ld(reg_ret, { base: Fp, offset }))
           }
         None =>
