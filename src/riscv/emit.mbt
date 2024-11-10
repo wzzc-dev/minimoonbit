@@ -1,11 +1,11 @@
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  // for fundef in input.fundefs {
-  //   if extenv.contains(fundef.name._) {
-  //     continue
-  //   }
-  //   println("fundef: " + fundef.to_string())
-  // }
-  // println("minimbt_main: " + input.body.to_string())
+  for fundef in input.fundefs {
+    if extenv.contains(fundef.name._) {
+      continue
+    }
+    println("fundef: " + fundef.to_string())
+  }
+  println("minimbt_main: " + input.body.to_string())
   let functions = []
 
   // 为每个函数定义生成汇编代码
@@ -135,8 +135,20 @@ fn getTypeSize(ty : @closure.LowType) -> Int {
     Int => 8 // 整数类型占用8字节
     Double => 8 // 双精度浮点数占用8字节
     Bool => 1 // 布尔类型占用1字节
-    ClosureFn(_, _) => 8
-    DirectFn(_, _) => 8
+    ClosureFn(args, ret) => {
+      let mut size = 0
+      for arg in args {
+        size += getTypeSize(arg)
+      }
+      size + getTypeSize(ret)
+    }
+    DirectFn(args, ret) => {
+      let mut size = 0
+      for arg in args {
+        size += getTypeSize(arg)
+      }
+      size + getTypeSize(ret)
+    }
     Tuple(arr_t) => {
       // 假设元组的大小是其元素大小的总和
       let mut tuple_size = 0
@@ -403,12 +415,13 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Label(label_end._))
     }
     Let((name, ty), e1, e2) => {
-      // println("Let: " + expr.to_string())
+      println("Let: " + expr.to_string())
       // println("Let: " + name.to_string() + " " + ty.to_string() + " " + e1.to_string() + " " + e2.to_string())
       // 计算 e1
       instrs.append(compile_expr(e1, env))
       let size = getTypeSize(ty)
-      // println("size: " + size.to_string())
+      println("size: " + size.to_string())
+      println("ty: " + ty.to_string())
       let offset = env.current_offset - size
 
       // 为新变量分配栈空间
@@ -420,6 +433,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         Double => instrs.push(Fsd(Fa0, { base: Fp, offset }))
         _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
       }
+      println("name: " + name.to_string())
+      println("offset: " + offset.to_string())
       env.vars.set(name.to_string(), (offset, ty))
       // 更新环境
       let new_env = {
@@ -434,19 +449,19 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     Var(name) =>
       // 从环境中查找变量的偏移
       match env.vars.get(name.to_string()) {
-        Some(offset) =>
-          match get_var_type(name, env) {
+        Some((offset, ty)) =>
+          match ty {
             Double =>{
               // println("Var Double: " + name.to_string())
-              instrs.push(Fld(Fa0, { base: Fp, offset: offset.0 }))
+              instrs.push(Fld(Fa0, { base: Fp, offset }))
             }
             DirectFn(_, _) =>
               // 对于直接函数，我们需要加载函数地址
               instrs.push(La(reg_ret, name.to_string()))
             ClosureFn(_, _) =>
               // 对于闭包函数，我们需要加载闭包对象
-              instrs.push(Ld(reg_ret, { base: Fp, offset: offset.0 }))
-            _ => instrs.push(Ld(reg_ret, { base: Fp, offset: offset.0 }))
+              instrs.push(Ld(reg_ret, { base: Fp, offset }))
+            _ => instrs.push(Ld(reg_ret, { base: Fp, offset }))
           }
         None =>
           // 如果在环境中找不到，可能是外部函数或全局函数
@@ -490,9 +505,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // println("env: " + env.vars.to_string())
       let offset = env.vars.get(f.to_string())
       match offset {
-        Some(offset) =>
+        Some((offset, _)) =>
           // 如果找到闭包指针，使用闭包指针
-          instrs.push(Ld(S11, { base: Fp, offset: offset.0 }))
+          instrs.push(Ld(S11, { base: Fp, offset }))
         None => println("CallClosure: " + f.to_string() + " not found")
       }
 
@@ -566,9 +581,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         // println("type: " + get_var_type(arg, env).to_string())
         if i < reg_arg_list.length() {
           match env.vars.get(arg.to_string()) {
-            Some(offset) =>
+            Some((offset, ty)) =>
               // 根据参数类型选择加载指令
-              match get_var_type(arg, env) {
+              match ty {
                 Double => {
                   // println("CallDirect Double: " + label.to_string())
                   // println("args Double: " + arg.to_string())
@@ -576,7 +591,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                   instrs.push(
                     Fld(
                       freg_arg_list.get(i).unwrap(),
-                      { base: Fp, offset: offset.0 },
+                      { base: Fp, offset },
                     ),
                   )
                 }
@@ -585,7 +600,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                   instrs.push(
                     Ld(
                       reg_arg_list.get(i).unwrap(),
-                      { base: Fp, offset: offset.0 },
+                      { base: Fp, offset: offset },
                     ),
                   )
               }
