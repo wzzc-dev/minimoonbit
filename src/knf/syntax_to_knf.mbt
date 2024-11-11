@@ -181,6 +181,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         //   ),
         // )
         Not(b) => to_knf!(self, If(b, syn3, syn2))
+        Bool(b) => if b { to_knf!(self, syn2) } else { to_knf!(self, syn3) }
         _ => to_knf!(self, If(Eq(syn1, Bool(false)), syn3, syn2))
       }
     Neg(syn, ~kind) =>
@@ -569,12 +570,12 @@ test {
 }
 
 test {
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/adder.mbt").unwrap() //cls-reg-bug.mbt
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/non-tail-if2.mbt").unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
-  // println(parse)
+  println(parse)
   try {
     let typed = @typing.typing!(parse)
-    // println(typed)
+    println(typed)
     
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = syntax_preprocess(env, typed)

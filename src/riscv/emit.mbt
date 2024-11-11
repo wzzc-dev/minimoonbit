@@ -54,14 +54,12 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
       if i < reg_arg_list.length() {
         let offset = env.current_offset
         match arg.1 {
-          Double => {
+          Double =>
             // 浮点参数使用浮点寄存器和指令
             body.push(Fsd(freg_arg_list.get(i).unwrap(), { base: Fp, offset }))
-          }
-          _ => {
+          _ =>
             // 其他类型使用通用寄存器和指令
             body.push(Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
-          }
         }
         env.vars.set(arg.0.to_string(), (offset, arg.1))
         env.current_offset -= 8
@@ -69,14 +67,12 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
         // 如果参数超过8个，则需要从栈上读取
         let offset = env.current_offset
         match arg.1 {
-          Double => {
+          Double =>
             // 浮点参数使用浮点寄存器和指令
             body.push(Fld(freg_arg_list.get(i).unwrap(), { base: Fp, offset }))
-          }
-          _ => {
+          _ =>
             // 其他类型使用通用寄存器和指令
             body.push(Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
-          }
         }
         env.vars.set(arg.0.to_string(), (offset, arg.1))
         env.current_offset -= 8
@@ -378,6 +374,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(FdivD(Fa0, Fa0, Fa1))
     }
     IfEq(x, y, e1, e2) => {
+      // println("IfEq: " + x.to_string() + " " + y.to_string())
+      // println("IfEq: e1: " + e1.to_string() + " e2: " + e2.to_string())
       instrs.push(
         Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
@@ -451,10 +449,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       match env.vars.get(name.to_string()) {
         Some((offset, ty)) =>
           match ty {
-            Double =>{
+            Double =>
               // println("Var Double: " + name.to_string())
               instrs.push(Fld(Fa0, { base: Fp, offset }))
-            }
             // DirectFn(_, _) =>
             //   // 对于直接函数，我们需要加载函数地址
             //   instrs.push(La(reg_ret, name.to_string()))
@@ -516,7 +513,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         if i < reg_arg_list.length() {
           // 使用参数寄存器
           match get_var_type(arg, env) {
-            Double => {
+            Double =>
               // 浮点参数使用浮点寄存器和指令
               instrs.push(
                 Fld(
@@ -524,8 +521,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                   { base: Fp, offset: env.vars.get(arg.to_string()).unwrap().0 },
                 ),
               )
-            }
-            _ => {
+            _ =>
               // 其他类型使用通用寄存器和指令
               instrs.push(
                 Ld(
@@ -533,7 +529,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                   { base: Fp, offset: env.vars.get(arg.to_string()).unwrap().0 },
                 ),
               )
-            }
           }
         } else {
           // 超出寄存器数量的参数存入栈
@@ -546,7 +541,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                 ),
               )
               instrs.push(
-                Fsd(Ft0, { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 }),
+                Fsd(
+                  Ft0,
+                  { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 },
+                ),
               )
             }
             _ => {
@@ -557,7 +555,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                 ),
               )
               instrs.push(
-                Sd(T0, { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 }),
+                Sd(
+                  T0,
+                  { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 },
+                ),
               )
             }
           }
@@ -584,24 +585,17 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             Some((offset, ty)) =>
               // 根据参数类型选择加载指令
               match ty {
-                Double => {
+                Double =>
                   // println("CallDirect Double: " + label.to_string())
                   // println("args Double: " + arg.to_string())
                   // 浮点数参数使用浮点寄存器
                   instrs.push(
-                    Fld(
-                      freg_arg_list.get(i).unwrap(),
-                      { base: Fp, offset },
-                    ),
+                    Fld(freg_arg_list.get(i).unwrap(), { base: Fp, offset }),
                   )
-                }
                 _ =>
                   // 其他类型使用通用寄存器
                   instrs.push(
-                    Ld(
-                      reg_arg_list.get(i).unwrap(),
-                      { base: Fp, offset: offset },
-                    ),
+                    Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
                   )
               }
             None => {
@@ -655,7 +649,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                 ),
               )
               instrs.push(
-                Fsd(Ft0, { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 }),
+                Fsd(
+                  Ft0,
+                  { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 },
+                ),
               )
             }
             _ => {
@@ -666,7 +663,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                 ),
               )
               instrs.push(
-                Sd(T0, { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 }),
+                Sd(
+                  T0,
+                  { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 },
+                ),
               )
             }
           }
@@ -718,22 +718,28 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         Ld(T0, { base: Fp, offset: env.vars.get(array.to_string()).unwrap().0 }),
       )
 
-      // 2. 加载索引值并计算偏移
+      // 2. 加载索引值并根据类型计算偏移
       instrs.push(
         Ld(T1, { base: Fp, offset: env.vars.get(index.to_string()).unwrap().0 }),
       )
-      instrs.push(Slli(T1, T1, 3)) // 乘以8 (左移3位)
-
-      // 3. 安全地计算和访问元素地址
+      match get_array_element_type(array, env) {
+        Double => 
+          instrs.push(Slli(T1, T1, 3))  // 浮点数: 乘以8 (左移3位)
+        _ => 
+          instrs.push(Slli(T1, T1, 2))  // 整数: 乘以4 (左移2位)
+      }
+      
+      // 3. 计算最终地址
       instrs.push(Add(T0, T0, T1))
 
-      // 根据数组元素类型选择加载指令
+      // 4. 根据数组元素类型选择加载指令
       match get_array_element_type(array, env) {
-        Double => instrs.push(Fld(Fa0, { base: T0, offset: 0 }))
-        _ => instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))
+        Double => instrs.push(Fld(freg_ret, { base: T0, offset: 0 }))
+        _ => instrs.push(Lw(reg_ret, { base: T0, offset: 0 }))
       }
     }
     ArrayPut(array, index, value) => {
+
       // 1. 加载数组基地址
       instrs.push(
         Ld(T0, { base: Fp, offset: env.vars.get(array.to_string()).unwrap().0 }),
@@ -749,10 +755,26 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Add(T0, T0, T1))
 
       // 4. 加载并存储值
-      instrs.push(
-        Ld(T1, { base: Fp, offset: env.vars.get(value.to_string()).unwrap().0 }),
-      )
-      instrs.push(Sd(T1, { base: T0, offset: 0 }))
+      match get_array_element_type(array, env) {
+        Double => {
+          instrs.push(
+            Fld(
+              Fa0,
+              { base: Fp, offset: env.vars.get(value.to_string()).unwrap().0 },
+            ),
+          )
+          instrs.push(Fsd(Fa0, { base: T0, offset: 0 }))
+        }
+        _ => {
+          instrs.push(
+            Ld(
+              T1,
+              { base: Fp, offset: env.vars.get(value.to_string()).unwrap().0 },
+            ),
+          )
+          instrs.push(Sd(T1, { base: T0, offset: 0 }))
+        }
+      }
     }
     ExternalArray(label) =>
       // 外部数组
