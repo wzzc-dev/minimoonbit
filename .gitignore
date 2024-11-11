@@ -25,3 +25,4 @@ rvelf
 rvlinux
 test-exe-file
 out.js
+out.wasm

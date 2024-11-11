@@ -46,6 +46,7 @@ struct CompileStatus {
   mut closure_ir : @closure.Program?
   mut asm : Array[@riscv.AssemblyFunction]?
   mut js : String?
+  mut wasm : String?
 }
 
 fn CompileStatus::initialize(
@@ -65,6 +66,7 @@ fn CompileStatus::initialize(
     closure_ir: None,
     asm: None,
     js: None,
+    wasm: None,
   }
   match start_stage {
     Parse => v.source_code = Some(file)
@@ -84,7 +86,7 @@ fn CompileStatus::initialize(
 }
 
 /// Run the next stage of compilation. Returns true if the compilation is finished.
-fn CompileStatus::step(self : CompileStatus, js : Bool) -> Bool {
+fn CompileStatus::step(self : CompileStatus, js : Bool, wasm : Bool) -> Bool {
   if self.curr_stage >= self.end_stage {
     return true
   }
@@ -120,6 +122,9 @@ fn CompileStatus::step(self : CompileStatus, js : Bool) -> Bool {
         // 添加生成 JavaScript 代码的逻辑
         let js_code = @js.emit(self.closure_ir.unwrap())
         self.js = Some(js_code)
+      } else if wasm {
+        let wasm_code = @wasm.emit(self.closure_ir.unwrap())
+        self.wasm = Some(wasm_code)
       } else {
         let real_asm = @riscv.emit(self.closure_ir.unwrap())
         self.asm = Some(real_asm)
@@ -131,7 +136,7 @@ fn CompileStatus::step(self : CompileStatus, js : Bool) -> Bool {
   self.curr_stage >= self.end_stage
 }
 
-fn CompileStatus::output(self : CompileStatus, json : Bool, js : Bool) -> String {
+fn CompileStatus::output(self : CompileStatus, json : Bool, js : Bool, wasm : Bool) -> String {
   if json {
     match self.curr_stage {
       Parse => self.source_code.unwrap()
@@ -154,6 +159,8 @@ fn CompileStatus::output(self : CompileStatus, json : Bool, js : Bool) -> String
         if js {
           // 如果是生成 JavaScript，直接返回生成的代码
           self.js.unwrap()
+        } else if wasm {
+          self.wasm.unwrap()
         } else {
           @riscv.print_functions(self.asm.unwrap())
         }
@@ -177,6 +184,7 @@ fn main {
   let out_file = Ref::new("-")
   let print = Ref::new([])
   let js = Ref::new(false)
+  let wasm = Ref::new(false)
   // 
   @ArgParser.parse(
     [
@@ -267,6 +275,12 @@ fn main {
         @ArgParser.Set(js),
         "Generate JavaScript code",
       ),
+      (
+        "--wasm",
+        "",
+        @ArgParser.Set(wasm),
+        "Generate WebAssembly code",
+      ),
     ],
     fn(s) {
       if file.is_empty().not() {
@@ -315,10 +329,10 @@ fn main {
   // Run stages
   while true {
     let stg = status.curr_stage
-    let stop = status.step(js.val)
+    let stop = status.step(js.val, wasm.val)
     if stages_to_print.contains(stg) {
       println("Stage: \{stg}")
-      println(status.output(json.val, js.val))
+      println(status.output(json.val, js.val, wasm.val))
     }
     if stop {
       break
@@ -347,7 +361,7 @@ fn main {
       }
     }
   } else {
-    let out_string = status.output(json.val, js.val)
+    let out_string = status.output(json.val, js.val, wasm.val)
     if out_file.val == "-" {
       println(out_string)
     } else {
