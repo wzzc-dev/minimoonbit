@@ -417,7 +417,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // println("Let: " + name.to_string() + " " + ty.to_string() + " " + e1.to_string() + " " + e2.to_string())
       // 计算 e1
       instrs.append(compile_expr(e1, env))
-      if ty != Unit {
+      if not(name.to_string() == "_" && ty == Unit) {
         let size = getTypeSize(ty) // TODO: 计算需要优化
         // println("size: " + size.to_string())
         // println("ty: " + ty.to_string())
