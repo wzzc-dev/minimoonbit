@@ -1,12 +1,11 @@
 pub fn emit(input : @closure.Program) -> String {
-  // for fundef in input.fundefs {
-  //   if extenv.contains(fundef.name._) {
-  //     continue
-  //   }
-  //   println("fundef: " + fundef.to_string())
-  // }
-  // println("minimbt_main: " + input.body.to_string())
   let mut output = ""
+  
+  // 添加内存段声明，用于存储闭包环境
+  output += "  (memory 1)\n"
+  
+  // 添加全局变量用于内存分配
+  output += "  (global $heap (mut i32) (i32.const 0))\n"
   
   // 添加主函数声明
   output += "(module\n"
@@ -22,7 +21,33 @@ pub fn emit(input : @closure.Program) -> String {
   // 处理所有函数定义
   for fundef in input.fundefs {
     if not(extenv.contains(fundef.name._)) {
-      output += "  (func $" + fundef.name._ + "\n"
+      output += "  (func $" + fundef.name._ + " "
+      
+      // 如果是闭包函数，添加环境指针参数
+      if fundef.is_closure {
+        output += "(param $env i32) "
+      }
+      
+      // 添加其他参数
+      for name_ty in fundef.args {
+        let name = name_ty.0
+        let ty = name_ty.1
+        output += "(param $" + name.to_string() + " " + getTy(ty) + ") "
+      }
+      
+      // 添加返回类型（如果需要）
+      output += "(result " + getTy(fundef.ty) + ")\n"
+      
+      // 如果是闭包函数，添加局部变量声明用于加载自由变量
+      if fundef.is_closure {
+        for i, name_ty in fundef.formal_free_vars {
+          output += "    (local $" + name_ty  .0.to_string() + " i32)\n"
+          output += "    (local.set $" + name_ty.0.to_string() + 
+                   " (i32.load offset=" + (i * 4).to_string() + 
+                   " (local.get $env)))\n"
+        }
+      }
+      
       output += "    " + emit_expr(fundef.body) + "\n"
       output += "  )\n"
     }
@@ -30,6 +55,14 @@ pub fn emit(input : @closure.Program) -> String {
   
   output += ")\n"
   output
+}
+
+fn getTy(ty : @closure.LowType) -> String {
+  match ty {
+    Int => "i32"
+    Double => "f64"
+    _ => "i32"
+  }
 }
 
 fn emit_expr(expr : @closure.Expr) -> String {
@@ -86,7 +119,44 @@ fn emit_expr(expr : @closure.Expr) -> String {
     
     // 其他情况暂时返回空值
     Unit => "(i32.const 0)"
-    _ => "(i32.const 0)" // 其他情况需要进一步实现
+    
+    // 修改闭包相关的处理
+    MakeClosure((name, _ty), closure, body) => {
+      let mut result = "(block\n"
+      // 分配闭包环境的内存
+      result += "  (local $env_ptr i32)\n"
+      result += "  (local.set $env_ptr (global.get $heap))\n"
+      
+      // 存储环境变量
+      for i, var in closure.actual_free_vars {
+        result += "  (i32.store offset=" + (i * 4).to_string() + 
+                 " (local.get $env_ptr) (local.get $" + var.to_string() + "))\n"
+      }
+      
+      // 更新堆指针
+      result += "  (global.set $heap (i32.add (local.get $env_ptr) " +
+               "(i32.const " + (closure.actual_free_vars.length() * 4).to_string() + ")))\n"
+      
+      // 将环境指针绑定到名称
+      result += "  (local.set $" + name.to_string() + " (local.get $env_ptr))\n"
+      
+      // 继续处理body
+      result += "  " + emit_expr(body) + ")"
+      result
+    }
+    
+    CallClosure(func_name, args) => {
+      let mut result = "(call $" + func_name.to_string()
+      // 首先传递环境指针
+      result += " (local.get $" + func_name.to_string() + ")"
+      // 然后传递其他参数
+      for arg in args {
+        result += " (local.get $" + arg.to_string() + ")"
+      }
+      result += ")"
+      result
+    }
+    _ => ""
   }
 }
 pub let extenv = [
