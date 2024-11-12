@@ -1,11 +1,11 @@
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  for fundef in input.fundefs {
-    if extenv.contains(fundef.name._) {
-      continue
-    }
-    println("fundef: " + fundef.to_string())
-  }
-  println("minimbt_main: " + input.body.to_string())
+  // for fundef in input.fundefs {
+  //   if extenv.contains(fundef.name._) {
+  //     continue
+  //   }
+  //   println("fundef: " + fundef.to_string())
+  // }
+  // println("minimbt_main: " + input.body.to_string())
   let functions = []
 
   // 为每个函数定义生成汇编代码
@@ -481,10 +481,17 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
 
       // 4. 存储捕获的变量
       for i, var in closure.actual_free_vars {
-        instrs.push(
-          Ld(T1, { base: Fp, offset: env.vars.get(var.to_string()).unwrap().0 }),
-        )
-        instrs.push(Sd(T1, { base: T0, offset: (i + 1) * 8 }))
+        match env.vars.get(var.to_string()) {
+          Some((offset, _)) => {
+            instrs.push(Ld(T1, { base: Fp, offset }))
+            instrs.push(Sd(T1, { base: T0, offset: (i + 1) * 8 }))
+          }
+          None =>
+            println(
+              "Warning: Free variable not found in environment: " +
+              var.to_string(),
+            )
+        }
       }
 
       // 5. 将闭包指针移到返回寄存器
@@ -500,76 +507,56 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.append(compile_expr(e, env))
     }
     CallClosure(f, args) => {
-      // println("CallClosure: " + f.to_string() + " " + args.to_string())
-      // println("env: " + env.vars.to_string())
-      let offset = env.vars.get(f.to_string())
-      match offset {
-        Some((offset, _)) =>
-          // 如果找到闭包指针，使用闭包指针
-          instrs.push(Ld(S11, { base: Fp, offset }))
-        None => println("CallClosure: " + f.to_string() + " not found")
-      }
 
-      // 2. 准备参数
+      // 2. 准备参数，确保正确处理不同类型
       for i, arg in args {
-        if i < reg_arg_list.length() {
-          // 使用参数寄存器
-          match get_var_type(arg, env) {
-            Double =>
-              // 浮点参数使用浮点寄存器和指令
-              instrs.push(
-                Fld(
-                  freg_arg_list.get(i).unwrap(),
-                  { base: Fp, offset: env.vars.get(arg.to_string()).unwrap().0 },
-                ),
-              )
-            _ =>
-              // 其他类型使用通用寄存器和指令
-              instrs.push(
-                Ld(
-                  reg_arg_list.get(i).unwrap(),
-                  { base: Fp, offset: env.vars.get(arg.to_string()).unwrap().0 },
-                ),
-              )
-          }
-        } else {
-          // 超出寄存器数量的参数存入栈
-          match get_var_type(arg, env) {
-            Double => {
-              instrs.push(
-                Fld(
-                  Ft0,
-                  { base: Fp, offset: env.vars.get(arg.to_string()).unwrap().0 },
-                ),
-              )
-              instrs.push(
-                Fsd(
-                  Ft0,
-                  { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 },
-                ),
-              )
+        let arg_type = get_var_type(arg, env)
+        match env.vars.get(arg.to_string()) {
+          Some((offset, _)) =>
+            if i < reg_arg_list.length() {
+              match arg_type {
+                Double =>
+                  instrs.push(
+                    Fld(freg_arg_list.get(i).unwrap(), { base: Fp, offset }),
+                  )
+                _ =>
+                  instrs.push(
+                    Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
+                  )
+              }
+            } else {
+              // 处理溢出参数
+              let stack_offset = -(i - reg_arg_list.length() + 1) * 8
+              match arg_type {
+                Double => {
+                  instrs.push(Fld(Ft0, { base: Fp, offset }))
+                  instrs.push(Fsd(Ft0, { base: Sp, offset: stack_offset }))
+                }
+                _ => {
+                  instrs.push(Ld(T0, { base: Fp, offset }))
+                  instrs.push(Sd(T0, { base: Sp, offset: stack_offset }))
+                }
+              }
             }
-            _ => {
-              instrs.push(
-                Ld(
-                  T0,
-                  { base: Fp, offset: env.vars.get(arg.to_string()).unwrap().0 },
-                ),
-              )
-              instrs.push(
-                Sd(
-                  T0,
-                  { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 },
-                ),
-              )
-            }
-          }
+          None =>
+            println(
+              "Warning: Argument not found in environment: " + arg.to_string(),
+            )
         }
       }
 
-      // 3. 加载函数指针并调用
-      instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
-      instrs.push(Jalr(T1)) // 调用闭包函数
+      match env.vars.get(f.to_string()) {
+        Some((offset, _)) => {
+          // 3. 加载函数指针并调用
+          instrs.push(Ld(S11, { base: Fp, offset }))
+          instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
+          instrs.push(Jalr(T1)) // 调用闭包函数
+        }
+        None => {
+          instrs.push(Call(Label(f.to_string())))
+        }
+      }
+      
     }
     CallDirect(label, args) => {
       // println("CallDirect: " + label.to_string() + " " + args.to_string())
@@ -684,7 +671,17 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           }
         }
       }
-      instrs.push(Call(label._))
+      match env.vars.get(label._) {
+        Some((offset, _)) => {
+          // 3. 加载函数指针并调用
+          instrs.push(Ld(S11, { base: Fp, offset }))
+          instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
+          instrs.push(Jalr(T1)) // 调用闭包函数
+        }
+        None => {
+          instrs.push(Call(label._))
+        }
+      }
     }
     MakeTuple(elems) => {
       // 1. 分配元组空间
@@ -735,16 +732,12 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         Ld(T1, { base: Fp, offset: env.vars.get(index.to_string()).unwrap().0 }),
       )
       match get_array_element_type(array, env) {
-        Double => 
-          instrs.push(Slli(T1, T1, 3))  // 浮点数: 8字节
-        Int => 
-          instrs.push(Slli(T1, T1, 2))  // 整数: 4字节
-        DirectFn(_, _) | ClosureFn(_, _) | Ptr =>
-          instrs.push(Slli(T1, T1, 3))  // 指针类型: 8字节
-        _ =>
-          instrs.push(Slli(T1, T1, 2))  // 默认: 4字节
+        Double => instrs.push(Slli(T1, T1, 3)) // 浮点数: 8字节
+        Int => instrs.push(Slli(T1, T1, 2)) // 整数: 4字节
+        DirectFn(_, _) | ClosureFn(_, _) | Ptr => instrs.push(Slli(T1, T1, 3)) // 指针类型: 8字节
+        _ => instrs.push(Slli(T1, T1, 2)) // 默认: 4字节
       }
-      
+
       // 3. 计算最终地址
       instrs.push(Add(T0, T0, T1))
 
@@ -752,10 +745,11 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       match get_array_element_type(array, env) {
         Double => instrs.push(Fld(freg_ret, { base: T0, offset: 0 }))
         Int => instrs.push(Lw(reg_ret, { base: T0, offset: 0 }))
-        DirectFn(_, _) => instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))  // 函数指针用 Ld
-        ClosureFn(_, _) => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 闭包函数指针也用 Ld
-        Ptr => instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))  // 指针类型用 Ld
-        _ => instrs.push(Lw(reg_ret, { base: T0, offset: 0 }))    // 其他类型默认用 Lw
+        Array(_) => instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))
+        DirectFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Ld
+        ClosureFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 闭包函数指针也用 Ld
+        Ptr => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 指针类型用 Ld
+        _ => instrs.push(Lw(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Lw
       }
     }
     ArrayPut(array, index, value) => {
