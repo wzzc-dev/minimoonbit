@@ -553,7 +553,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           instrs.push(Jalr(T1)) // 调用闭包函数
         }
         None => {
-          instrs.push(Call(Label(f.to_string())))
+          instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
+          instrs.push(Jalr(T1)) // 调用闭包函数
         }
       }
       
