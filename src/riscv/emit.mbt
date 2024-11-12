@@ -417,34 +417,32 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // println("Let: " + name.to_string() + " " + ty.to_string() + " " + e1.to_string() + " " + e2.to_string())
       // 计算 e1
       instrs.append(compile_expr(e1, env))
-      let size = getTypeSize(ty) // TODO: 计算需要优化
-      // println("size: " + size.to_string())
-      // println("ty: " + ty.to_string())
-      let offset = env.current_offset - size
+      if ty != Unit {
+        let size = getTypeSize(ty) // TODO: 计算需要优化
+        // println("size: " + size.to_string())
+        // println("ty: " + ty.to_string())
+        let offset = env.current_offset - size
 
-      // 为新变量分配栈空间
+        // 为新变量分配栈空间
 
-      // println("env.current_offset: " + env.current_offset.to_string() + " size: " + size.to_string())
-      // println("offset = env.current_offset - size: " + offset.to_string())
-      // 保存结果到栈上
-      match ty {
-        Double => instrs.push(Fsd(Fa0, { base: Fp, offset }))
-        DirectFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
-        ClosureFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
-        _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
-      }
-      // println("name: " + name.to_string())
-      // println("offset: " + offset.to_string())
-      env.vars.set(name.to_string(), (offset, ty))
-      // 更新环境
-      let new_env = {
-        vars: env.vars,
-        current_offset: offset,
-        fundefs: env.fundefs,
+        // println("env.current_offset: " + env.current_offset.to_string() + " size: " + size.to_string())
+        // println("offset = env.current_offset - size: " + offset.to_string())
+        // 保存结果到栈上
+        match ty {
+          Double => instrs.push(Fsd(Fa0, { base: Fp, offset }))
+          DirectFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
+          ClosureFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
+          _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
+        }
+        // println("name: " + name.to_string())
+        // println("offset: " + offset.to_string())
+        env.vars.set(name.to_string(), (offset, ty))
+        // 更新环境
+        env.current_offset = offset
       }
 
       // 计算 e2,使用更新后的环境
-      instrs.append(compile_expr(e2, new_env))
+      instrs.append(compile_expr(e2, env))
     }
     Var(name) =>
       // 从环境中查找变量的偏移
@@ -544,7 +542,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             )
         }
       }
-
       match env.vars.get(f.to_string()) {
         Some((offset, _)) => {
           // 3. 加载函数指针并调用
@@ -557,7 +554,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           instrs.push(Jalr(T1)) // 调用闭包函数
         }
       }
-      
     }
     CallDirect(label, args) => {
       // println("CallDirect: " + label.to_string() + " " + args.to_string())
@@ -679,9 +675,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
           instrs.push(Jalr(T1)) // 调用闭包函数
         }
-        None => {
-          instrs.push(Call(label._))
-        }
+        None => instrs.push(Call(label._))
       }
     }
     MakeTuple(elems) => {
@@ -754,39 +748,31 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       }
     }
     ArrayPut(array, index, value) => {
-
       // 1. 加载数组基地址
-      instrs.push(
-        Ld(T0, { base: Fp, offset: env.vars.get(array.to_string()).unwrap().0 }),
-      )
+      let array_offset = env.vars.get(array.to_string()).unwrap().0
+      instrs.push(Ld(T0, { base: Fp, offset: array_offset }))
 
       // 2. 加载并计算索引偏移
-      instrs.push(
-        Ld(T1, { base: Fp, offset: env.vars.get(index.to_string()).unwrap().0 }),
-      )
+      let index_offset = env.vars.get(index.to_string()).unwrap().0
+      instrs.push(Ld(T1, { base: Fp, offset: index_offset }))
       instrs.push(Slli(T1, T1, 3))
 
       // 3. 安全地计算目标地址
       instrs.push(Add(T0, T0, T1))
 
       // 4. 加载并存储值
+      let value_offset = env.vars.get(value.to_string()).unwrap().0
       match get_array_element_type(array, env) {
         Double => {
-          instrs.push(
-            Fld(
-              Fa0,
-              { base: Fp, offset: env.vars.get(value.to_string()).unwrap().0 },
-            ),
-          )
+          instrs.push(Fld(Fa0, { base: Fp, offset: value_offset }))
           instrs.push(Fsd(Fa0, { base: T0, offset: 0 }))
         }
+        Int => {
+          instrs.push(Lw(T1, { base: Fp, offset: value_offset }))
+          instrs.push(Sw(T1, { base: T0, offset: 0 }))
+        }
         _ => {
-          instrs.push(
-            Ld(
-              T1,
-              { base: Fp, offset: env.vars.get(value.to_string()).unwrap().0 },
-            ),
-          )
+          instrs.push(Ld(T1, { base: Fp, offset: value_offset }))
           instrs.push(Sd(T1, { base: T0, offset: 0 }))
         }
       }
