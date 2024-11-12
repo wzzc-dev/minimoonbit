@@ -1,19 +1,19 @@
 pub fn emit(input : @closure.Program) -> String {
   let mut output = ""
   
+  // 添加模块声明添加主函数声明
+  output += "(module\n"
+  
   // 添加内存段声明，用于存储闭包环境
   output += "  (memory 1)\n"
   
   // 添加全局变量用于内存分配
   output += "  (global $heap (mut i32) (i32.const 0))\n"
   
-  // 添加主函数声明
-  output += "(module\n"
-  
   // 添加start section
   output += "  (start $minimbt_main)\n"
   
-  // 添加主函数定义
+  // 添加主函数声明
   output += "  (func $minimbt_main\n"
   output += "    " + emit_expr(input.body) + "\n"
   output += "  )\n"
