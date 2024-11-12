@@ -358,9 +358,9 @@ fn fv_with_type(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       }
       result.union(@hashset.of([new_fv(name, Ptr)]))
     }
-    Get(a, b) => @hashset.of([new_fv(a, Ptr), new_fv(b, Ptr)])
+    Get(a, b) => @hashset.of([new_fv(a, Ptr), new_fv(b, Int)])
     Put(a, b, c) =>
-      @hashset.of([new_fv(a, Ptr), new_fv(b, Ptr), new_fv(c, Ptr)])
+      @hashset.of([new_fv(a, Ptr), new_fv(b, Int), new_fv(c, Ptr)])
     ExternalArray(a) => @hashset.of([new_fv(a, Ptr)])
     ExternalFunctionApplication(_, arr_name) =>
       @hashset.from_array(arr_name.map(fn { name => new_fv(name, Ptr) }))

@@ -533,7 +533,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
   }
 }
 
-type! KnfErr String derive(ToJson)
+pub type! KnfErr String derive(ToJson)
 
 test {
   let list = @fs.read_dir!(path="test/test_src")
