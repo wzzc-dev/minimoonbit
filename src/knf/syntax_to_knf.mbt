@@ -570,7 +570,7 @@ test {
 }
 
 test {
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/non-tail-if2.mbt").unwrap() //cls-reg-bug.mbt
+  let _test2 = @fs.read_file_to_string?(path="test/test_src/matmul.mbt").unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   println(parse)
   try {

@@ -481,7 +481,7 @@ fn assignStmt(
       ((((get_expr, _), expr), _), stmt) =>
        match get_expr {
         Get(arr, idx) => {
-          @types.Syntax::Let(("_", Var({val: None})), Put(arr, idx, expr), stmt)
+          @types.Syntax::Let(("_", Unit), Put(arr, idx, expr), stmt)
         }
         _ => {
           println("Invalid assign statement")

@@ -344,7 +344,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
           match infer!(ctx, name) {
             Array(t) =>
               if t == infer!(ctx, value) {
-                t
+                Unit
               } else {
                 raise TyErr(
                   "The operand of Put should have same type: " +
