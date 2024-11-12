@@ -1,11 +1,11 @@
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  // for fundef in input.fundefs {
-  //   if extenv.contains(fundef.name._) {
-  //     continue
-  //   }
-  //   println("fundef: " + fundef.to_string())
-  // }
-  // println("minimbt_main: " + input.body.to_string())
+  for fundef in input.fundefs {
+    if extenv.contains(fundef.name._) {
+      continue
+    }
+    println("fundef: " + fundef.to_string())
+  }
+  println("minimbt_main: " + input.body.to_string())
   let functions = []
 
   // 为每个函数定义生成汇编代码
@@ -429,6 +429,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 保存结果到栈上
       match ty {
         Double => instrs.push(Fsd(Fa0, { base: Fp, offset }))
+        DirectFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
+        ClosureFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
         _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
       }
       // println("name: " + name.to_string())
@@ -592,6 +594,16 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                   instrs.push(
                     Fld(freg_arg_list.get(i).unwrap(), { base: Fp, offset }),
                   )
+                DirectFn(_, _) =>
+                  // 直接函数使用通用寄存器加载函数地址
+                  instrs.push(
+                    Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
+                  )
+                ClosureFn(_, _) =>
+                  // 闭包函数使用通用寄存器加载闭包对象指针
+                  instrs.push(
+                    Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
+                  )
                 _ =>
                   // 其他类型使用通用寄存器
                   instrs.push(
@@ -724,9 +736,13 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       )
       match get_array_element_type(array, env) {
         Double => 
-          instrs.push(Slli(T1, T1, 3))  // 浮点数: 乘以8 (左移3位)
-        _ => 
-          instrs.push(Slli(T1, T1, 2))  // 整数: 乘以4 (左移2位)
+          instrs.push(Slli(T1, T1, 3))  // 浮点数: 8字节
+        Int => 
+          instrs.push(Slli(T1, T1, 2))  // 整数: 4字节
+        DirectFn(_, _) | ClosureFn(_, _) | Ptr =>
+          instrs.push(Slli(T1, T1, 3))  // 指针类型: 8字节
+        _ =>
+          instrs.push(Slli(T1, T1, 2))  // 默认: 4字节
       }
       
       // 3. 计算最终地址
@@ -735,7 +751,11 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 4. 根据数组元素类型选择加载指令
       match get_array_element_type(array, env) {
         Double => instrs.push(Fld(freg_ret, { base: T0, offset: 0 }))
-        _ => instrs.push(Lw(reg_ret, { base: T0, offset: 0 }))
+        Int => instrs.push(Lw(reg_ret, { base: T0, offset: 0 }))
+        DirectFn(_, _) => instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))  // 函数指针用 Ld
+        ClosureFn(_, _) => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 闭包函数指针也用 Ld
+        Ptr => instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))  // 指针类型用 Ld
+        _ => instrs.push(Lw(reg_ret, { base: T0, offset: 0 }))    // 其他类型默认用 Lw
       }
     }
     ArrayPut(array, index, value) => {
