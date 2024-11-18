@@ -3,7 +3,9 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   //   if extenv.contains(fundef.name._) {
   //     continue
   //   }
-  //   println("fundef: " + fundef.to_string())
+  //   if fundef.name._ == "loop2" {
+  //     println("fundef: " + fundef.to_string())
+  //   }
   // }
   // println("minimbt_main: " + input.body.to_string())
   let functions = []
@@ -36,9 +38,6 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     }
     // 如果是闭包函数，先处理自由变量
     if fundef.is_closure {
-      // 保存旧的闭包指针
-      body.push(Sd(S11, { base: Sp, offset: -24 }))
-      env.current_offset -= 8 // 为保存的 S11 分配栈空间
       for i, arg in fundef.formal_free_vars {
         let offset = env.current_offset
         // 从闭包对象(s11)中加载自由变量，偏移为8*i+8 (第一个8字节是函数指针)
@@ -81,11 +80,6 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
 
     // 编译函数体
     body.append(compile_expr(fundef.body, env))
-    // 函数尾声
-    if fundef.is_closure {
-      // 恢复旧的闭包指针
-      body.push(Ld(S11, { base: Sp, offset: -24 }))
-    }
     body.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
     body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
     body.push(Addi(Sp, Sp, framesize))
@@ -282,13 +276,13 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       let bits = d.reinterpret_as_i64()
       // println("bits: " + bits.to_string())
       instrs.push(Li(T0, bits.to_string()))
-      instrs.push(FmvDX(Fa0, T0))
+      instrs.push(FmvDX(freg_ret, T0))
     }
     Neg(x) => {
       instrs.push(
         Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
-      instrs.push(Neg(reg_ret, reg_ret))
+      instrs.push(Neg(reg_ret, A0))
     }
     Add(x, y) => {
       // println("Add: " + x.to_string() + " " + y.to_string())
@@ -333,7 +327,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(
         Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
-      instrs.push(FnegD(Fa0, Fa0))
+      instrs.push(FnegD(freg_ret, Fa0))
     }
     FAdd(x, y) => {
       // println("FAdd: " + x.to_string() + " " + y.to_string())
@@ -343,7 +337,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(
         Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(FaddD(Fa0, Fa0, Fa1))
+      instrs.push(FaddD(freg_ret, Fa0, Fa1))
     }
     FSub(x, y) => {
       instrs.push(
@@ -352,7 +346,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(
         Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(FsubD(Fa0, Fa0, Fa1))
+      instrs.push(FsubD(freg_ret, Fa0, Fa1))
     }
     FMul(x, y) => {
       // println("FMul: " + x.to_string() + " " + y.to_string())
@@ -362,7 +356,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(
         Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(FmulD(Fa0, Fa0, Fa1))
+      instrs.push(FmulD(freg_ret, Fa0, Fa1))
     }
     FDiv(x, y) => {
       instrs.push(
@@ -371,7 +365,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(
         Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(FdivD(Fa0, Fa0, Fa1))
+      instrs.push(FdivD(freg_ret, Fa0, Fa1))
     }
     IfEq(x, y, e1, e2) => {
       // println("IfEq: " + x.to_string() + " " + y.to_string())
@@ -429,7 +423,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         // println("offset = env.current_offset - size: " + offset.to_string())
         // 保存结果到栈上
         match ty {
-          Double => instrs.push(Fsd(Fa0, { base: Fp, offset }))
+          Double => instrs.push(Fsd(freg_ret, { base: Fp, offset }))
           DirectFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
           ClosureFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
           _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
@@ -451,7 +445,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           match ty {
             Double =>
               // println("Var Double: " + name.to_string())
-              instrs.push(Fld(Fa0, { base: Fp, offset }))
+              instrs.push(Fld(freg_ret, { base: Fp, offset }))
             // DirectFn(_, _) =>
             //   // 对于直接函数，我们需要加载函数地址
             //   instrs.push(La(reg_ret, name.to_string()))
@@ -465,6 +459,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           instrs.push(La(reg_ret, name.to_string()))
       }
     MakeClosure((name, _ty), closure, e) => {
+
       // 1. 计算需要的内存大小 (函数指针 + 自由变量)
       let size = 8 + closure.actual_free_vars.length() * 8
 
@@ -505,7 +500,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.append(compile_expr(e, env))
     }
     CallClosure(f, args) => {
-
+      // 1. 保存函数指针
+      // let func_offset = env.current_offset
+      // instrs.push(Sd(S11, { base: Fp, offset: func_offset }))
+      // env.current_offset -= 8
       // 2. 准备参数，确保正确处理不同类型
       for i, arg in args {
         let arg_type = get_var_type(arg, env)
@@ -548,12 +546,113 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           instrs.push(Ld(S11, { base: Fp, offset }))
           instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
           instrs.push(Jalr(T1)) // 调用闭包函数
+          // 4. 恢复函数指针
+          instrs.push(Ld(S11, { base: Fp, offset }))
+          // // 恢复参数
+          // for i, arg in args {
+          //   let arg_type = get_var_type(arg, env)
+          //   match env.vars.get(arg.to_string()) {
+          //     Some((offset, _)) =>
+          //       if i < reg_arg_list.length() {
+          //         match arg_type {
+          //           Double =>
+          //             instrs.push(
+          //               Fld(freg_arg_list.get(i).unwrap(), { base: Fp, offset }),
+          //             )
+          //           _ =>
+          //             instrs.push(
+          //               Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
+          //             )
+          //         }
+          //       } else {
+          //         // 处理溢出参数
+          //         let stack_offset = -(i - reg_arg_list.length() + 1) * 8
+          //         match arg_type {
+          //           Double => {
+          //             instrs.push(Fld(Ft0, { base: Fp, offset }))
+          //             instrs.push(Fsd(Ft0, { base: Sp, offset: stack_offset }))
+          //           }
+          //           _ => {
+          //             instrs.push(Ld(T0, { base: Fp, offset }))
+          //             instrs.push(Sd(T0, { base: Sp, offset: stack_offset }))
+          //           }
+          //         }
+          //       }
+          //     None =>
+          //       println(
+          //         "Warning: Argument not found in environment: " +
+          //         arg.to_string(),
+          //       )
+          //   }
+          // }
         }
-        None => {
-          instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
-          instrs.push(Jalr(T1)) // 调用闭包函数
-        }
+        None =>
+          match
+            env.fundefs.search_by(fn(fundef) { fundef.name._ == f.to_string() }) {
+            Some(offset) => {
+              // 保存函数指针
+              instrs.push(Sd(S11, { base: Fp, offset }))
+              instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
+              instrs.push(Jalr(T1)) // 调用闭包函数
+              // 恢复函数指针
+              instrs.push(Ld(S11, { base: Fp, offset }))
+
+              // // 恢复参数
+              // for i, arg in args {
+              //   let arg_type = get_var_type(arg, env)
+              //   match env.vars.get(arg.to_string()) {
+              //     Some((offset, _)) =>
+              //       if i < reg_arg_list.length() {
+              //         match arg_type {
+              //           Double =>
+              //             instrs.push(
+              //               Fld(
+              //                 freg_arg_list.get(i).unwrap(),
+              //                 { base: Fp, offset },
+              //               ),
+              //             )
+              //           _ =>
+              //             instrs.push(
+              //               Ld(
+              //                 reg_arg_list.get(i).unwrap(),
+              //                 { base: Fp, offset },
+              //               ),
+              //             )
+              //         }
+              //       } else {
+              //         // 处理溢出参数
+              //         let stack_offset = -(i - reg_arg_list.length() + 1) * 8
+              //         match arg_type {
+              //           Double => {
+              //             instrs.push(Fld(Ft0, { base: Fp, offset }))
+              //             instrs.push(
+              //               Fsd(Ft0, { base: Sp, offset: stack_offset }),
+              //             )
+              //           }
+              //           _ => {
+              //             instrs.push(Ld(T0, { base: Fp, offset }))
+              //             instrs.push(
+              //               Sd(T0, { base: Sp, offset: stack_offset }),
+              //             )
+              //           }
+              //         }
+              //       }
+              //     None =>
+              //       println(
+              //         "Warning: Argument not found in environment: " +
+              //         arg.to_string(),
+              //       )
+              //   }
+              // }
+            }
+            None =>
+              println("Warning: CallClosure: " + f.to_string() + " not found")
+          }
       }
+      // 5. 恢复函数指针
+      // instrs.push(Ld(S11, { base: Fp, offset: func_offset }))
+      // 恢复参数寄存器
+
     }
     CallDirect(label, args) => {
       // println("CallDirect: " + label.to_string() + " " + args.to_string())
@@ -668,15 +767,23 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           }
         }
       }
-      match env.vars.get(label._) {
-        Some((offset, _)) => {
-          // 3. 加载函数指针并调用
-          instrs.push(Ld(S11, { base: Fp, offset }))
-          instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
-          instrs.push(Jalr(T1)) // 调用闭包函数
-        }
-        None => instrs.push(Call(label._))
+      match env.fundefs.search_by(fn(fundef) { fundef.name._ == label._ }) {
+        Some(_) =>
+          // println("CallDirect: " + label._)
+          instrs.push(Call(Label(label._)))
+        None =>
+          match env.vars.get(label._) {
+            Some((offset, _)) => {
+              // 3. 加载函数指针并调用
+              instrs.push(Ld(S11, { base: Fp, offset }))
+              instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
+              instrs.push(Jalr(T1)) // 调用闭包函数
+            }
+            None => instrs.push(Call(Label(label._)))
+          }
       }
+      // 恢复参数
+
     }
     MakeTuple(elems) => {
       // 1. 分配元组空间
@@ -730,7 +837,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         Double => instrs.push(Slli(T1, T1, 3)) // 浮点数: 8字节
         Int => instrs.push(Slli(T1, T1, 2)) // 整数: 4字节
         DirectFn(_, _) | ClosureFn(_, _) | Ptr => instrs.push(Slli(T1, T1, 3)) // 指针类型: 8字节
-        _ => instrs.push(Slli(T1, T1, 2)) // 默认: 4字节
+        _ => instrs.push(Slli(T1, T1, 3)) // 默认: 4字节
       }
 
       // 3. 计算最终地址
@@ -744,7 +851,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         DirectFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Ld
         ClosureFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 闭包函数指针也用 Ld
         Ptr => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 指针类型用 Ld
-        _ => instrs.push(Lw(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Lw
+        _ => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Lw
       }
     }
     ArrayPut(array, index, value) => {
@@ -788,6 +895,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
 fn get_var_type(name : @typing.Name, env : Env) -> @closure.LowType {
   for var in env.vars {
     if var.0 == name.to_string() {
+      // println("var: " + var.0.to_string())
+      // println("var type: " + var.1.1.to_string())
       return var.1.1
     }
   }
@@ -806,21 +915,30 @@ fn get_var_type(name : @typing.Name, env : Env) -> @closure.LowType {
     // 检查自由变量
     for _index, free_var in fundef.formal_free_vars {
       if free_var.0 == name {
+        // println("free_var: " + free_var.0.to_string())
+        // println("free_var type: " + free_var.1.to_string())
         return free_var.1
       }
     }
   }
   // 默认返回整数类型
-  Int
+  Ptr
 }
 
 // 添加一个辅助函数来获取数组元素类型
 fn get_array_element_type(array : @typing.Name, env : Env) -> @closure.LowType {
   match get_var_type(array, env) {
-    Array(elem_type) =>
-      // println("Array element type: " + elem_type.to_string())
+    Array(elem_type) => {
+      // println("get_array_element_type: " + array.to_string() + " Array element type: " + elem_type.to_string())
+      // println("offset: " + env.vars.get(array.to_string()).unwrap().0.to_string())
+      let _ = elem_type
       elem_type
-    _ => Int // 默认类型
+    }
+    _ =>
+      // println("get_array_element_type: Int " + array.to_string())
+      // println("offset: " + env.vars.get(array.to_string()).unwrap().0.to_string())
+
+      Ptr // 默认类型
   }
 }
 
