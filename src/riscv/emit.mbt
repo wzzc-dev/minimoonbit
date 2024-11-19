@@ -1,12 +1,12 @@
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  // for fundef in input.fundefs {
-  //   if extenv.contains(fundef.name._) {
-  //     continue
-  //   }
-  //   if fundef.name._ == "loop2" {
-  //     println("fundef: " + fundef.to_string())
-  //   }
-  // }
+  for fundef in input.fundefs {
+    if extenv.contains(fundef.name._) {
+      continue
+    }
+    if fundef.name._ == "loop2" {
+      println("fundef: " + fundef.to_string())
+    }
+  }
   // println("minimbt_main: " + input.body.to_string())
   let functions = []
 
@@ -371,15 +371,15 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // println("IfEq: " + x.to_string() + " " + y.to_string())
       // println("IfEq: e1: " + e1.to_string() + " e2: " + e2.to_string())
       instrs.push(
-        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
       instrs.push(
-        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
+        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
       // 相等比较分支
       let label_else = gen_label("else")
       let label_end = gen_label("end")
-      instrs.push(Bne(A0, A1, label_else))
+      instrs.push(Bne(T0, T1, label_else))
       instrs.append(compile_expr(e1, env))
       instrs.push(J(label_end))
       instrs.push(Label(label_else._))
@@ -390,16 +390,16 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // println("IfLe: " + x.to_string() + " " + y.to_string() + " " + e1.to_string() + " " + e2.to_string())
       // println("env: " + env.vars.to_string())
       instrs.push(
-        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
       instrs.push(
-        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
+        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
       // println("A0: " + A0.to_string() + " A1: " + A1.to_string())
       // 小于等于比较分支
       let label_else = gen_label("else")
       let label_end = gen_label("end")
-      instrs.push(Bgt(A0, A1, label_else))
+      instrs.push(Bgt(T0, T1, label_else))
       instrs.append(compile_expr(e1, env))
       instrs.push(J(label_end))
       instrs.push(Label(label_else._))
@@ -590,13 +590,16 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           match
             env.fundefs.search_by(fn(fundef) { fundef.name._ == f.to_string() }) {
             Some(offset) => {
-              // 保存函数指针
-              instrs.push(Sd(S11, { base: Fp, offset }))
-              instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
-              instrs.push(Jalr(T1)) // 调用闭包函数
-              // 恢复函数指针
-              instrs.push(Ld(S11, { base: Fp, offset }))
-
+              let func = env.fundefs.get(offset).unwrap()
+              if func.is_closure {
+               
+                instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
+                instrs.push(Jalr(T1)) // 调用闭包函数
+                // 恢复函数指针
+                instrs.push(Ld(S11, { base: Fp, offset }))
+              } else {
+                instrs.push(Call(Label(func.name._)))
+              }
               // // 恢复参数
               // for i, arg in args {
               //   let arg_type = get_var_type(arg, env)
