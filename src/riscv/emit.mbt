@@ -280,92 +280,92 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     Neg(x) => {
       instrs.push(
-        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
-      instrs.push(Neg(reg_ret, A0))
+      instrs.push(Neg(reg_ret, T0))
     }
     Add(x, y) => {
       // println("Add: " + x.to_string() + " " + y.to_string())
       // println("env x: " + env.vars.get(x.to_string()).to_string())
       // println("env y: " + env.vars.get(y.to_string()).to_string())
       instrs.push(
-        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
       instrs.push(
-        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
+        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(Add(reg_ret, A0, A1))
+      instrs.push(Add(reg_ret, T0, T1))
     }
     Sub(x, y) => {
       instrs.push(
-        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
       instrs.push(
-        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
+        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(Sub(reg_ret, A0, A1))
+      instrs.push(Sub(reg_ret, T0, T1))
     }
     Mul(x, y) => {
       instrs.push(
-        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
       instrs.push(
-        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
+        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(Mul(reg_ret, A0, A1))
+      instrs.push(Mul(reg_ret, T0, T1))
     }
     Div(x, y) => {
       instrs.push(
-        Ld(A0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
       instrs.push(
-        Ld(A1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
+        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(Div(reg_ret, A0, A1))
+      instrs.push(Div(reg_ret, T0, T1))
     }
     FNeg(x) => {
       instrs.push(
-        Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Fld(Ft0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
-      instrs.push(FnegD(freg_ret, Fa0))
+      instrs.push(FnegD(freg_ret, Ft0))
     }
     FAdd(x, y) => {
       // println("FAdd: " + x.to_string() + " " + y.to_string())
       instrs.push(
-        Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Fld(Ft0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
       instrs.push(
-        Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
+        Fld(Ft1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(FaddD(freg_ret, Fa0, Fa1))
+      instrs.push(FaddD(freg_ret, Ft0, Ft1))
     }
     FSub(x, y) => {
       instrs.push(
-        Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Fld(Ft0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
       instrs.push(
-        Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
+        Fld(Ft1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(FsubD(freg_ret, Fa0, Fa1))
+      instrs.push(FsubD(freg_ret, Ft0, Ft1))
     }
     FMul(x, y) => {
       // println("FMul: " + x.to_string() + " " + y.to_string())
       instrs.push(
-        Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Fld(Ft0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
       instrs.push(
-        Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
+        Fld(Ft1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(FmulD(freg_ret, Fa0, Fa1))
+      instrs.push(FmulD(freg_ret, Ft0, Ft1))
     }
     FDiv(x, y) => {
       instrs.push(
-        Fld(Fa0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
+        Fld(Ft0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
       )
       instrs.push(
-        Fld(Fa1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
+        Fld(Ft1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
       )
-      instrs.push(FdivD(freg_ret, Fa0, Fa1))
+      instrs.push(FdivD(freg_ret, Ft0, Ft1))
     }
     IfEq(x, y, e1, e2) => {
       // println("IfEq: " + x.to_string() + " " + y.to_string())
@@ -467,11 +467,11 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Li(A0, size.to_string()))
       instrs.push(Call(Label("minimbt_malloc")))
       instrs.push(Mv(T0, A0)) // 保存闭包指针到 t0
-
+      
       // 3. 存储函数指针
       instrs.push(La(T1, closure.name._))
       instrs.push(Sd(T1, { base: T0, offset: 0 }))
-
+      
       // 4. 存储捕获的变量
       for i, var in closure.actual_free_vars {
         match env.vars.get(var.to_string()) {
@@ -499,12 +499,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 7. 编译剩余表达式，使用新环境
       instrs.append(compile_expr(e, env))
     }
-    CallClosure(f, args) => {
-      // 1. 保存函数指针
-      // let func_offset = env.current_offset
-      // instrs.push(Sd(S11, { base: Fp, offset: func_offset }))
-      // env.current_offset -= 8
-      // 2. 准备参数，确保正确处理不同类型
+    CallClosure(f, args) => {       
       for i, arg in args {
         let arg_type = get_var_type(arg, env)
         match env.vars.get(arg.to_string()) {
@@ -546,45 +541,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           instrs.push(Ld(S11, { base: Fp, offset }))
           instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
           instrs.push(Jalr(T1)) // 调用闭包函数
-          // 4. 恢复函数指针
           instrs.push(Ld(S11, { base: Fp, offset }))
-          // // 恢复参数
-          // for i, arg in args {
-          //   let arg_type = get_var_type(arg, env)
-          //   match env.vars.get(arg.to_string()) {
-          //     Some((offset, _)) =>
-          //       if i < reg_arg_list.length() {
-          //         match arg_type {
-          //           Double =>
-          //             instrs.push(
-          //               Fld(freg_arg_list.get(i).unwrap(), { base: Fp, offset }),
-          //             )
-          //           _ =>
-          //             instrs.push(
-          //               Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
-          //             )
-          //         }
-          //       } else {
-          //         // 处理溢出参数
-          //         let stack_offset = -(i - reg_arg_list.length() + 1) * 8
-          //         match arg_type {
-          //           Double => {
-          //             instrs.push(Fld(Ft0, { base: Fp, offset }))
-          //             instrs.push(Fsd(Ft0, { base: Sp, offset: stack_offset }))
-          //           }
-          //           _ => {
-          //             instrs.push(Ld(T0, { base: Fp, offset }))
-          //             instrs.push(Sd(T0, { base: Sp, offset: stack_offset }))
-          //           }
-          //         }
-          //       }
-          //     None =>
-          //       println(
-          //         "Warning: Argument not found in environment: " +
-          //         arg.to_string(),
-          //       )
-          //   }
-          // }
         }
         None =>
           match
@@ -592,68 +549,24 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             Some(offset) => {
               let func = env.fundefs.get(offset).unwrap()
               if func.is_closure {
-               
+                // println("CallClosure: " + f.to_string() + " is closure")
+            
+                // 保存当前闭包指针到栈上
+                let closure_save_offset = env.current_offset
+                instrs.push(Sd(S11, { base: Fp, offset: closure_save_offset }))
+                env.current_offset -= 8
                 instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
                 instrs.push(Jalr(T1)) // 调用闭包函数
-                // 恢复函数指针
-                instrs.push(Ld(S11, { base: Fp, offset }))
+                instrs.push(Ld(S11, { base: Fp, offset: closure_save_offset }))
               } else {
                 instrs.push(Call(Label(func.name._)))
               }
-              // // 恢复参数
-              // for i, arg in args {
-              //   let arg_type = get_var_type(arg, env)
-              //   match env.vars.get(arg.to_string()) {
-              //     Some((offset, _)) =>
-              //       if i < reg_arg_list.length() {
-              //         match arg_type {
-              //           Double =>
-              //             instrs.push(
-              //               Fld(
-              //                 freg_arg_list.get(i).unwrap(),
-              //                 { base: Fp, offset },
-              //               ),
-              //             )
-              //           _ =>
-              //             instrs.push(
-              //               Ld(
-              //                 reg_arg_list.get(i).unwrap(),
-              //                 { base: Fp, offset },
-              //               ),
-              //             )
-              //         }
-              //       } else {
-              //         // 处理溢出参数
-              //         let stack_offset = -(i - reg_arg_list.length() + 1) * 8
-              //         match arg_type {
-              //           Double => {
-              //             instrs.push(Fld(Ft0, { base: Fp, offset }))
-              //             instrs.push(
-              //               Fsd(Ft0, { base: Sp, offset: stack_offset }),
-              //             )
-              //           }
-              //           _ => {
-              //             instrs.push(Ld(T0, { base: Fp, offset }))
-              //             instrs.push(
-              //               Sd(T0, { base: Sp, offset: stack_offset }),
-              //             )
-              //           }
-              //         }
-              //       }
-              //     None =>
-              //       println(
-              //         "Warning: Argument not found in environment: " +
-              //         arg.to_string(),
-              //       )
-              //   }
-              // }
             }
             None =>
               println("Warning: CallClosure: " + f.to_string() + " not found")
           }
       }
       // 5. 恢复函数指针
-      // instrs.push(Ld(S11, { base: Fp, offset: func_offset }))
       // 恢复参数寄存器
 
     }
