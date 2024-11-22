@@ -40,28 +40,26 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     // 保存参数
     let env = {
       vars: Map::new(),
-      current_offset: -16,
+      current_offset: -24,
       // current_offset: -24 - reg_callee_saved_list.length() * 8, // 从-24开始，留出ra和fp的空间
       fundefs: input.fundefs,
     }
     // 如果是闭包函数，先处理自由变量
     if fundef.is_closure {
       for i, arg in fundef.formal_free_vars {
-        
-        env.current_offset -= 8
-        let offset = env.current_offset
         // 从闭包对象(s11)中加载自由变量，偏移为8*i+8 (第一个8字节是函数指针)
         body.push(Ld(T0, { base: S11, offset: (i + 1) * 8 }))
         // 保存到栈上
+        let offset = env.current_offset
         body.push(Sd(T0, { base: Fp, offset }))
         env.vars.set(arg.0.to_string(), (offset, arg.1))
+        env.current_offset -= 8
       }
     }
     // 处理普通参数
     for i, arg in fundef.args {
       if i < reg_arg_list.length() {
         
-        env.current_offset -= 8
         let offset = env.current_offset
         match arg.1 {
           Double =>
@@ -72,10 +70,9 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
             body.push(Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
         }
         env.vars.set(arg.0.to_string(), (offset, arg.1))
+        env.current_offset -= 8
       } else {
-        // 如果参数超过8个，则需要从栈上读取 
-        
-        env.current_offset -= 8       
+        // 如果参数超过8个，则需要从栈上读取
         let offset = env.current_offset
         let stack_offset = -(i - reg_arg_list.length() + 1) * 8
         match arg.1 {
@@ -91,6 +88,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
           }
         }
         env.vars.set(arg.0.to_string(), (offset, arg.1))
+        env.current_offset -= 8
       }
     }
 
@@ -425,8 +423,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 计算 e1
       instrs.append(compile_expr(e1, env))
       if not(name.to_string() == "_" && ty == Unit) {
-        let size = getTypeSize(ty) // TODO: 计算需要优化
-        let offset = env.current_offset - size
+        // let size = getTypeSize(ty) // TODO: 计算需要优化
+        let offset = env.current_offset
         match ty {
           Double => instrs.push(Fsd(freg_ret, { base: Fp, offset }))
           DirectFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
@@ -437,7 +435,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         // println("offset: " + offset.to_string())
         env.vars.set(name.to_string(), (offset, ty))
         // 更新环境
-        env.current_offset = offset
+        env.current_offset -= 8
       }
 
       // 计算 e2,使用更新后的环境
@@ -488,12 +486,12 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
 
       // 5. 将闭包指针移到返回寄存器
       instrs.push(Mv(reg_ret, T0))
-      env.current_offset -= 8
       let offset = env.current_offset
       instrs.push(Sd(reg_ret, { base: Fp, offset }))
 
       // 6. 更新环境
       env.vars.set(name.to_string(), (offset, _ty))
+      env.current_offset -= 8
 
       // 7. 编译剩余表达式，使用新环境
       instrs.append(compile_expr(e, env))
@@ -563,10 +561,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                 // println("CallClosure: " + f.to_string() + " is closure")
 
                 // 保存当前闭包指针到栈上
-                
-                env.current_offset -= 8
                 let closure_save_offset = env.current_offset
                 instrs.push(Sd(S11, { base: Fp, offset: closure_save_offset }))
+                env.current_offset -= 8
                 instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
                 instrs.push(Jalr(T1)) // 调用闭包函数
                 instrs.push(Ld(S11, { base: Fp, offset: closure_save_offset }))
@@ -596,12 +593,13 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // let save_area_offset = env.current_offset 
       // // 保存将被使用的参数寄存器
       // for i = 0; i < args_to_save; i = i + 1 {
+      //   // println(env.current_offset)
       //   instrs.push(
       //     Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset: env.current_offset }),
       //   )
       //   env.current_offset -= 8
       // }
-
+      // println("")
       for i, arg in args {
         if i < reg_arg_list.length() {
           match env.vars.get(arg.to_string()) {
@@ -691,10 +689,12 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 恢复参数寄存器 - 使用保存时的偏移量
       // let restore_offset = save_area_offset
       // for i = 0; i < args_to_save; i = i + 1 {
+      //   // println(restore_offset - (i * 8))
       //   instrs.push(
       //     Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset: restore_offset - (i * 8) }),
       //   )
       // }
+      // println("\n")
     }
     MakeTuple(elems) => {
       // 1. 分配元组空间
