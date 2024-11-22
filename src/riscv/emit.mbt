@@ -1,12 +1,12 @@
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  for fundef in input.fundefs {
-    if extenv.contains(fundef.name._) {
-      continue
-    }
-    if fundef.name._ == "loop2" {
-      println("fundef: " + fundef.to_string())
-    }
-  }
+  // for fundef in input.fundefs {
+  //   if extenv.contains(fundef.name._) {
+  //     continue
+  //   }
+  //   if fundef.name._ == "loop2" {
+  //     println("fundef: " + fundef.to_string())
+  //   }
+  // }
   // println("minimbt_main: " + input.body.to_string())
   let functions = []
 
@@ -63,15 +63,20 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
         env.vars.set(arg.0.to_string(), (offset, arg.1))
         env.current_offset -= 8
       } else {
-        // 如果参数超过8个，则需要从栈上读取
+        // 如果参数超过8个，则需要从栈上读取        
         let offset = env.current_offset
+        let stack_offset = -(i - reg_arg_list.length() + 1) * 8
         match arg.1 {
-          Double =>
+          Double => {
             // 浮点参数使用浮点寄存器和指令
-            body.push(Fld(freg_arg_list.get(i).unwrap(), { base: Fp, offset }))
-          _ =>
+            body.push(Fld(Ft0, { base: Sp, offset: stack_offset }))
+            body.push(Fsd(Ft0, { base: Fp, offset }))
+          }
+          _ => {
             // 其他类型使用通用寄存器和指令
-            body.push(Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
+            body.push(Ld(T0, { base: Sp, offset: stack_offset }))
+            body.push(Sd(T0, { base: Fp, offset }))
+          }
         }
         env.vars.set(arg.0.to_string(), (offset, arg.1))
         env.current_offset -= 8
@@ -407,21 +412,11 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Label(label_end._))
     }
     Let((name, ty), e1, e2) => {
-      // println("Let: " + expr.to_string())
-      // println("Let: " + name.to_string() + " " + ty.to_string() + " " + e1.to_string() + " " + e2.to_string())
       // 计算 e1
       instrs.append(compile_expr(e1, env))
       if not(name.to_string() == "_" && ty == Unit) {
         let size = getTypeSize(ty) // TODO: 计算需要优化
-        // println("size: " + size.to_string())
-        // println("ty: " + ty.to_string())
         let offset = env.current_offset - size
-
-        // 为新变量分配栈空间
-
-        // println("env.current_offset: " + env.current_offset.to_string() + " size: " + size.to_string())
-        // println("offset = env.current_offset - size: " + offset.to_string())
-        // 保存结果到栈上
         match ty {
           Double => instrs.push(Fsd(freg_ret, { base: Fp, offset }))
           DirectFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
@@ -446,12 +441,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             Double =>
               // println("Var Double: " + name.to_string())
               instrs.push(Fld(freg_ret, { base: Fp, offset }))
-            // DirectFn(_, _) =>
-            //   // 对于直接函数，我们需要加载函数地址
-            //   instrs.push(La(reg_ret, name.to_string()))
-            // ClosureFn(_, _) =>
-            //   // 对于闭包函数，我们需要加载闭包对象
-            //   instrs.push(Ld(reg_ret, { base: Fp, offset }))
             _ => instrs.push(Ld(reg_ret, { base: Fp, offset }))
           }
         None =>
@@ -467,11 +456,11 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Li(A0, size.to_string()))
       instrs.push(Call(Label("minimbt_malloc")))
       instrs.push(Mv(T0, A0)) // 保存闭包指针到 t0
-      
+
       // 3. 存储函数指针
       instrs.push(La(T1, closure.name._))
       instrs.push(Sd(T1, { base: T0, offset: 0 }))
-      
+
       // 4. 存储捕获的变量
       for i, var in closure.actual_free_vars {
         match env.vars.get(var.to_string()) {
@@ -499,7 +488,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 7. 编译剩余表达式，使用新环境
       instrs.append(compile_expr(e, env))
     }
-    CallClosure(f, args) => {       
+    CallClosure(f, args) => {
       for i, arg in args {
         let arg_type = get_var_type(arg, env)
         match env.vars.get(arg.to_string()) {
@@ -550,7 +539,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               let func = env.fundefs.get(offset).unwrap()
               if func.is_closure {
                 // println("CallClosure: " + f.to_string() + " is closure")
-            
+
                 // 保存当前闭包指针到栈上
                 let closure_save_offset = env.current_offset
                 instrs.push(Sd(S11, { base: Fp, offset: closure_save_offset }))
@@ -566,42 +555,16 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               println("Warning: CallClosure: " + f.to_string() + " not found")
           }
       }
-      // 5. 恢复函数指针
-      // 恢复参数寄存器
-
     }
     CallDirect(label, args) => {
-      // println("CallDirect: " + label.to_string() + " " + args.to_string())
-      // println("env: " + env.vars.to_string())
-      // 准备参数
       for i, arg in args {
-        // println("arg: " + arg.to_string())
-        // println(
-        //   "env.vars.get(arg.to_string()): " +
-        //   env.vars.get(arg.to_string()).to_string(),
-        // )
-        // println("type: " + get_var_type(arg, env).to_string())
         if i < reg_arg_list.length() {
           match env.vars.get(arg.to_string()) {
             Some((offset, ty)) =>
-              // 根据参数类型选择加载指令
               match ty {
                 Double =>
-                  // println("CallDirect Double: " + label.to_string())
-                  // println("args Double: " + arg.to_string())
-                  // 浮点数参数使用浮点寄存器
                   instrs.push(
                     Fld(freg_arg_list.get(i).unwrap(), { base: Fp, offset }),
-                  )
-                DirectFn(_, _) =>
-                  // 直接函数使用通用寄存器加载函数地址
-                  instrs.push(
-                    Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
-                  )
-                ClosureFn(_, _) =>
-                  // 闭包函数使用通用寄存器加载闭包对象指针
-                  instrs.push(
-                    Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }),
                   )
                 _ =>
                   // 其他类型使用通用寄存器
@@ -650,35 +613,17 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             }
           }
         } else {
+          let offset = env.vars.get(arg.to_string()).unwrap().0
+          let stack_offset = -(i - reg_arg_list.length() + 1) * 8
           // 超出寄存器数量的参数存入栈
           match get_var_type(arg, env) {
             Double => {
-              instrs.push(
-                Fld(
-                  Ft0,
-                  { base: Fp, offset: env.vars.get(arg.to_string()).unwrap().0 },
-                ),
-              )
-              instrs.push(
-                Fsd(
-                  Ft0,
-                  { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 },
-                ),
-              )
+              instrs.push(Fld(Ft0, { base: Fp, offset }))
+              instrs.push(Fsd(Ft0, { base: Sp, offset: stack_offset }))
             }
             _ => {
-              instrs.push(
-                Ld(
-                  T0,
-                  { base: Fp, offset: env.vars.get(arg.to_string()).unwrap().0 },
-                ),
-              )
-              instrs.push(
-                Sd(
-                  T0,
-                  { base: Sp, offset: -(i - reg_arg_list.length() + 1) * 8 },
-                ),
-              )
+              instrs.push(Ld(T0, { base: Fp, offset }))
+              instrs.push(Sd(T0, { base: Sp, offset: stack_offset }))
             }
           }
         }
@@ -725,7 +670,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Mv(reg_ret, T0))
     }
     LetTuple(names, tuple, e) => {
-      // println("LetTuple: " + names.to_string() + " " + tuple.to_string() + " " + e.to_string())
       // 元组解构
       // 从元组加载各个字段
       instrs.push(
@@ -845,16 +789,10 @@ fn get_var_type(name : @typing.Name, env : Env) -> @closure.LowType {
 fn get_array_element_type(array : @typing.Name, env : Env) -> @closure.LowType {
   match get_var_type(array, env) {
     Array(elem_type) => {
-      // println("get_array_element_type: " + array.to_string() + " Array element type: " + elem_type.to_string())
-      // println("offset: " + env.vars.get(array.to_string()).unwrap().0.to_string())
       let _ = elem_type
       elem_type
     }
-    _ =>
-      // println("get_array_element_type: Int " + array.to_string())
-      // println("offset: " + env.vars.get(array.to_string()).unwrap().0.to_string())
-
-      Ptr // 默认类型
+    _ => Ptr // 默认类型
   }
 }
 
