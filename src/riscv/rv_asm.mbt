@@ -76,6 +76,7 @@ pub enum RvAsm {
   FmvD(FReg, FReg)
   J(Label)
   Jalr(Reg)
+  TailJalr(Reg)
   Jr(Reg)
   Call(Label)
   Tail(Label)
@@ -168,6 +169,10 @@ impl Show for RvAsm with output(self, logger) {
     _ => logger.write_string("  ")
   }
   match self {
+    TailJalr(rs1) => {
+      logger.write_string("tail jalr ")
+      Show::output(rs1, logger)
+    }
     Add(rd, rs1, rs2) => write3(logger, "add", rd, rs1, rs2)
     Sub(rd, rs1, rs2) => write3(logger, "sub", rd, rs1, rs2)
     Xor(rd, rs1, rs2) => write3(logger, "xor", rd, rs1, rs2)

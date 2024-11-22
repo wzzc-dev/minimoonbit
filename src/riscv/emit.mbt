@@ -18,7 +18,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     }
     // println("fundef: " + fundef.to_string())
     let body = []
-    let framesize = calculate_framesize(fundef) 
+    let framesize = calculate_framesize(fundef)
     // + reg_callee_saved_list.length() * 8
     // println("framesize: " + framesize.to_string())
     // 函数序言
@@ -29,39 +29,35 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     // 保存帧指针
     body.push(Sd(Fp, { base: Sp, offset: framesize - 16 }))
 
-    // // 保存被调用者保存的寄存器
-    // for i, reg in reg_callee_saved_list {
-    //   body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
-    // }
+    // 保存被调用者保存的寄存器
+    for i, reg in reg_callee_saved_list {
+      body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
+    }
 
     // 更新帧指针
     body.push(Addi(Fp, Sp, framesize))
-
-    // 保存参数
     let env = {
+      // 保存参数
       vars: Map::new(),
-      current_offset: -16,
+      current_offset: -24,
       // current_offset: -24 - reg_callee_saved_list.length() * 8, // 从-24开始，留出ra和fp的空间
       fundefs: input.fundefs,
     }
     // 如果是闭包函数，先处理自由变量
     if fundef.is_closure {
       for i, arg in fundef.formal_free_vars {
-        
-        env.current_offset -= 8
-        let offset = env.current_offset
         // 从闭包对象(s11)中加载自由变量，偏移为8*i+8 (第一个8字节是函数指针)
         body.push(Ld(T0, { base: S11, offset: (i + 1) * 8 }))
         // 保存到栈上
+        let offset = env.current_offset
         body.push(Sd(T0, { base: Fp, offset }))
         env.vars.set(arg.0.to_string(), (offset, arg.1))
+        env.current_offset -= 8
       }
     }
     // 处理普通参数
     for i, arg in fundef.args {
       if i < reg_arg_list.length() {
-        
-        env.current_offset -= 8
         let offset = env.current_offset
         match arg.1 {
           Double =>
@@ -72,10 +68,9 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
             body.push(Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
         }
         env.vars.set(arg.0.to_string(), (offset, arg.1))
+        env.current_offset -= 8
       } else {
-        // 如果参数超过8个，则需要从栈上读取 
-        
-        env.current_offset -= 8       
+        // 如果参数超过8个，则需要从栈上读取
         let offset = env.current_offset
         let stack_offset = -(i - reg_arg_list.length() + 1) * 8
         match arg.1 {
@@ -91,6 +86,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
           }
         }
         env.vars.set(arg.0.to_string(), (offset, arg.1))
+        env.current_offset -= 8
       }
     }
 
@@ -98,10 +94,10 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     body.append(compile_expr(fundef.body, env))
     body.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
     body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
-    // // 恢复被调用者保存的寄存器
-    // for i, reg in reg_callee_saved_list {
-    //   body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
-    // }
+    // 恢复被调用者保存的寄存器
+    for i, reg in reg_callee_saved_list {
+      body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
+    }
     body.push(Addi(Sp, Sp, framesize))
     body.push(Ret)
     functions.push({ name: fundef.name._, export: false, body })
@@ -135,39 +131,6 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   functions
 }
 
-fn getTypeSize(ty : @closure.LowType) -> Int {
-  match ty {
-    Int => 8 // 整数类型占用8字节
-    Double => 8 // 双精度浮点数占用8字节
-    Bool => 1 // 布尔类型占用1字节
-    ClosureFn(args, ret) => {
-      let mut size = 0
-      for arg in args {
-        size += getTypeSize(arg)
-      }
-      size + getTypeSize(ret)
-    }
-    DirectFn(args, ret) => {
-      let mut size = 0
-      for arg in args {
-        size += getTypeSize(arg)
-      }
-      size + getTypeSize(ret)
-    }
-    Tuple(arr_t) => {
-      // 假设元组的大小是其元素大小的总和
-      let mut tuple_size = 0
-      for elem_type in arr_t {
-        tuple_size += getTypeSize(elem_type)
-      }
-      tuple_size
-    }
-    Array(_) => 8
-    Ptr => 8
-    Unit => 0 // 其他类型不占用空间
-  }
-}
-
 fn calculate_framesize(fundef : @closure.FuncDef) -> Int {
   // 基础大小：返回地址 + 帧指针 + 调用者保存寄存器 + 参数 + 局部变量
   let base_size = 24 // Ra + Fp
@@ -179,43 +142,20 @@ fn calculate_framesize(fundef : @closure.FuncDef) -> Int {
 
 fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
   match expr {
-    Unit => 0
-    Int(_) => 0
-    Double(_) => 0
-    Neg(_) => 0
-    Add(_, _) => 0
-    Sub(_, _) => 0
-    Mul(_, _) => 0
-    Div(_, _) => 0
-    FNeg(_) => 0
-    FAdd(_, _) => 0
-    FSub(_, _) => 0
-    FMul(_, _) => 0
-    FDiv(_, _) => 0
     IfEq(_, _, e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      // println("IfEq size1: " + size1.to_string())
-      // println("IfEq size2: " + size2.to_string())
       @math.maximum(size1, size2)
     }
     IfLe(_, _, e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      // println("IfLe size1: " + size1.to_string())
-      // println("IfLe size2: " + size2.to_string())
       @math.maximum(size1, size2)
     }
-    Let((_name, ty), e1, e2) => {
+    Let((_name, _), e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      let ty_size = getTypeSize(ty)
-      // println("let: " + _name.to_string())
-      // println("let ty: " + ty.to_string())
-      // println("let size1: " + size1.to_string())
-      // println("let size2: " + size2.to_string())
-      // println("let ty_size: " + ty_size.to_string())
-      @math.maximum(size1, size2) + ty_size
+      @math.maximum(size1, size2) + 8
     }
     Var(_) => 0
     MakeClosure((_name, _ty), _, e) => {
@@ -241,19 +181,12 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
       // println("CallDirect args: " + (args.length() * 8).to_string())
       @math.maximum(48, args.length() * 8) // 同样遵循48字节最小值
     MakeTuple(elems) => elems.length() * 8 // 每个元素8字节
-    LetTuple(names_tys, _, e) => {
-      let mut size = 0
-      for name_ty in names_tys {
-        size += getTypeSize(name_ty.1)
-      }
-      // println("LetTuple: " + names_tys.to_string())
-      // println("LetTuple size: " + size.to_string())
-      // println("LetTuple e: " + calculate_framesize_expr(e).to_string())
-      size + calculate_framesize_expr(e)
-    }
+    LetTuple(names_tys, _, e) =>
+      names_tys.length() * 8 + calculate_framesize_expr(e)
     ArrayGet(_, _) => 16
     ArrayPut(_, _, _) => 16
     ExternalArray(_) => 8
+    _ => 0
   }
 }
 
@@ -278,119 +211,58 @@ pub fn AssemblyFunction::output(
   }
 }
 
+// 添加一个环境结构来跟踪变量位置
+struct Env {
+  vars : Map[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
+  mut current_offset : Int // 当前可用的栈偏移
+  fundefs : Array[@closure.FuncDef] // 函数定义
+}
+
+fn Env::varOffset(env : Env, name : @typing.Name) -> Int {
+  env.vars.get(name.to_string()).unwrap().0
+}
+
 fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
-  // println("compile_expr: " + expr.to_string())
-  // println("env: " + env.vars.to_string())
-  // println("env.current_offset: " + env.current_offset.to_string())
-  let instrs = []
+  let instrs = [Comment(expr.to_string())]
   match expr {
     Unit => instrs.clear()
     Int(i) => instrs.push(Li(reg_ret, i.to_string()))
     Double(d) => {
-      // println("Double: " + d.to_string())
       let bits = d.reinterpret_as_i64()
-      // println("bits: " + bits.to_string())
       instrs.push(Li(T0, bits.to_string()))
       instrs.push(FmvDX(freg_ret, T0))
     }
     Neg(x) => {
-      instrs.push(
-        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
+      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, x) }))
       instrs.push(Neg(reg_ret, T0))
     }
-    Add(x, y) => {
-      // println("Add: " + x.to_string() + " " + y.to_string())
-      // println("env x: " + env.vars.get(x.to_string()).to_string())
-      // println("env y: " + env.vars.get(y.to_string()).to_string())
-      instrs.push(
-        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
-      instrs.push(
-        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
-      )
-      instrs.push(Add(reg_ret, T0, T1))
-    }
-    Sub(x, y) => {
-      instrs.push(
-        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
-      instrs.push(
-        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
-      )
-      instrs.push(Sub(reg_ret, T0, T1))
-    }
-    Mul(x, y) => {
-      instrs.push(
-        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
-      instrs.push(
-        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
-      )
-      instrs.push(Mul(reg_ret, T0, T1))
-    }
-    Div(x, y) => {
-      instrs.push(
-        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
-      instrs.push(
-        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
-      )
-      instrs.push(Div(reg_ret, T0, T1))
+    Add(x, y) | Sub(x, y) | Mul(x, y) | Div(x, y) => {
+      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, x) }))
+      instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, y) }))
+      match expr {
+        Add(_) => instrs.push(Add(reg_ret, T0, T1))
+        Sub(_) => instrs.push(Sub(reg_ret, T0, T1))
+        Mul(_) => instrs.push(Mul(reg_ret, T0, T1))
+        Div(_) | _ => instrs.push(Div(reg_ret, T0, T1))
+      }
     }
     FNeg(x) => {
-      instrs.push(
-        Fld(Ft0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
+      instrs.push(Fld(Ft0, { base: Fp, offset: varOffset(env, x) }))
       instrs.push(FnegD(freg_ret, Ft0))
     }
-    FAdd(x, y) => {
-      // println("FAdd: " + x.to_string() + " " + y.to_string())
-      instrs.push(
-        Fld(Ft0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
-      instrs.push(
-        Fld(Ft1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
-      )
-      instrs.push(FaddD(freg_ret, Ft0, Ft1))
-    }
-    FSub(x, y) => {
-      instrs.push(
-        Fld(Ft0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
-      instrs.push(
-        Fld(Ft1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
-      )
-      instrs.push(FsubD(freg_ret, Ft0, Ft1))
-    }
-    FMul(x, y) => {
-      // println("FMul: " + x.to_string() + " " + y.to_string())
-      instrs.push(
-        Fld(Ft0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
-      instrs.push(
-        Fld(Ft1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
-      )
-      instrs.push(FmulD(freg_ret, Ft0, Ft1))
-    }
-    FDiv(x, y) => {
-      instrs.push(
-        Fld(Ft0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
-      instrs.push(
-        Fld(Ft1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
-      )
-      instrs.push(FdivD(freg_ret, Ft0, Ft1))
+    FAdd(x, y) | FSub(x, y) | FMul(x, y) | FDiv(x, y) => {
+      instrs.push(Fld(Ft0, { base: Fp, offset: varOffset(env, x) }))
+      instrs.push(Fld(Ft1, { base: Fp, offset: varOffset(env, y) }))
+      match expr {
+        FAdd(_) => instrs.push(FaddD(freg_ret, Ft0, Ft1))
+        FSub(_) => instrs.push(FsubD(freg_ret, Ft0, Ft1))
+        FMul(_) => instrs.push(FmulD(freg_ret, Ft0, Ft1))
+        FDiv(_) | _ => instrs.push(FdivD(freg_ret, Ft0, Ft1))
+      }
     }
     IfEq(x, y, e1, e2) => {
-      // println("IfEq: " + x.to_string() + " " + y.to_string())
-      // println("IfEq: e1: " + e1.to_string() + " e2: " + e2.to_string())
-      instrs.push(
-        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
-      instrs.push(
-        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
-      )
+      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, x) }))
+      instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, y) }))
       // 相等比较分支
       let label_else = gen_label("else")
       let label_end = gen_label("end")
@@ -402,14 +274,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Label(label_end._))
     }
     IfLe(x, y, e1, e2) => {
-      // println("IfLe: " + x.to_string() + " " + y.to_string() + " " + e1.to_string() + " " + e2.to_string())
-      // println("env: " + env.vars.to_string())
-      instrs.push(
-        Ld(T0, { base: Fp, offset: env.vars.get(x.to_string()).unwrap().0 }),
-      )
-      instrs.push(
-        Ld(T1, { base: Fp, offset: env.vars.get(y.to_string()).unwrap().0 }),
-      )
+      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, x) }))
+      instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, y) }))
       // println("A0: " + A0.to_string() + " A1: " + A1.to_string())
       // 小于等于比较分支
       let label_else = gen_label("else")
@@ -425,19 +291,17 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 计算 e1
       instrs.append(compile_expr(e1, env))
       if not(name.to_string() == "_" && ty == Unit) {
-        let size = getTypeSize(ty) // TODO: 计算需要优化
-        let offset = env.current_offset - size
+        // let size = getTypeSize(ty) // TODO: 计算需要优化
+        let offset = env.current_offset
         match ty {
           Double => instrs.push(Fsd(freg_ret, { base: Fp, offset }))
           DirectFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
           ClosureFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
           _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
         }
-        // println("name: " + name.to_string())
-        // println("offset: " + offset.to_string())
         env.vars.set(name.to_string(), (offset, ty))
         // 更新环境
-        env.current_offset = offset
+        env.current_offset -= 8
       }
 
       // 计算 e2,使用更新后的环境
@@ -465,18 +329,17 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 2. 调用 malloc 分配内存
       instrs.push(Li(A0, size.to_string()))
       instrs.push(Call(Label("minimbt_malloc")))
-      instrs.push(Mv(T0, A0)) // 保存闭包指针到 t0
 
       // 3. 存储函数指针
-      instrs.push(La(T1, closure.name._))
-      instrs.push(Sd(T1, { base: T0, offset: 0 }))
+      instrs.push(La(T0, closure.name._))
+      instrs.push(Sd(T0, { base: reg_ret, offset: 0 }))
 
       // 4. 存储捕获的变量
       for i, var in closure.actual_free_vars {
         match env.vars.get(var.to_string()) {
           Some((offset, _)) => {
-            instrs.push(Ld(T1, { base: Fp, offset }))
-            instrs.push(Sd(T1, { base: T0, offset: (i + 1) * 8 }))
+            instrs.push(Ld(T0, { base: Fp, offset }))
+            instrs.push(Sd(T0, { base: reg_ret, offset: (i + 1) * 8 }))
           }
           None =>
             println(
@@ -486,31 +349,18 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         }
       }
 
-      // 5. 将闭包指针移到返回寄存器
-      instrs.push(Mv(reg_ret, T0))
-      env.current_offset -= 8
+      // 5. 将闭包指针保存到栈
       let offset = env.current_offset
       instrs.push(Sd(reg_ret, { base: Fp, offset }))
 
       // 6. 更新环境
       env.vars.set(name.to_string(), (offset, _ty))
+      env.current_offset -= 8
 
       // 7. 编译剩余表达式，使用新环境
       instrs.append(compile_expr(e, env))
     }
     CallClosure(f, args) => {
-      // let args_to_save = @math.minimum(args.length() + 1, reg_arg_list.length()) // +1 for closure object
-      // // 保存当前参数寄存器到栈上
-      // let save_area_offset = env.current_offset 
-      // // 保存将被使用的参数寄存器
-      // for i = 0; i < args_to_save; i = i + 1 {
-      //   println(env.current_offset)
-      //   instrs.push(
-      //     Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset: env.current_offset }),
-      //   )
-      //   env.current_offset -= 8
-      // }
-
       for i, arg in args {
         let arg_type = get_var_type(arg, env)
         match env.vars.get(arg.to_string()) {
@@ -541,9 +391,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               }
             }
           None =>
-            println(
-              "Warning: Argument not found in environment: " + arg.to_string(),
-            )
+            println("Warning: Arg not found in environment: " + arg.to_string())
         }
       }
       match env.vars.get(f.to_string()) {
@@ -563,10 +411,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                 // println("CallClosure: " + f.to_string() + " is closure")
 
                 // 保存当前闭包指针到栈上
-                
-                env.current_offset -= 8
                 let closure_save_offset = env.current_offset
                 instrs.push(Sd(S11, { base: Fp, offset: closure_save_offset }))
+                env.current_offset -= 8
                 instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
                 instrs.push(Jalr(T1)) // 调用闭包函数
                 instrs.push(Ld(S11, { base: Fp, offset: closure_save_offset }))
@@ -578,30 +425,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               println("Warning: CallClosure: " + f.to_string() + " not found")
           }
       }
-      // println("")
-      // // 恢复参数寄存器 - 使用保存时的偏移量
-      // let restore_offset = save_area_offset
-      // for i = 0; i < args_to_save; i = i + 1 {
-      //   println((restore_offset - (i * 8)))
-      //   instrs.push(
-      //     Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset: restore_offset - (i * 8) }),
-      //   )
-      // }
-      // println("")
     }
     CallDirect(label, args) => {
-
-      // let args_to_save = @math.minimum(args.length() + 1, reg_arg_list.length()) // +1 for closure object
-      // // 保存当前参数寄存器到栈上
-      // let save_area_offset = env.current_offset 
-      // // 保存将被使用的参数寄存器
-      // for i = 0; i < args_to_save; i = i + 1 {
-      //   instrs.push(
-      //     Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset: env.current_offset }),
-      //   )
-      //   env.current_offset -= 8
-      // }
-
       for i, arg in args {
         if i < reg_arg_list.length() {
           match env.vars.get(arg.to_string()) {
@@ -674,9 +499,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         }
       }
       match env.fundefs.search_by(fn(fundef) { fundef.name._ == label._ }) {
-        Some(_) =>
-          // println("CallDirect: " + label._)
-          instrs.push(Call(Label(label._)))
+        Some(_) => instrs.push(Call(Label(label._)))
         None =>
           match env.vars.get(label._) {
             Some((offset, _)) => {
@@ -691,10 +514,12 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 恢复参数寄存器 - 使用保存时的偏移量
       // let restore_offset = save_area_offset
       // for i = 0; i < args_to_save; i = i + 1 {
+      //   // println(restore_offset - (i * 8))
       //   instrs.push(
       //     Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset: restore_offset - (i * 8) }),
       //   )
       // }
+      // println("\n")
     }
     MakeTuple(elems) => {
       // 1. 分配元组空间
@@ -706,12 +531,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 2. 存储元素
       for i, elem in elems {
         // 加载元素值（使用Ld而不是Lw）
-        instrs.push(
-          Ld(
-            T1,
-            { base: Fp, offset: env.vars.get(elem.to_string()).unwrap().0 },
-          ),
-        )
+        instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, elem) }))
         // 存储到元组中
         instrs.push(Sd(T1, { base: T0, offset: i * 8 }))
       }
@@ -722,9 +542,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     LetTuple(names, tuple, e) => {
       // 元组解构
       // 从元组加载各个字段
-      instrs.push(
-        Ld(T0, { base: Fp, offset: env.vars.get(tuple.to_string()).unwrap().0 }),
-      )
+      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, tuple) }))
       for i, name_ty in names {
         instrs.push(Ld(T1, { base: T0, offset: i * 8 }))
         instrs.push(Sd(T1, { base: Fp, offset: env.current_offset }))
@@ -735,14 +553,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     ArrayGet(array, index) => {
       // 1. 加载数组基地址
-      instrs.push(
-        Ld(T0, { base: Fp, offset: env.vars.get(array.to_string()).unwrap().0 }),
-      )
+      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, array) }))
 
       // 2. 加载索引值并根据类型计算偏移
-      instrs.push(
-        Ld(T1, { base: Fp, offset: env.vars.get(index.to_string()).unwrap().0 }),
-      )
+      instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, index) }))
       match get_array_element_type(array, env) {
         Double => instrs.push(Slli(T1, T1, 3)) // 浮点数: 8字节
         Int => instrs.push(Slli(T1, T1, 2)) // 整数: 4字节
@@ -766,12 +580,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     ArrayPut(array, index, value) => {
       // 1. 加载数组基地址
-      let array_offset = env.vars.get(array.to_string()).unwrap().0
-      instrs.push(Ld(T0, { base: Fp, offset: array_offset }))
+      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, array) }))
 
       // 2. 加载并计算索引偏移
-      let index_offset = env.vars.get(index.to_string()).unwrap().0
-      instrs.push(Ld(T1, { base: Fp, offset: index_offset }))
+      instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, index) }))
       instrs.push(Slli(T1, T1, 3))
 
       // 3. 安全地计算目标地址
@@ -857,11 +669,4 @@ let _default_counter : Ref[Int] = { val: 0 }
 fn gen_label(name : String, ~counter : Ref[Int] = _default_counter) -> Label {
   counter.val = counter.val + 1
   Label("label_" + name + "_" + counter.val.to_string())
-}
-
-// 添加一个环境结构来跟踪变量位置
-struct Env {
-  vars : Map[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
-  mut current_offset : Int // 当前可用的栈偏移
-  fundefs : Array[@closure.FuncDef] // 函数定义
 }

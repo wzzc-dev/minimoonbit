@@ -67,50 +67,22 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     IfLe(a, b, ka, kb) =>
       IfLe(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
     Let((x, ty), e, cont) => {
-      // 记录变量的类型信息
-      let (args, is_func, _) = match ty {
-        Fun(args, return_ty) => (args, true, return_ty)
-        _ => ([], false, Unit)
+      let is_func = match ty {
+        Fun(_) => true
+        _ => false
       }
-
-      // 如果是闭包类型，将变量添加到环境中
+      let mut is_closure = false
       if is_func {
-        let _args = args.map(
-          fn { ty => (gen_name(), ty_to_low_type(ty, false)) },
+        let fv = fv(e).difference(
+          @hashset.from_array(env.map(fn(def) { new_fv(def.old_name, Unit) })),
         )
-        let fv = fv(e).difference(@hashset.from_array(
-          env.map(fn(def) { new_fv(def.old_name, Unit) })
-        ))
-        let free_vars = fv_to_array(fv)
-        // println("free_vars: " + free_vars.to_string())
-        let is_closure = not(free_vars.is_empty())
-        // let def : FuncDef = {
-        //   name: x.to_string(),
-        //   old_name: x,
-        //   is_closure,
-        //   ty: ty_to_low_type(ty, is_closure),
-        //   args: [],
-        //   formal_free_vars: free_vars,
-        //   body: knf_to_closure(env, e),
-        // }
-        // env.push(def)
-        // let closure : Closure = {
-        //   name: x.to_string(),
-        //   actual_free_vars: free_vars.map(fn { fv => fv.0 }),
-        // }
-        // println("free_vars: " + free_vars.to_string())
-        Let(
-          (x, ty_to_low_type(ty, is_closure)),
-          knf_to_closure(env, e),
-          knf_to_closure(env, cont),
-        )
-      } else {
-        Let(
-          (x, ty_to_low_type(ty, false)),
-          knf_to_closure(env, e),
-          knf_to_closure(env, cont),
-        )
+        is_closure = not(fv_to_array(fv).is_empty())
       }
+      Let(
+        (x, ty_to_low_type(ty, is_closure)),
+        knf_to_closure(env, e),
+        knf_to_closure(env, cont),
+      )
     }
     LetRec({ name, ty, args, body }, cont) => {
       let mut return_ty : Type = Unit
@@ -118,16 +90,14 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         Fun(_, ty) => return_ty = ty
         _ => @util.die("LetRec: " + ty.to_string())
       }
-      let free_vars = fv(body).difference(@hashset.from_array(
-        env.map(fn(def) { new_fv(def.old_name, Unit) })
-      ))
+      let free_vars = fv(body).difference(
+        @hashset.from_array(env.map(fn(def) { new_fv(def.old_name, Unit) })),
+      )
       for arg in args {
         free_vars.remove(new_fv(arg.0, Unit))
       }
       free_vars.remove(new_fv(name, Unit))
       let is_closure = not(free_vars.is_empty())
-      
-      // 创建函数定义的通用部分
       let make_def = fn(body : Expr) -> FuncDef {
         {
           name: name.to_string(),
@@ -139,30 +109,22 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
           body,
         }
       }
-      
-      // 先将函数定义添加到环境中，这样在处理函数体时可以引用到该函数
       env.push(make_def(Unit))
-      
+
       // 处理函数体
       let def = make_def(knf_to_closure(env, body))
       let index = env.search_by(fn(def) { def.old_name == name }).unwrap()
       let _ = env.remove(index)
       env.push(def)
-      
-      // 处理后续代码
-      // if is_closure {
-        let closure : Closure = {
-          name: name.to_string(),
-          actual_free_vars: fv_to_array(free_vars).map(fn { fv => fv.0 }),
-        }
-        MakeClosure(
-          (name, ty_to_low_type(ty, is_closure)),
-          closure,
-          knf_to_closure(env, cont),
-        )
-      // } else {
-      //   knf_to_closure(env, cont)
-      // }
+      let closure : Closure = {
+        name: name.to_string(),
+        actual_free_vars: fv_to_array(free_vars).map(fn { fv => fv.0 }),
+      }
+      MakeClosure(
+        (name, ty_to_low_type(ty, is_closure)),
+        closure,
+        knf_to_closure(env, cont),
+      )
     }
     Apply(name, arr_name) => {
       // 参数是函数类型
@@ -197,23 +159,13 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       match env.search_by(fn(def) { def.old_name == n }) {
         Some(index) => {
           let def = env.get(index).unwrap()
-          // match def.is_closure {
-          //   true => {
-              // 如果变量引用的是一个闭包函数，需要创建闭包对象
-              let closure : Closure = {
-                name: def.name,
-                actual_free_vars: def.formal_free_vars.map(fn { fv => fv.0 }),
-              }
-              MakeClosure(
-                (def.old_name, def.ty),
-                closure,
-                Var(n)
-              )
-            // }
-            // false => Var(n) // 如果不是闭包，调用 CallDirect
-          // }
+          let closure : Closure = {
+            name: def.name,
+            actual_free_vars: def.formal_free_vars.map(fn { fv => fv.0 }),
+          }
+          MakeClosure((def.old_name, def.ty), closure, Var(n))
         }
-        None => Var(n)  // 如果在环境中找不到，直接返回变量引用
+        None => Var(n) // 如果在环境中找不到，直接返回变量引用
       }
     Tuple(arr_name) => MakeTuple(arr_name)
     LetTuple(arr_name_ty, name, cont) => {
@@ -227,10 +179,6 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     ExternalArray(name) => ExternalArray(name.name.to_string())
     ExternalFunctionApplication(name, arr_name) => CallDirect(name, arr_name)
   }
-}
-
-fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
-  fv_with_type(e)
 }
 
 fn fv_to_array(
@@ -248,7 +196,6 @@ fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
     Int => Int
     Double => Double
     Fun(arr_ty, ty) => {
-      // println("Fun: " + (arr_ty, ty).to_string())
       let arr_low_ty = arr_ty.map(fn { ty => ty_to_low_type(ty, is_closure) })
       match is_closure {
         true => ClosureFn(arr_low_ty, ty_to_low_type(ty, is_closure))
@@ -263,15 +210,6 @@ fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
   }
 }
 
-let _default_counter : Ref[Int] = { val: 0 }
-
-fn gen_name(~counter : Ref[Int] = _default_counter) -> Name {
-  counter.val = counter.val + 1
-  Name::from_string?("_" + counter.val.to_string() + "_closure").unwrap()
-  // Name::from_string?("x").unwrap()
-
-}
-
 pub struct FreeVarWithType {
   name : @types.Name
   ty : LowType
@@ -281,8 +219,6 @@ impl Hash for FreeVarWithType with hash_combine(_self, _state) {
   fn _hash_combine(self : FreeVarWithType, state : Hasher) -> Unit {
     self.name.hash_combine(state)
   }
-
-
 }
 
 impl Hash for FreeVarWithType with hash(self) {
@@ -306,7 +242,7 @@ fn new_fv(name : @types.Name, ty : LowType) -> FreeVarWithType {
   { name, ty }
 }
 
-fn fv_with_type(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
+fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
   match e {
     Unit => @hashset.new()
     Int(_) => @hashset.new()
@@ -323,25 +259,25 @@ fn fv_with_type(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
     FDiv(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
     IfEq(a, b, ka, kb) =>
       @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
-      .union(fv_with_type(ka))
-      .union(fv_with_type(kb))
+      .union(fv(ka))
+      .union(fv(kb))
     IfLe(a, b, ka, kb) =>
       @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
-      .union(fv_with_type(ka))
-      .union(fv_with_type(kb))
+      .union(fv(ka))
+      .union(fv(kb))
     Let((x, _), e, cont) => {
-      let r = fv_with_type(cont)
+      let r = fv(cont)
       r.remove(new_fv(x, Unit))
-      fv_with_type(e).union(r)
+      fv(e).union(r)
     }
     Var(x) => @hashset.of([new_fv(x, Unit)])
     // Var(_) => @hashset.new()
     LetRec({ name, ty: _, args, body }, cont) => {
-      let x = fv_with_type(body)
+      let x = fv(body)
       for i in args {
         x.remove(new_fv(i.0, Unit))
       }
-      let result = fv_with_type(cont).union(x)
+      let result = fv(cont).union(x)
       result.remove(new_fv(name, Unit))
       result
     }
@@ -352,7 +288,7 @@ fn fv_with_type(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
     Tuple(arr_name) =>
       @hashset.from_array(arr_name.map(fn { name => new_fv(name, Ptr) }))
     LetTuple(arr_name_ty, name, cont) => {
-      let result = fv_with_type(cont)
+      let result = fv(cont)
       for _, name_ty in arr_name_ty {
         result.remove(new_fv(name_ty.0, Ptr))
       }
