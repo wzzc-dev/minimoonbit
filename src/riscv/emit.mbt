@@ -150,8 +150,6 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
     IfLe(_, _, e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      // println("IfLe size1: " + size1.to_string())
-      // println("IfLe size2: " + size2.to_string())
       @math.maximum(size1, size2)
     }
     Let((_name, _), e1, e2) => {
@@ -225,14 +223,12 @@ fn Env::varOffset(env : Env, name : @typing.Name) -> Int {
 }
 
 fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
-  let instrs = []
+  let instrs = [Comment(expr.to_string())]
   match expr {
     Unit => instrs.clear()
     Int(i) => instrs.push(Li(reg_ret, i.to_string()))
     Double(d) => {
-      // println("Double: " + d.to_string())
       let bits = d.reinterpret_as_i64()
-      // println("bits: " + bits.to_string())
       instrs.push(Li(T0, bits.to_string()))
       instrs.push(FmvDX(freg_ret, T0))
     }
@@ -303,8 +299,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           ClosureFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
           _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
         }
-        // println("name: " + name.to_string())
-        // println("offset: " + offset.to_string())
         env.vars.set(name.to_string(), (offset, ty))
         // 更新环境
         env.current_offset -= 8
@@ -335,18 +329,17 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 2. 调用 malloc 分配内存
       instrs.push(Li(A0, size.to_string()))
       instrs.push(Call(Label("minimbt_malloc")))
-      instrs.push(Mv(T0, A0)) // 保存闭包指针到 t0
 
       // 3. 存储函数指针
-      instrs.push(La(T1, closure.name._))
-      instrs.push(Sd(T1, { base: T0, offset: 0 }))
+      instrs.push(La(T0, closure.name._))
+      instrs.push(Sd(T0, { base: reg_ret, offset: 0 }))
 
       // 4. 存储捕获的变量
       for i, var in closure.actual_free_vars {
         match env.vars.get(var.to_string()) {
           Some((offset, _)) => {
-            instrs.push(Ld(T1, { base: Fp, offset }))
-            instrs.push(Sd(T1, { base: T0, offset: (i + 1) * 8 }))
+            instrs.push(Ld(T0, { base: Fp, offset }))
+            instrs.push(Sd(T0, { base: reg_ret, offset: (i + 1) * 8 }))
           }
           None =>
             println(
@@ -356,8 +349,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         }
       }
 
-      // 5. 将闭包指针移到返回寄存器
-      instrs.push(Mv(reg_ret, T0))
+      // 5. 将闭包指针保存到栈
       let offset = env.current_offset
       instrs.push(Sd(reg_ret, { base: Fp, offset }))
 
@@ -369,17 +361,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.append(compile_expr(e, env))
     }
     CallClosure(f, args) => {
-      // let args_to_save = @math.minimum(args.length() + 1, reg_arg_list.length()) // +1 for closure object
-      // // 保存当前参数寄存器到栈上
-      // let save_area_offset = env.current_offset 
-      // // 保存将被使用的参数寄存器
-      // for i = 0; i < args_to_save; i = i + 1 {
-      //   println(env.current_offset)
-      //   instrs.push(
-      //     Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset: env.current_offset }),
-      //   )
-      //   env.current_offset -= 8
-      // }
 
       for i, arg in args {
         let arg_type = get_var_type(arg, env)
@@ -447,31 +428,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               println("Warning: CallClosure: " + f.to_string() + " not found")
           }
       }
-      // println("")
-      // // 恢复参数寄存器 - 使用保存时的偏移量
-      // let restore_offset = save_area_offset
-      // for i = 0; i < args_to_save; i = i + 1 {
-      //   println((restore_offset - (i * 8)))
-      //   instrs.push(
-      //     Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset: restore_offset - (i * 8) }),
-      //   )
-      // }
-      // println("")
+     
     }
     CallDirect(label, args) => {
 
-      // let args_to_save = @math.minimum(args.length() + 1, reg_arg_list.length()) // +1 for closure object
-      // // 保存当前参数寄存器到栈上
-      // let save_area_offset = env.current_offset 
-      // // 保存将被使用的参数寄存器
-      // for i = 0; i < args_to_save; i = i + 1 {
-      //   // println(env.current_offset)
-      //   instrs.push(
-      //     Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset: env.current_offset }),
-      //   )
-      //   env.current_offset -= 8
-      // }
-      // println("")
       for i, arg in args {
         if i < reg_arg_list.length() {
           match env.vars.get(arg.to_string()) {
@@ -544,9 +504,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         }
       }
       match env.fundefs.search_by(fn(fundef) { fundef.name._ == label._ }) {
-        Some(_) =>
-          // println("CallDirect: " + label._)
-          instrs.push(Call(Label(label._)))
+        Some(_) => instrs.push(Call(Label(label._)))
         None =>
           match env.vars.get(label._) {
             Some((offset, _)) => {
