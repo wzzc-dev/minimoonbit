@@ -29,10 +29,10 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     // 保存帧指针
     body.push(Sd(Fp, { base: Sp, offset: framesize - 16 }))
 
-    // // 保存被调用者保存的寄存器
-    // for i, reg in reg_callee_saved_list {
-    //   body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
-    // }
+    // 保存被调用者保存的寄存器
+    for i, reg in reg_callee_saved_list {
+      body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
+    }
 
     // 更新帧指针
     body.push(Addi(Fp, Sp, framesize))
@@ -94,10 +94,10 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     body.append(compile_expr(fundef.body, env))
     body.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
     body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
-    // // 恢复被调用者保存的寄存器
-    // for i, reg in reg_callee_saved_list {
-    //   body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
-    // }
+    // 恢复被调用者保存的寄存器
+    for i, reg in reg_callee_saved_list {
+      body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
+    }
     body.push(Addi(Sp, Sp, framesize))
     body.push(Ret)
     functions.push({ name: fundef.name._, export: false, body })
@@ -361,7 +361,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.append(compile_expr(e, env))
     }
     CallClosure(f, args) => {
-
       for i, arg in args {
         let arg_type = get_var_type(arg, env)
         match env.vars.get(arg.to_string()) {
@@ -392,9 +391,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               }
             }
           None =>
-            println(
-              "Warning: Argument not found in environment: " + arg.to_string(),
-            )
+            println("Warning: Arg not found in environment: " + arg.to_string())
         }
       }
       match env.vars.get(f.to_string()) {
@@ -428,10 +425,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               println("Warning: CallClosure: " + f.to_string() + " not found")
           }
       }
-     
     }
     CallDirect(label, args) => {
-
       for i, arg in args {
         if i < reg_arg_list.length() {
           match env.vars.get(arg.to_string()) {
