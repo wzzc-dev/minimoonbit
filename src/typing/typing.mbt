@@ -255,7 +255,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
         Var({ val: None }) => {
           let t = infer!(ctx, value)
           unify!(ty, t)
-          let newctx = ctx._.insert(name, t)
+          let newctx = ctx._.add(name, t)
           infer!(newctx, s1)
         }
         _ => {
@@ -264,7 +264,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
           // println("TY: " + ty.repr().to_string());
           // println("after")
           if t == ty.repr() {
-            let newctx = ctx._.insert(name, t)
+            let newctx = ctx._.add(name, t)
             infer!(newctx, s1)
           } else {
             raise TyErr(
@@ -282,11 +282,11 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
         }
       }
     LetRec({ name: (f, t), args: params, body }, rest) => {
-      let env_with_f = ctx._.insert(f, t)
+      let env_with_f = ctx._.add(f, t)
       let params_ty = params.map(fn { (_, t) => t.repr() })
       let mut env_with_params = env_with_f
       for p in params {
-        env_with_params = env_with_params.insert(p.0, p.1)
+        env_with_params = env_with_params.add(p.0, p.1)
       }
       let body_ty = infer!(env_with_params, body)
       unify!(t, Fun(params_ty, body_ty))
@@ -301,7 +301,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
               for i, value in arr {
                 let t = infer!(ctx, arr_tup[i])
                 unify!(value.1, t)
-                newctx = ctx._.insert(value.0, t)
+                newctx = ctx._.add(value.0, t)
               }
               infer!(newctx, s2)
             }
@@ -333,7 +333,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
               for i, value in arr {
                 let t = infer!(ctx, arr_tup[i])
                 if value.1 == t {
-                  newctx = ctx._.insert(value.0, t)
+                  newctx = ctx._.add(value.0, t)
                 } else {
                   raise TyErr("The types of tuple and array are different")
                 }
@@ -483,7 +483,7 @@ pub fn get_type(
   e : @types.Syntax
 ) -> @types.Type!TyErr {
   let mut sort_map : LocalCtx = @immut/sorted_map.empty()
-  m.each(fn { k, v => sort_map = sort_map._.insert(k, v) })
+  m.each(fn { k, v => sort_map = sort_map._.add(k, v) })
   infer!(sort_map, e)
 }
 

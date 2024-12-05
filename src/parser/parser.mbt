@@ -1415,8 +1415,8 @@ fn zeroOrOnce[V1, V2](
 }
 
 ///|
-fn Parser::ref[Value](ref : Ref[Parser[Value]]) -> Parser[Value] {
-  fn(input) { ref.val.parse(input) }
+fn Parser::refval[Value](refval : Ref[Parser[Value]]) -> Parser[Value] {
+  fn(input) { refval.val.parse(input) }
 }
 
 ///|
