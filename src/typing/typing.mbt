@@ -1,5 +1,7 @@
-pub type! TyErr String derive(ToJson)
+///|
+pub(all) type! TyErr String derive(ToJson)
 
+///|
 fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
   // println("unify:" + t1.to_string() + " t2: " + t2.to_string())
   let t1 = t1.repr()
@@ -47,6 +49,7 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
   }
 }
 
+///|
 fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
   // println("check_occur:" + t1.to_string() + " t2: " + t2.to_string())
   match (t1, t2) {
@@ -97,8 +100,10 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
   }
 }
 
+///|
 type LocalCtx @immut/sorted_map.T[String, @types.Type]
 
+///|
 pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
   // println("infer: " + e.to_string())
   match e {
@@ -378,6 +383,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type!TyErr {
   }
 }
 
+///|
 fn deref_type(t : @types.Type) -> @types.Type {
   match t {
     Fun(params, result) =>
@@ -400,6 +406,7 @@ fn deref_type(t : @types.Type) -> @types.Type {
   }
 }
 
+///|
 fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
   match syntax {
     Unit => Unit
@@ -410,11 +417,11 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
     Tuple(tys) => Tuple(tys.map(fn { t => deref_term(t) }))
     Not(e) => Not(deref_term(e))
     Array(e1, e2) => Array(deref_term(e1), deref_term(e2))
-    Neg(e1, ~kind) => Neg(deref_term(e1), ~kind)
+    Neg(e1, kind~) => Neg(deref_term(e1), kind~)
     App(f, args) => App(deref_term(f), args.map(fn { t => deref_term(t) }))
     Get(e1, e2) => Get(deref_term(e1), deref_term(e2))
     If(e1, e2, e3) => If(deref_term(e1), deref_term(e2), deref_term(e3))
-    Prim(e1, e2, op, ~kind) => Prim(deref_term(e1), deref_term(e2), op, ~kind)
+    Prim(e1, e2, op, kind~) => Prim(deref_term(e1), deref_term(e2), op, kind~)
     Eq(e1, e2) => Eq(deref_term(e1), deref_term(e2))
     LE(e1, e2) => LE(deref_term(e1), deref_term(e2))
     Let((name, t), value, other) =>
@@ -439,6 +446,7 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
   }
 }
 
+///|
 pub let extenv : Map[String, @types.Type] = {
   "read_int": Fun([], Unit),
   "print_int": Fun([Int], Unit),
@@ -457,6 +465,7 @@ pub let extenv : Map[String, @types.Type] = {
   "atan": Fun([Double], Double),
 }
 
+///|
 pub fn typing(e : @types.Syntax) -> @types.Syntax!TyErr {
   unify!(Unit, infer!(@immut/sorted_map.empty(), e))
   // println("type check ok")
@@ -468,6 +477,7 @@ pub fn typing(e : @types.Syntax) -> @types.Syntax!TyErr {
   deref_term(e)
 }
 
+///|
 pub fn get_type(
   m : @immut/hashmap.T[String, @types.Type],
   e : @types.Syntax

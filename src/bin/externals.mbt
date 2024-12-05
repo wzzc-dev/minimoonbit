@@ -1,3 +1,4 @@
+///|
 fn add_interpreter_fns(interpreter : @knf_eval.KnfInterpreter) -> Unit {
   interpreter.add_extern_fn(
     "minimbt_print_int",
@@ -90,6 +91,7 @@ fn add_interpreter_fns(interpreter : @knf_eval.KnfInterpreter) -> Unit {
   )
 }
 
+///|
 fn add_closure_interpreter_fns(
   interpreter : @closure_eval.ClosureInterpreter
 ) -> Unit {
@@ -98,7 +100,11 @@ fn add_closure_interpreter_fns(
     fn(args) {
       match args[0] {
         Int(i) => @io.print(i)
-        _ => @util.die("\n -------------------- \n print_int expects Int: " + args.to_string())
+        _ =>
+          @util.die(
+            "\n -------------------- \n print_int expects Int: " +
+            args.to_string(),
+          )
       }
       Unit
     },
@@ -184,6 +190,7 @@ fn add_closure_interpreter_fns(
   )
 }
 
+///|
 fn externals() -> @immut/hashmap.T[String, @types.Type] {
   @immut/hashmap.T::new()
   .add("read_int", @types.Fun([], Int))

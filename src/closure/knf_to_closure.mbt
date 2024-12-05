@@ -1,5 +1,7 @@
+///|
 pub typealias LocalEnv = @immut/hashmap.T[Name, LowType]
 
+///|
 pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type]
@@ -46,6 +48,7 @@ pub fn knf_program_to_closure(
   { fundefs, body }
 }
 
+///|
 fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
   // println("knf_to_closure: " + e.to_string())
   match e {
@@ -85,11 +88,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       )
     }
     LetRec({ name, ty, args, body }, cont) => {
-      let mut return_ty : Type = Unit
-      match ty {
-        Fun(_, ty) => return_ty = ty
-        _ => @util.die("LetRec: " + ty.to_string())
-      }
+
       let free_vars = fv(body).difference(
         @hashset.from_array(env.map(fn(def) { new_fv(def.old_name, Unit) })),
       )
@@ -181,6 +180,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
   }
 }
 
+///|
 fn fv_to_array(
   fv : @hashset.T[FreeVarWithType]
 ) -> Array[(@types.Name, LowType)] {
@@ -189,6 +189,7 @@ fn fv_to_array(
   res
 }
 
+///|
 fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
   match ty {
     Unit => Unit
@@ -210,27 +211,34 @@ fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
   }
 }
 
-pub struct FreeVarWithType {
+///|
+pub(all) struct FreeVarWithType {
   name : @types.Name
   ty : LowType
 } derive(Show)
 
+///|
 impl Hash for FreeVarWithType with hash_combine(_self, _state) {
   fn _hash_combine(self : FreeVarWithType, state : Hasher) -> Unit {
     self.name.hash_combine(state)
   }
+
+
 }
 
+///|
 impl Hash for FreeVarWithType with hash(self) {
   let hasher = Hasher::new()
   hasher.combine(self.name)
   hasher.finalize()
 }
 
+///|
 impl Compare for FreeVarWithType with compare(self, other) {
   self.name.compare(other.name)
 }
 
+///|
 impl Eq for FreeVarWithType with op_equal(
   self : FreeVarWithType,
   other : FreeVarWithType
@@ -238,10 +246,12 @@ impl Eq for FreeVarWithType with op_equal(
   self.name == other.name
 }
 
+///|
 fn new_fv(name : @types.Name, ty : LowType) -> FreeVarWithType {
   { name, ty }
 }
 
+///|
 fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
   match e {
     Unit => @hashset.new()

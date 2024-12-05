@@ -1,3 +1,4 @@
+///|
 pub fn emit(input : @closure.Program) -> String {
   // for fundef in input.fundefs {
   //   if extenv.contains(fundef.name._) {
@@ -18,7 +19,7 @@ pub fn emit(input : @closure.Program) -> String {
       output += "function \{name._.to_string()}(env, "
 
       // 添加函数参数
-      output += func.args.map(fn(arg) { arg.0.to_string() }).join(", ")
+      output += String::concat(func.args.map(fn(arg) { arg.0.to_string() }), separator=", ")
       output += ") {\n"
       // 从环境变量中获取闭包
       for i, fv in func.formal_free_vars {
@@ -30,7 +31,7 @@ pub fn emit(input : @closure.Program) -> String {
       output += "\n}\n\n"
     } else {
       output += "function \{name._.to_string()}("
-      output += func.args.map(fn(arg) { arg.0.to_string() }).join(", ")
+      output += String::concat(func.args.map(fn(arg) { arg.0.to_string() }), separator=",")
       output += ") {\n"
       output += "  return "
       output += emit_expr(func.body)
@@ -46,6 +47,7 @@ pub fn emit(input : @closure.Program) -> String {
   output
 }
 
+///|
 fn emit_expr(expr : @closure.Expr) -> String {
   match expr {
     Int(n) => n.to_string()
@@ -62,13 +64,25 @@ fn emit_expr(expr : @closure.Expr) -> String {
     FMul(e1, e2) => e1.to_string() + " * " + e2.to_string()
     FDiv(e1, e2) => e1.to_string() + " / " + e2.to_string()
     IfEq(e1, e2, e3, e4) =>
-      "if (" + e1.to_string() + " === " + e2.to_string() + ") {\n  " +
-      emit_expr(e3) + "\n} else {\n  " +
-      emit_expr(e4) + "\n}"
+      "if (" +
+      e1.to_string() +
+      " === " +
+      e2.to_string() +
+      ") {\n  " +
+      emit_expr(e3) +
+      "\n} else {\n  " +
+      emit_expr(e4) +
+      "\n}"
     IfLe(e1, e2, e3, e4) =>
-      "if (" + e1.to_string() + " <= " + e2.to_string() + ") {\n  " +
-      emit_expr(e3) + "\n} else {\n  " +
-      emit_expr(e4) + "\n}"
+      "if (" +
+      e1.to_string() +
+      " <= " +
+      e2.to_string() +
+      ") {\n  " +
+      emit_expr(e3) +
+      "\n} else {\n  " +
+      emit_expr(e4) +
+      "\n}"
     Let((name, _), e1, e2) => // 先生成绑定，然后继续处理剩余表达式
       "(() => {\n  " +
       "const \{name} = " +
@@ -83,7 +97,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
         emit_expr(e)
       } else {
         // 生成 bind 调用来创建闭包
-        let free_vars = env.actual_free_vars.map(fn(v) { v }).join(", ")
+        let free_vars = String::concat(env.actual_free_vars.map(fn(v) { v.name.to_string() }), separator=",")
         "  \{func.to_string()}.bind(null, [\{free_vars}])"
       }
     CallClosure(func, args) => {
@@ -112,7 +126,9 @@ fn emit_expr(expr : @closure.Expr) -> String {
     MakeTuple(es) => {
       let mut result = "["
       for i, e in es {
-        if i > 0 { result += ", " }
+        if i > 0 {
+          result += ", "
+        }
         result += e.to_string()
       }
       result += "]"
@@ -120,41 +136,24 @@ fn emit_expr(expr : @closure.Expr) -> String {
     }
     LetTuple(names_tys, e1, e2) =>
       "(() => {\n  " +
-      "const " + names_tys.map(
-        fn(name) { name.0.to_string() }
-      ).join(",") + " = " +
-      e1.to_string() + ";\n  " +
-      "return " + emit_expr(e2) + ";\n" +
+      "const " +
+      String::concat(names_tys.map(fn(name) { name.0.to_string() }),separator=",") +
+      " = " +
+      e1.to_string() +
+      ";\n  " +
+      "return " +
+      emit_expr(e2) +
+      ";\n" +
       "})()"
     ArrayGet(e1, e2) => e1.to_string() + "[" + e2.to_string() + "]"
-    ArrayPut(e1, e2, e3) => e1.to_string() + "[" + e2.to_string() + "] = " + e3.to_string()
+    ArrayPut(e1, e2, e3) =>
+      e1.to_string() + "[" + e2.to_string() + "] = " + e3.to_string()
     ExternalArray(e) => e.to_string()
     Unit => "undefined"
-
   }
 }
 
-pub struct AssemblyFunction {
-  name : String
-  export : Bool
-  body : Array[RvAsm]
-}
-
-pub fn AssemblyFunction::output(
-  self : AssemblyFunction,
-  logger : Logger
-) -> Unit {
-  let name = self.name
-  if self.export {
-    logger.write_string(".global \{name}\n")
-  }
-  logger.write_string("\{name}:\n")
-  for asm in self.body {
-    Show::output(asm, logger)
-    logger.write_string("\n")
-  }
-}
-
+///|
 pub let extenv = [
   "read_int", "print_int", "read_char", "print_char", "print_newline", "print_endline",
   "int_of_float", "float_of_int", "truncate", "floor", "abs_float", "sqrt", "sin",

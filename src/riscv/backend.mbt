@@ -12,7 +12,6 @@
 
 // typealias Value = (LowType, MemAccess[Reg, Int])
 
-
 // // ------------------- enviroment start -------------------
 // struct Env {
 //   env : @immut/hashmap.T[String, Value]
@@ -41,9 +40,9 @@
 // }
 // // ------------------- enviroment end -------------------
 
-
 // // ------------------- instruction selection -------------------
-pub struct Emitter {
+///|
+pub(all) struct Emitter {
   mut stack_sapce : Int
   mut label_counter : Int
   mut func_name : String
@@ -63,6 +62,7 @@ pub struct Emitter {
 //   MemAccess::{ base: reg_fp, offset: self.stack_sapce * -1 }
 // }
 
+///|
 fn adjust_stack_space(self : Emitter) -> Unit {
   if self.stack_sapce % 16 != 0 {
     self.stack_sapce = self.stack_sapce / 16 * 16 + 16
@@ -171,7 +171,7 @@ fn adjust_stack_space(self : Emitter) -> Unit {
 //     }
 //     Let((var, ty), e1, e2) => {
 //       let e1_asms = self.emit_exp(env, e1, false)
-      
+
 //       if var.to_string() == "_" {
 //         let e2_asms = self.emit_exp(env, e2, is_tail)
 //         return e1_asms + e2_asms
@@ -430,22 +430,19 @@ fn adjust_stack_space(self : Emitter) -> Unit {
 //   }
 // }
 
+///|
 fn emit_prelude_conclusion(self : Emitter) -> (Array[RvAsm], Array[RvAsm]) {
   self.adjust_stack_space()
-
   let frame_pointer_addr = MemAccess::{ base: Sp, offset: -8 }
   let return_address_addr = MemAccess::{ base: Sp, offset: -16 }
-
-  let prelude1 = Sd(Ra, return_address_addr)     // store return address
-  let prelude2 = Sd(Fp, frame_pointer_addr)      // store frame pointer
-  let prelude3 = Mv(Fp, Sp)                      // set frame pointer
+  let prelude1 = Sd(Ra, return_address_addr) // store return address
+  let prelude2 = Sd(Fp, frame_pointer_addr) // store frame pointer
+  let prelude3 = Mv(Fp, Sp) // set frame pointer
   let prelude4 = Addi(Sp, Sp, -self.stack_sapce) // allocate stack frame
-
-  let conclusion1 = Mv(Sp, Fp)                  // restore stack pointer
-  let conclusion2 = Ld(Fp, frame_pointer_addr)  // restore frame pointer
+  let conclusion1 = Mv(Sp, Fp) // restore stack pointer
+  let conclusion2 = Ld(Fp, frame_pointer_addr) // restore frame pointer
   let conclusion3 = Ld(Ra, return_address_addr) // restore return address
-  let conclusion4 = Ret                         // return to the caller
-
+  let conclusion4 = Ret // return to the caller
   let preclude = [prelude1, prelude2, prelude3, prelude4]
   let conclusion = [conclusion1, conclusion2, conclusion3, conclusion4]
   (preclude, conclusion)
@@ -544,6 +541,6 @@ fn emit_prelude_conclusion(self : Emitter) -> (Array[RvAsm], Array[RvAsm]) {
 //   // tail call optimization
 //   let body_asms = tail_call_opt(conclusion.copy(), body_asms)
 //   let body = prelude + body_asms + conclusion
-  
+
 //   assem_funcs + [AssemblyFunction::{name: "minimbt_main", export: true, body }]
 // }

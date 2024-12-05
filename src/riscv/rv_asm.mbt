@@ -1,4 +1,5 @@
-pub enum RvAsm {
+///|
+pub(all) enum RvAsm {
   // reg-reg arith
   Add(Reg, Reg, Reg)
   Sub(Reg, Reg, Reg)
@@ -86,6 +87,7 @@ pub enum RvAsm {
   Comment(String)
 }
 
+///|
 fn write3[TReg1 : Show, TReg2 : Show, TReg3 : Show](
   logger : Logger,
   op : String,
@@ -102,6 +104,7 @@ fn write3[TReg1 : Show, TReg2 : Show, TReg3 : Show](
   rs2.output(logger)
 }
 
+///|
 fn write2imm[TReg : Show](
   logger : Logger,
   op : String,
@@ -118,6 +121,7 @@ fn write2imm[TReg : Show](
   logger.write_string(imm.to_string())
 }
 
+///|
 fn write2label[TReg : Show](
   logger : Logger,
   op : String,
@@ -134,6 +138,7 @@ fn write2label[TReg : Show](
   logger.write_string(label._)
 }
 
+///|
 fn write2mem[TReg1 : Show, TReg2 : Show](
   logger : Logger,
   op : String,
@@ -150,6 +155,7 @@ fn write2mem[TReg1 : Show, TReg2 : Show](
   logger.write_string(")")
 }
 
+///|
 fn write2[TReg1 : Show, TReg2 : Show](
   logger : Logger,
   op : String,
@@ -163,6 +169,7 @@ fn write2[TReg1 : Show, TReg2 : Show](
   rs1.output(logger)
 }
 
+///|
 impl Show for RvAsm with output(self, logger) {
   match self {
     Label(_) => ()

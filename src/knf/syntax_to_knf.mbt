@@ -1,14 +1,18 @@
+///|
 pub typealias LocalEnv = @immut/hashmap.T[String, Type]
 
+///|
 struct KnfEnv {
   mut counter : Int
   externals : @immut/hashmap.T[String, Type]
 }
 
+///|
 pub fn KnfEnv::new(externals : @immut/hashmap.T[String, Type]) -> KnfEnv {
   { counter: 1, externals }
 }
 
+///|
 pub fn KnfEnv::init_counter_from_existing(
   self : KnfEnv,
   existing : Knf
@@ -16,18 +20,21 @@ pub fn KnfEnv::init_counter_from_existing(
   self.counter = knf_max_counter(existing) + 1
 }
 
+///|
 fn KnfEnv::new_temp(self : KnfEnv) -> Name {
   let temp = Name::slot_only(self.counter)
   self.counter += 1
   temp
 }
 
+///|
 fn KnfEnv::new_named_temp(self : KnfEnv, name : Name) -> Name {
   let counter = self.counter
   self.counter += 1
   { ..name, slot: counter }
 }
 
+///|
 fn KnfEnv::get_knf(
   self : KnfEnv,
   syn : @types.Syntax
@@ -45,6 +52,7 @@ fn KnfEnv::get_knf(
   }
 }
 
+///|
 fn KnfEnv::get_type(env : LocalEnv, syn : @types.Syntax) -> @types.Type!KnfErr {
   try {
     @typing.get_type!(env, syn)
@@ -53,6 +61,7 @@ fn KnfEnv::get_type(env : LocalEnv, syn : @types.Syntax) -> @types.Type!KnfErr {
   }
 }
 
+///|
 pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Failure
   match s {
     Unit => Unit
@@ -184,7 +193,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         Bool(b) => if b { to_knf!(self, syn2) } else { to_knf!(self, syn3) }
         _ => to_knf!(self, If(Eq(syn1, Bool(false)), syn3, syn2))
       }
-    Neg(syn, ~kind) =>
+    Neg(syn, kind~) =>
       // let knf = get_knf!(self, syn)
       match kind {
         Some(Int) =>
@@ -214,7 +223,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
           }
         _ => raise KnfErr("the type of negation is unknown")
       }
-    Prim(lsyn, rsyn, op, ~kind) => {
+    Prim(lsyn, rsyn, op, kind~) => {
       let (l_name, _, l) = get_knf!(self, lsyn)
       let (r_name, _, r) = get_knf!(self, rsyn)
       // println("l_name = " + l_name.to_string())
@@ -350,7 +359,10 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
             if not(f.name.is_empty()) &&
               @typing.extenv.contains(f.name.unwrap()) {
               // println("external")
-              ExternalFunctionApplication("minimbt_" + f.name.unwrap(), args_names)
+              ExternalFunctionApplication(
+                "minimbt_" + f.name.unwrap(),
+                args_names,
+              )
             } else {
               // println("app")
               Apply(f, args_names)
@@ -533,7 +545,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
   }
 }
 
-pub type! KnfErr String derive(ToJson)
+///|
+pub(all) type! KnfErr String derive(ToJson)
 
 test {
   let list = @fs.read_dir!(path="test/test_src")
@@ -576,7 +589,6 @@ test {
   try {
     let typed = @typing.typing!(parse)
     println(typed)
-    
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = syntax_preprocess(env, typed)
     println(pre)

@@ -1,11 +1,12 @@
+///|
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   // for fundef in input.fundefs {
   //   if extenv.contains(fundef.name._) {
   //     continue
   //   }
-  //   if fundef.name._ == "loop2" {
-  //     println("fundef: " + fundef.to_string())
-  //   }
+  //   // if fundef.name._ == "loop2" {
+  //   println("fundef: " + fundef.to_string())
+  //   // }
   // }
   // println("minimbt_main: " + input.body.to_string())
   let functions = []
@@ -108,8 +109,8 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   let main_framesize = calculate_framesize_expr(input.body) + 24 // 增加主函数的栈帧大小
 
   // 主函数序言
-  main.push(Addi(Sp, Sp, -main_framesize))
-  main.push(Sd(Ra, { base: Sp, offset: main_framesize - 8 }))
+  main.push(Addi(Sp, Sp, -main_framesize)) // allocate stack frame
+  main.push(Sd(Ra, { base: Sp, offset: main_framesize - 8 })) // store return address
   main.push(Sd(Fp, { base: Sp, offset: main_framesize - 16 }))
   main.push(Addi(Fp, Sp, main_framesize))
 
@@ -131,6 +132,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   functions
 }
 
+///|
 fn calculate_framesize(fundef : @closure.FuncDef) -> Int {
   // 基础大小：返回地址 + 帧指针 + 调用者保存寄存器 + 参数 + 局部变量
   let base_size = 24 // Ra + Fp
@@ -140,6 +142,7 @@ fn calculate_framesize(fundef : @closure.FuncDef) -> Int {
   return base_size + args_size + fv_size + locals_size
 }
 
+///|
 fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
   match expr {
     IfEq(_, _, e1, e2) => {
@@ -190,12 +193,14 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
   }
 }
 
-pub struct AssemblyFunction {
+///|
+pub(all) struct AssemblyFunction {
   name : String
   export : Bool
   body : Array[RvAsm]
 }
 
+///|
 pub fn AssemblyFunction::output(
   self : AssemblyFunction,
   logger : Logger
@@ -212,23 +217,26 @@ pub fn AssemblyFunction::output(
 }
 
 // 添加一个环境结构来跟踪变量位置
+///|
 struct Env {
   vars : Map[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
   mut current_offset : Int // 当前可用的栈偏移
   fundefs : Array[@closure.FuncDef] // 函数定义
 }
 
+///|
 fn Env::varOffset(env : Env, name : @typing.Name) -> Int {
   env.vars.get(name.to_string()).unwrap().0
 }
 
+///|
 fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
   let instrs = [Comment(expr.to_string())]
   match expr {
     Unit => instrs.clear()
     Int(i) => instrs.push(Li(reg_ret, i.to_string()))
     Double(d) => {
-      let bits = d.reinterpret_as_i64()
+      let bits = d.reinterpret_as_int64()
       instrs.push(Li(T0, bits.to_string()))
       instrs.push(FmvDX(freg_ret, T0))
     }
@@ -614,6 +622,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
   instrs
 }
 
+///|
 fn get_var_type(name : @typing.Name, env : Env) -> @closure.LowType {
   for var in env.vars {
     if var.0 == name.to_string() {
@@ -648,6 +657,7 @@ fn get_var_type(name : @typing.Name, env : Env) -> @closure.LowType {
 }
 
 // 添加一个辅助函数来获取数组元素类型
+///|
 fn get_array_element_type(array : @typing.Name, env : Env) -> @closure.LowType {
   match get_var_type(array, env) {
     Array(elem_type) => {
@@ -658,15 +668,18 @@ fn get_array_element_type(array : @typing.Name, env : Env) -> @closure.LowType {
   }
 }
 
+///|
 pub let extenv = [
   "read_int", "print_int", "read_char", "print_char", "print_newline", "print_endline",
   "int_of_float", "float_of_int", "truncate", "floor", "abs_float", "sqrt", "sin",
   "cos", "atan", "create_array", "create_float_array", "create_ptr_array",
 ]
 
+///|
 let _default_counter : Ref[Int] = { val: 0 }
 
-fn gen_label(name : String, ~counter : Ref[Int] = _default_counter) -> Label {
+///|
+fn gen_label(name : String, counter~ : Ref[Int] = _default_counter) -> Label {
   counter.val = counter.val + 1
   Label("label_" + name + "_" + counter.val.to_string())
 }

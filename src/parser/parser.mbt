@@ -1,9 +1,11 @@
+///|
 fn program(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   Parser(topLevel).parse(tokens)
 }
 
+///|
 fn topLevel(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -11,6 +13,7 @@ fn topLevel(
   Parser(toplevelFnDecl).or(topLetDecl).parse(tokens)
 }
 
+///|
 fn topLetDecl(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -56,6 +59,7 @@ fn topLetDecl(
   .parse(tokens)
 }
 
+///|
 fn toplevelFnDecl(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -76,6 +80,7 @@ fn toplevelFnDecl(
   .parse(tokens)
 }
 
+///|
 fn mainFnDecl(
   tokens : ArrayView[@lex.Token]
 ) ->
@@ -113,6 +118,7 @@ fn mainFnDecl(
 // top_fn_decl:
 // 	'fn' IDENTIFIER '(' param_list? ')' '->' type fn_body;
 
+///|
 fn topFnDecl(
   tokens : ArrayView[@lex.Token]
 ) ->
@@ -165,6 +171,7 @@ fn topFnDecl(
 
 // param_list: param (',' param)*;
 
+///|
 fn paramList(
   tokens : ArrayView[@lex.Token]
 ) -> (Array[(String, @types.Type)], ArrayView[@lex.Token])? {
@@ -188,6 +195,7 @@ fn paramList(
 
 // param: IDENTIFIER type_annotation;
 
+///|
 fn param(
   tokens : ArrayView[@lex.Token]
 ) -> ((String, @types.Type), ArrayView[@lex.Token])? {
@@ -206,6 +214,7 @@ fn param(
 
 // fn_body: '{' stmt '}';
 
+///|
 fn fnBody(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -230,6 +239,7 @@ fn fnBody(
 // 		'->' type
 // 	)? fn_body;
 
+///|
 fn nontopFnDecl(
   tokens : ArrayView[@lex.Token]
 ) ->
@@ -278,6 +288,7 @@ fn nontopFnDecl(
 // nontop_param_list:
 // 	nontop_param (',' nontop_param)*;
 
+///|
 fn nonTopParamList(
   tokens : ArrayView[@lex.Token]
 ) -> (Array[(String, @types.Type)], ArrayView[@lex.Token])? {
@@ -296,6 +307,7 @@ fn nonTopParamList(
 
 // nontop_param: IDENTIFIER type_annotation?;
 
+///|
 fn nonTopParam(
   tokens : ArrayView[@lex.Token]
 ) -> ((String, @types.Type), ArrayView[@lex.Token])? {
@@ -316,6 +328,7 @@ fn nonTopParam(
   .parse(tokens)
 }
 
+///|
 fn stmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -328,6 +341,7 @@ fn stmt(
   .parse(tokens)
 }
 
+///|
 fn letTupleStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -406,6 +420,7 @@ fn letTupleStmt(
 // let_stmt:
 // 	'let' IDENTIFIER type_annotation? '=' expr ';' stmt;
 
+///|
 fn letStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -441,6 +456,7 @@ fn letStmt(
 
 // type_annotation: COLON type;
 
+///|
 fn typeAnnotation(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Type, ArrayView[@lex.Token])? {
@@ -448,6 +464,7 @@ fn typeAnnotation(
 }
 
 // fn_decl_stmt: nontop_fn_decl ';' stmt;
+///|
 fn fnDeclStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -467,6 +484,7 @@ fn fnDeclStmt(
 
 // // x[y] = z;
 // assign_stmt: get_expr '=' expr ';' stmt;
+///|
 fn assignStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -479,15 +497,14 @@ fn assignStmt(
   .map(
     fn {
       ((((get_expr, _), expr), _), stmt) =>
-       match get_expr {
-        Get(arr, idx) => {
-          @types.Syntax::Let(("_", Unit), Put(arr, idx, expr), stmt)
+        match get_expr {
+          Get(arr, idx) =>
+            @types.Syntax::Let(("_", Unit), Put(arr, idx, expr), stmt)
+          _ => {
+            println("Invalid assign statement")
+            @types.Syntax::Let(("_", Var({ val: None })), get_expr, stmt)
+          }
         }
-        _ => {
-          println("Invalid assign statement")
-          @types.Syntax::Let(("_", Var({val: None})), get_expr, stmt)
-        }
-       }
     },
   )
   .parse(tokens)
@@ -495,6 +512,7 @@ fn assignStmt(
 
 // expr_stmt: expr;
 
+///|
 fn exprStmt(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -502,6 +520,7 @@ fn exprStmt(
   Parser(expr).parse(tokens)
 }
 
+///|
 fn expr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -523,6 +542,7 @@ fn expr(
   // .parse(tokens)
 }
 
+///|
 fn exprEq(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -533,6 +553,7 @@ fn exprEq(
   .parse(tokens)
 }
 
+///|
 let ptoken_le : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::LE => true
@@ -540,6 +561,7 @@ let ptoken_le : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 fn exprLe(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -551,6 +573,7 @@ fn exprLe(
   .parse(tokens)
 }
 
+///|
 fn addSubLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -580,6 +603,7 @@ fn addSubLevelExpr(
   .parse(tokens)
 }
 
+///|
 let ptoken_plus : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::Add => true
@@ -587,6 +611,7 @@ let ptoken_plus : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_minus : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::Sub => true
@@ -599,6 +624,7 @@ let ptoken_minus : Parser[@lex.Token] = ptoken(
 //  | if_level_expr '*' mul_div_level_expr
 //  | if_level_expr '/' mul_div_level_expr;
 
+///|
 fn mulDivLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -653,6 +679,7 @@ fn mulDivLevelExpr(
   .parse(tokens)
 }
 
+///|
 let ptoken_star : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::Mul => true
@@ -660,6 +687,7 @@ let ptoken_star : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_slash : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::Div => true
@@ -667,6 +695,7 @@ let ptoken_slash : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 fn ifLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -674,6 +703,7 @@ fn ifLevelExpr(
   Parser(getOrApplyLevelExpr).or(ifExpr).parse(tokens)
 }
 
+///|
 let ptoken_if : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::IF => true
@@ -681,6 +711,7 @@ let ptoken_if : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_else : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::ELSE => true
@@ -688,6 +719,7 @@ let ptoken_else : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 fn ifExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -707,6 +739,7 @@ fn ifExpr(
   .parse(tokens)
 }
 
+///|
 fn getOrApplyLevelExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -925,6 +958,7 @@ fn getOrApplyLevelExpr(
 // 	| not_expr
 // 	| array_make_expr;
 
+///|
 fn valueExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -945,12 +979,14 @@ fn valueExpr(
 
 // unit_expr: '(' ')'; // ()
 
+///|
 fn unitExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   lparen.and(rparen).map(fn { _ => @types.Syntax::Unit }).parse(tokens)
 }
 
+///|
 fn groupExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -958,6 +994,7 @@ fn groupExpr(
 }
 // tuple_expr: '(' expr (',' expr)* ')'; // (x, y)
 
+///|
 fn tupleExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -990,6 +1027,7 @@ fn tupleExpr(
 }
 
 // block_expr: '{' stmt '}'; // { blah; blah; }
+///|
 fn blockExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -1002,6 +1040,7 @@ fn blockExpr(
 }
 
 // bool_expr: 'true' | 'false';
+///|
 fn boolExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -1023,6 +1062,7 @@ fn boolExpr(
 }
 
 // neg_expr: '-' value_expr;
+///|
 fn negExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -1033,6 +1073,7 @@ fn negExpr(
 }
 
 // floating_point_expr: NUMBER '.' NUMBER?; // 1.0 | 1.
+///|
 fn floatingPointExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -1061,6 +1102,7 @@ fn floatingPointExpr(
 }
 
 // int_expr: NUMBER; // 1
+///|
 fn intExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -1085,6 +1127,7 @@ fn intExpr(
 }
 
 // not_expr: 'not' '(' expr ')'; // not(x)
+///|
 fn notExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -1098,6 +1141,7 @@ fn notExpr(
 // array_make_expr:
 // 	'Array' ':' ':' 'make' '(' expr ',' expr ')'; // Array::make(x, y)
 
+///|
 fn arrayMakeExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -1117,6 +1161,7 @@ fn arrayMakeExpr(
 }
 // identifier_expr: IDENTIFIER;
 
+///|
 fn identifierExpr(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -1137,6 +1182,7 @@ fn identifierExpr(
   .parse(tokens)
 }
 
+///|
 fn parseType(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Type, ArrayView[@lex.Token])? {
@@ -1165,6 +1211,7 @@ fn parseType(
   .parse(tokens)
 }
 
+///|
 fn arrayType(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Type, ArrayView[@lex.Token])? {
@@ -1185,6 +1232,7 @@ fn arrayType(
 
 // tuple_type: '(' type (',' type)* ')'; // (Int, Bool)
 
+///|
 fn tupleType(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Type, ArrayView[@lex.Token])? {
@@ -1218,6 +1266,7 @@ fn tupleType(
 // function_type:
 // 	'(' type (',' type)* ')' '->' type; // (Int, Bool) -> Int
 
+///|
 let arrow : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::ARROW => true
@@ -1225,6 +1274,7 @@ let arrow : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 fn functionType(
   tokens : ArrayView[@lex.Token]
 ) -> (@types.Type, ArrayView[@lex.Token])? {
@@ -1255,6 +1305,7 @@ fn functionType(
   .parse(tokens)
 }
 
+///|
 fn ptoken(predicate : (@lex.Token) -> Bool) -> Parser[@lex.Token] {
   fn {
     [hd, .. as tl] => if predicate(hd) { Some((hd, tl)) } else { None }
@@ -1262,6 +1313,7 @@ fn ptoken(predicate : (@lex.Token) -> Bool) -> Parser[@lex.Token] {
   }
 }
 
+///|
 fn map[I, O](self : Parser[I], f : (I) -> O) -> Parser[O] {
   fn {
     input =>
@@ -1272,6 +1324,7 @@ fn map[I, O](self : Parser[I], f : (I) -> O) -> Parser[O] {
   }
 }
 
+///|
 fn and[V1, V2](self : Parser[V1], parser2 : Parser[V2]) -> Parser[(V1, V2)] {
   fn {
     input =>
@@ -1288,6 +1341,7 @@ fn and[V1, V2](self : Parser[V1], parser2 : Parser[V2]) -> Parser[(V1, V2)] {
   }
 }
 
+///|
 fn or[V](self : Parser[V], parser2 : Parser[V]) -> Parser[V] {
   fn {
     input =>
@@ -1298,6 +1352,7 @@ fn or[V](self : Parser[V], parser2 : Parser[V]) -> Parser[V] {
   }
 }
 
+///|
 fn log[V](self : Parser[V]) -> Parser[V] {
   fn {
     input =>
@@ -1315,6 +1370,7 @@ fn log[V](self : Parser[V]) -> Parser[V] {
   }
 }
 
+///|
 fn many[Value : Show](self : Parser[Value]) -> Parser[Array[Value]] {
   fn(input) {
     let cumul = []
@@ -1330,6 +1386,7 @@ fn many[Value : Show](self : Parser[Value]) -> Parser[Array[Value]] {
   }
 }
 
+///|
 fn zeroOrOnce[V1, V2](
   self : Parser[V1],
   parser2 : Parser[V2]
@@ -1357,10 +1414,12 @@ fn zeroOrOnce[V1, V2](
   }
 }
 
+///|
 fn Parser::ref[Value](ref : Ref[Parser[Value]]) -> Parser[Value] {
   fn(input) { ref.val.parse(input) }
 }
 
+///|
 let ptoken_array : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::ARRAY => true
@@ -1368,6 +1427,7 @@ let ptoken_array : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_make : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::IDENTIFIER("make") => true
@@ -1375,6 +1435,7 @@ let ptoken_make : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_not : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::NOT => true
@@ -1382,6 +1443,7 @@ let ptoken_not : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_number : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::NUMBER(_) => true
@@ -1389,6 +1451,7 @@ let ptoken_number : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_fn : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::FN => true
@@ -1396,6 +1459,7 @@ let ptoken_fn : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_let : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::LET => true
@@ -1403,6 +1467,7 @@ let ptoken_let : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let dot : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::DOT => true
@@ -1410,6 +1475,7 @@ let dot : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_assign : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::ASSIGN => true
@@ -1417,6 +1483,7 @@ let ptoken_assign : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_eq : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::EQ => true
@@ -1424,6 +1491,7 @@ let ptoken_eq : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let ptoken_colon : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::COLON => true
@@ -1431,6 +1499,7 @@ let ptoken_colon : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let comma : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::COMMA => true
@@ -1438,6 +1507,7 @@ let comma : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let lparen : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::LPAREN => true
@@ -1445,6 +1515,7 @@ let lparen : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let rparen : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::RPAREN => true
@@ -1452,6 +1523,7 @@ let rparen : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let lbracket : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::LBRACKET => true
@@ -1459,6 +1531,7 @@ let lbracket : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let rbracket : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::RBRACKET => true
@@ -1466,6 +1539,7 @@ let rbracket : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let lcurlybracket : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::LCURLYBRACKET => true
@@ -1473,6 +1547,7 @@ let lcurlybracket : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let rcurlybracket : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::RCURLYBRACKET => true
@@ -1480,6 +1555,7 @@ let rcurlybracket : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let identifier : Parser[@lex.Token] = ptoken(
   fn {
     @lex.Token::IDENTIFIER(_) => true
@@ -1487,6 +1563,7 @@ let identifier : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 let semicolon : Parser[@lex.Token] = ptoken(
   fn {
     SEMICOLON => true
@@ -1494,8 +1571,10 @@ let semicolon : Parser[@lex.Token] = ptoken(
   },
 )
 
+///|
 type Parser[V] (ArrayView[@lex.Token]) -> (V, ArrayView[@lex.Token])?
 
+///|
 fn parse[V](
   self : Parser[V],
   tokens : ArrayView[@lex.Token]
@@ -1504,10 +1583,13 @@ fn parse[V](
   (self._)(tokens)
 }
 
+///|
 let parser : Parser[@types.Syntax] = Parser(program)
 
-pub type! ParserErr String derive(ToJson)
+///|
+pub(all) type! ParserErr String derive(ToJson)
 
+///|
 pub fn parse_from_string(str : String) -> @types.Syntax {
   // println("parsing: \n" + str)
   let tokens = []

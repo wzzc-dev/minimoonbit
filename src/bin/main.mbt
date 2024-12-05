@@ -1,4 +1,4 @@
-/// The stage to be run next.
+///| The stage to be run next.
 enum Stages {
   Parse
   Typecheck
@@ -9,6 +9,7 @@ enum Stages {
   Finished
 } derive(Show, Eq, Compare)
 
+///|
 fn Stages::from_string(s : String) -> Stages? {
   match s {
     "parse" => Some(Stages::Parse)
@@ -22,6 +23,7 @@ fn Stages::from_string(s : String) -> Stages? {
   }
 }
 
+///|
 fn Stages::next(self : Stages) -> Stages {
   match self {
     Stages::Parse => Stages::Typecheck
@@ -34,6 +36,7 @@ fn Stages::next(self : Stages) -> Stages {
   }
 }
 
+///|
 struct CompileStatus {
   mut curr_stage : Stages
   end_stage : Stages
@@ -49,6 +52,7 @@ struct CompileStatus {
   mut wasm : String?
 }
 
+///|
 fn CompileStatus::initialize(
   start_stage : Stages,
   end_stage : Stages,
@@ -85,7 +89,7 @@ fn CompileStatus::initialize(
   v
 }
 
-/// Run the next stage of compilation. Returns true if the compilation is finished.
+///| Run the next stage of compilation. Returns true if the compilation is finished.
 fn CompileStatus::step(self : CompileStatus, js : Bool, wasm : Bool) -> Bool {
   if self.curr_stage >= self.end_stage {
     return true
@@ -117,7 +121,7 @@ fn CompileStatus::step(self : CompileStatus, js : Bool, wasm : Bool) -> Bool {
       )
       self.closure_ir = Some(closure_ir)
     }
-    Asm => {
+    Asm =>
       if js {
         // 添加生成 JavaScript 代码的逻辑
         let js_code = @js.emit(self.closure_ir.unwrap())
@@ -129,14 +133,19 @@ fn CompileStatus::step(self : CompileStatus, js : Bool, wasm : Bool) -> Bool {
         let real_asm = @riscv.emit(self.closure_ir.unwrap())
         self.asm = Some(real_asm)
       }
-    }
     Finished => ()
   }
   self.curr_stage = self.curr_stage.next()
   self.curr_stage >= self.end_stage
 }
 
-fn CompileStatus::output(self : CompileStatus, json : Bool, js : Bool, wasm : Bool) -> String {
+///|
+fn CompileStatus::output(
+  self : CompileStatus,
+  json : Bool,
+  js : Bool,
+  wasm : Bool
+) -> String {
   if json {
     match self.curr_stage {
       Parse => self.source_code.unwrap()
@@ -155,7 +164,7 @@ fn CompileStatus::output(self : CompileStatus, json : Bool, js : Bool, wasm : Bo
       KnfOpt => self.knf.unwrap().to_string()
       Closure => self.opt_knf.unwrap().to_string()
       Asm => self.closure_ir.unwrap().to_string()
-      Finished => {
+      Finished =>
         if js {
           // 如果是生成 JavaScript，直接返回生成的代码
           self.js.unwrap()
@@ -164,13 +173,14 @@ fn CompileStatus::output(self : CompileStatus, json : Bool, js : Bool, wasm : Bo
         } else {
           @riscv.print_functions(self.asm.unwrap())
         }
-      }
     }
   }
 }
 
+///|
 fn main {
-  let argv = @env.get_args()
+  let argv = @sys.get_cli_args()
+  // println(argv)
   let mut file = None
   let knf_opt_iters = Ref::new(10)
   let knf_opt_inline_threshold = Ref::new(10)
@@ -269,18 +279,8 @@ fn main {
         ),
         "Inline threshold for KNF optimization",
       ),
-      (
-        "--js",
-        "",
-        @ArgParser.Set(js),
-        "Generate JavaScript code",
-      ),
-      (
-        "--wasm",
-        "",
-        @ArgParser.Set(wasm),
-        "Generate WebAssembly code",
-      ),
+      ("--js", "", @ArgParser.Set(js), "Generate JavaScript code"),
+      ("--wasm", "", @ArgParser.Set(wasm), "Generate WebAssembly code"),
     ],
     fn(s) {
       if file.is_empty().not() {
@@ -289,7 +289,7 @@ fn main {
       file = Some(s)
     },
     "",
-    argv,
+    argv.split_at(2).1,
   )
 
   // Configure pipeline
@@ -314,7 +314,7 @@ fn main {
   } else {
     file.unwrap()
   }
-  let contents = @fs.read_to_string(file)
+  let contents = @fs.read_file_to_string?(path=file).unwrap()
 
   // Compilation
   let status = match
@@ -365,7 +365,7 @@ fn main {
     if out_file.val == "-" {
       println(out_string)
     } else {
-      @fs.write_to_string(out_file.val, out_string)
+      @fs.write_string_to_file(path=out_file.val, content=out_string)
     }
   }
 }
