@@ -1,9 +1,11 @@
-pub struct Context {
+///|
+pub(all) struct Context {
   str : String
   mut offset : Int
   array : Array[Token]
 }
 
+///|
 pub fn lex(context : Context) -> Unit {
   let { offset, str, array } = context
   if offset >= str.length() {
@@ -101,6 +103,7 @@ pub fn lex(context : Context) -> Unit {
   lex(context)
 }
 
+///|
 fn lex_number_rest(context : Context, number : String) -> Unit {
   let { offset, str, array } = context
   if offset >= str.length() {
@@ -116,6 +119,7 @@ fn lex_number_rest(context : Context, number : String) -> Unit {
   }
 }
 
+///|
 fn lex_other_rest(context : Context, ident : String) -> Unit {
   let { offset, str, array } = context
   if offset >= str.length() {
@@ -135,25 +139,27 @@ fn lex_other_rest(context : Context, ident : String) -> Unit {
   }
 }
 
+///|
 fn matchIdentifier(ident : String) -> Token {
   match ident {
-      "true" => TRUE
-      "false" => FALSE
-      "Unit" => UNIT
-      "Bool" => BOOL
-      "Int" => INT
-      "Double" => DOUBLE
-      "Array" => ARRAY
-      "not" => NOT
-      "if" => IF
-      "else" => ELSE
-      "fn" => FN
-      "let" => LET
-      _ => IDENTIFIER(ident)
-    }
+    "true" => TRUE
+    "false" => FALSE
+    "Unit" => UNIT
+    "Bool" => BOOL
+    "Int" => INT
+    "Double" => DOUBLE
+    "Array" => ARRAY
+    "not" => NOT
+    "if" => IF
+    "else" => ELSE
+    "fn" => FN
+    "let" => LET
+    _ => IDENTIFIER(ident)
+  }
 }
 
-pub enum Token {
+///|
+pub(all) enum Token {
   TRUE
   FALSE
   UNIT
@@ -186,7 +192,7 @@ pub enum Token {
   COLON
   SEMICOLON
   COMMA
-  WA
+  WS
   COMMENT
 } derive(Show)
 

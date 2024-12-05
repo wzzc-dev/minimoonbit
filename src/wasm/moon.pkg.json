@@ -4,8 +4,6 @@
     {
       "path": "moonbitlang/minimbt",
       "alias": "typing"
-    },
-    "moonbitlang/minimbt/util",
-    "lijunchen/unstable_io/env"
+    }
   ]
 }
