@@ -1,22 +1,56 @@
 ///|
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  for fundef in input.fundefs {
-    if extenv.contains(fundef.name._) {
-      continue
-    }
-    if fundef.name._ == "loop2" {
-    println("fundef: " + fundef.to_string())
-    }
-  }
+  // for fundef in input.fundefs {
+  //   if extenv.contains(fundef.name._) {
+  //     continue
+  //   }
+  //   if fundef.name._ == "loop2" {
+  //   println("fundef: " + fundef.to_string())
+  //   }
+  // }
   // println("minimbt_main: " + input.body.to_string())
   let functions = []
 
   // 为每个函数定义生成汇编代码
   for fundef in input.fundefs {
-    // println("fundef: " + fundef.name._.to_string())
     if extenv.contains(fundef.name._) {
       continue
     }
+    let body = emit_fun(fundef, input.fundefs)
+    functions.push({ name: fundef.name._, export: false, body })
+  }
+
+  // 主函数
+  let main = []
+  let main_framesize = calculate_framesize_expr(input.body) + 24 // 增加主函数的栈帧大小
+
+  // 主函数序言
+  main.push(Addi(Sp, Sp, -main_framesize)) // allocate stack frame
+  main.push(Sd(Ra, { base: Sp, offset: main_framesize - 8 })) // store return address
+  main.push(Sd(Fp, { base: Sp, offset: main_framesize - 16 }))
+  main.push(Addi(Fp, Sp, main_framesize))
+
+  // 编译主体
+  let main_env = {
+    vars: Map::new(),
+    current_offset: -24,
+    fundefs: input.fundefs,
+  }
+  main.append(compile_expr(input.body, main_env))
+
+  // 主函数尾声
+  main.push(Ld(Ra, { base: Sp, offset: main_framesize - 8 }))
+  main.push(Ld(Fp, { base: Sp, offset: main_framesize - 16 }))
+  main.push(Addi(Sp, Sp, main_framesize))
+  main.push(Ret)
+  functions.push({ name: "minimbt_main", export: true, body: main })
+  // println("functions: " + functions.to_string())
+  functions
+}
+
+fn emit_fun(fundef : @closure.FuncDef, fundefs: Array[@closure.FuncDef]) -> Array[RvAsm] {
+ // println("fundef: " + fundef.name._.to_string())
+    
     // println("fundef: " + fundef.to_string())
     let body = []
     let framesize = calculate_framesize(fundef)
@@ -30,10 +64,10 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     // 保存帧指针
     body.push(Sd(Fp, { base: Sp, offset: framesize - 16 }))
 
-    // 保存被调用者保存的寄存器
-    for i, reg in reg_callee_saved_list {
-      body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
-    }
+    // // 保存被调用者保存的寄存器
+    // for i, reg in reg_callee_saved_list {
+    //   body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
+    // }
 
     // 更新帧指针
     body.push(Addi(Fp, Sp, framesize))
@@ -42,10 +76,15 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
       vars: Map::new(),
       current_offset: -24,
       // current_offset: -24 - reg_callee_saved_list.length() * 8, // 从-24开始，留出ra和fp的空间
-      fundefs: input.fundefs,
+      fundefs: fundefs,
     }
     // 如果是闭包函数，先处理自由变量
     if fundef.is_closure {
+      let offset = env.current_offset
+      body.push(Sd(S11, { base: Fp, offset }))
+      env.vars.set(fundef.old_name.to_string(), (offset, fundef.ty))
+      env.current_offset -= 8
+
       for i, arg in fundef.formal_free_vars {
         // 从闭包对象(s11)中加载自由变量，偏移为8*i+8 (第一个8字节是函数指针)
         body.push(Ld(T0, { base: S11, offset: (i + 1) * 8 }))
@@ -95,41 +134,13 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
     body.append(compile_expr(fundef.body, env))
     body.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
     body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
-    // 恢复被调用者保存的寄存器
-    for i, reg in reg_callee_saved_list {
-      body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
-    }
+    // // 恢复被调用者保存的寄存器
+    // for i, reg in reg_callee_saved_list {
+    //   body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
+    // }
     body.push(Addi(Sp, Sp, framesize))
     body.push(Ret)
-    functions.push({ name: fundef.name._, export: false, body })
-  }
-
-  // 主函数
-  let main = []
-  let main_framesize = calculate_framesize_expr(input.body) + 24 // 增加主函数的栈帧大小
-
-  // 主函数序言
-  main.push(Addi(Sp, Sp, -main_framesize)) // allocate stack frame
-  main.push(Sd(Ra, { base: Sp, offset: main_framesize - 8 })) // store return address
-  main.push(Sd(Fp, { base: Sp, offset: main_framesize - 16 }))
-  main.push(Addi(Fp, Sp, main_framesize))
-
-  // 编译主体
-  let main_env = {
-    vars: Map::new(),
-    current_offset: -24,
-    fundefs: input.fundefs,
-  }
-  main.append(compile_expr(input.body, main_env))
-
-  // 主函数尾声
-  main.push(Ld(Ra, { base: Sp, offset: main_framesize - 8 }))
-  main.push(Ld(Fp, { base: Sp, offset: main_framesize - 16 }))
-  main.push(Addi(Sp, Sp, main_framesize))
-  main.push(Ret)
-  functions.push({ name: "minimbt_main", export: true, body: main })
-  // println("functions: " + functions.to_string())
-  functions
+    body
 }
 
 ///|
@@ -231,7 +242,8 @@ fn Env::varOffset(env : Env, name : @typing.Name) -> Int {
 
 ///|
 fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
-  let instrs = [Comment(expr.to_string())]
+  // let instrs = [Comment(expr.to_string())]
+  let instrs = []
   match expr {
     Unit => instrs.clear()
     Int(i) => instrs.push(Li(reg_ret, i.to_string()))
