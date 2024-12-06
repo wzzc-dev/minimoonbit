@@ -1,0 +1,1 @@
+rm -rf out.js out.s out.wasm test-exe-file

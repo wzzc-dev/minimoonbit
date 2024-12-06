@@ -88,7 +88,6 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       )
     }
     LetRec({ name, ty, args, body }, cont) => {
-
       let free_vars = fv(body).difference(
         @hashset.from_array(env.map(fn(def) { new_fv(def.old_name, Unit) })),
       )
