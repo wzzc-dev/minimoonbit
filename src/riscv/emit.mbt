@@ -48,99 +48,102 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   functions
 }
 
-fn emit_fun(fundef : @closure.FuncDef, fundefs: Array[@closure.FuncDef]) -> Array[RvAsm] {
- // println("fundef: " + fundef.name._.to_string())
-    
-    // println("fundef: " + fundef.to_string())
-    let body = []
-    let framesize = calculate_framesize(fundef)
-    // + reg_callee_saved_list.length() * 8
-    // println("framesize: " + framesize.to_string())
-    // 函数序言
-    // 分配栈空间
-    body.push(Addi(Sp, Sp, -framesize))
-    // 保存返回地址
-    body.push(Sd(Ra, { base: Sp, offset: framesize - 8 }))
-    // 保存帧指针
-    body.push(Sd(Fp, { base: Sp, offset: framesize - 16 }))
+///|
+fn emit_fun(
+  fundef : @closure.FuncDef,
+  fundefs : Array[@closure.FuncDef]
+) -> Array[RvAsm] {
+  // println("fundef: " + fundef.name._.to_string())
 
-    // // 保存被调用者保存的寄存器
-    // for i, reg in reg_callee_saved_list {
-    //   body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
-    // }
+  // println("fundef: " + fundef.to_string())
+  let body = []
+  let framesize = calculate_framesize(fundef)
+  // + reg_callee_saved_list.length() * 8
+  // println("framesize: " + framesize.to_string())
+  // 函数序言
+  // 分配栈空间
+  body.push(Addi(Sp, Sp, -framesize))
+  // 保存返回地址
+  body.push(Sd(Ra, { base: Sp, offset: framesize - 8 }))
+  // 保存帧指针
+  body.push(Sd(Fp, { base: Sp, offset: framesize - 16 }))
 
-    // 更新帧指针
-    body.push(Addi(Fp, Sp, framesize))
-    let env = {
-      // 保存参数
-      vars: Map::new(),
-      current_offset: -24,
-      // current_offset: -24 - reg_callee_saved_list.length() * 8, // 从-24开始，留出ra和fp的空间
-      fundefs: fundefs,
-    }
-    // 如果是闭包函数，先处理自由变量
-    if fundef.is_closure {
+  // // 保存被调用者保存的寄存器
+  // for i, reg in reg_callee_saved_list {
+  //   body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
+  // }
+
+  // 更新帧指针
+  body.push(Addi(Fp, Sp, framesize))
+  let env = {
+    // 保存参数
+    vars: Map::new(),
+    current_offset: -24,
+    // current_offset: -24 - reg_callee_saved_list.length() * 8, // 从-24开始，留出ra和fp的空间
+    fundefs,
+  }
+  // 如果是闭包函数，先处理自由变量
+  if fundef.is_closure {
+    let offset = env.current_offset
+    body.push(Sd(S11, { base: Fp, offset }))
+    env.vars.set(fundef.old_name.to_string(), (offset, fundef.ty))
+    env.current_offset -= 8
+    for i, arg in fundef.formal_free_vars {
+      // 从闭包对象(s11)中加载自由变量，偏移为8*i+8 (第一个8字节是函数指针)
+      body.push(Ld(T0, { base: S11, offset: (i + 1) * 8 }))
+      // 保存到栈上
       let offset = env.current_offset
-      body.push(Sd(S11, { base: Fp, offset }))
-      env.vars.set(fundef.old_name.to_string(), (offset, fundef.ty))
+      body.push(Sd(T0, { base: Fp, offset }))
+      env.vars.set(arg.0.to_string(), (offset, arg.1))
       env.current_offset -= 8
-
-      for i, arg in fundef.formal_free_vars {
-        // 从闭包对象(s11)中加载自由变量，偏移为8*i+8 (第一个8字节是函数指针)
-        body.push(Ld(T0, { base: S11, offset: (i + 1) * 8 }))
-        // 保存到栈上
-        let offset = env.current_offset
-        body.push(Sd(T0, { base: Fp, offset }))
-        env.vars.set(arg.0.to_string(), (offset, arg.1))
-        env.current_offset -= 8
-      }
     }
-    // 处理普通参数
-    for i, arg in fundef.args {
-      if i < reg_arg_list.length() {
-        let offset = env.current_offset
-        match arg.1 {
-          Double =>
-            // 浮点参数使用浮点寄存器和指令
-            body.push(Fsd(freg_arg_list.get(i).unwrap(), { base: Fp, offset }))
-          _ =>
-            // 其他类型使用通用寄存器和指令
-            body.push(Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
-        }
-        env.vars.set(arg.0.to_string(), (offset, arg.1))
-        env.current_offset -= 8
-      } else {
-        // 如果参数超过8个，则需要从栈上读取
-        let offset = env.current_offset
-        let stack_offset = -(i - reg_arg_list.length() + 1) * 8
-        match arg.1 {
-          Double => {
-            // 浮点参数使用浮点寄存器和指令
-            body.push(Fld(Ft0, { base: Sp, offset: stack_offset }))
-            body.push(Fsd(Ft0, { base: Fp, offset }))
-          }
-          _ => {
-            // 其他类型使用通用寄存器和指令
-            body.push(Ld(T0, { base: Sp, offset: stack_offset }))
-            body.push(Sd(T0, { base: Fp, offset }))
-          }
-        }
-        env.vars.set(arg.0.to_string(), (offset, arg.1))
-        env.current_offset -= 8
+  }
+  // 处理普通参数
+  for i, arg in fundef.args {
+    if i < reg_arg_list.length() {
+      let offset = env.current_offset
+      match arg.1 {
+        Double =>
+          // 浮点参数使用浮点寄存器和指令
+          body.push(Fsd(freg_arg_list.get(i).unwrap(), { base: Fp, offset }))
+        _ =>
+          // 其他类型使用通用寄存器和指令
+          body.push(Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
       }
+      env.vars.set(arg.0.to_string(), (offset, arg.1))
+      env.current_offset -= 8
+    } else {
+      // 如果参数超过8个，则需要从栈上读取
+      let offset = env.current_offset
+      let stack_offset = -(i - reg_arg_list.length() + 1) * 8
+      match arg.1 {
+        Double => {
+          // 浮点参数使用浮点寄存器和指令
+          body.push(Fld(Ft0, { base: Sp, offset: stack_offset }))
+          body.push(Fsd(Ft0, { base: Fp, offset }))
+        }
+        _ => {
+          // 其他类型使用通用寄存器和指令
+          body.push(Ld(T0, { base: Sp, offset: stack_offset }))
+          body.push(Sd(T0, { base: Fp, offset }))
+        }
+      }
+      env.vars.set(arg.0.to_string(), (offset, arg.1))
+      env.current_offset -= 8
     }
+  }
 
-    // 编译函数体
-    body.append(compile_expr(fundef.body, env))
-    body.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
-    body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
-    // // 恢复被调用者保存的寄存器
-    // for i, reg in reg_callee_saved_list {
-    //   body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
-    // }
-    body.push(Addi(Sp, Sp, framesize))
-    body.push(Ret)
-    body
+  // 编译函数体
+  body.append(compile_expr(fundef.body, env))
+  body.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
+  body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
+  // // 恢复被调用者保存的寄存器
+  // for i, reg in reg_callee_saved_list {
+  //   body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
+  // }
+  body.push(Addi(Sp, Sp, framesize))
+  body.push(Ret)
+  body
 }
 
 ///|
