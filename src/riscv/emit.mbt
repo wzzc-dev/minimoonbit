@@ -126,10 +126,7 @@ fn emit_fun(
   body.append(compile_expr(fundef.body, env))
   body.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
   body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
-  // // 恢复被调用者保存的寄存器
-  // for i, reg in reg_callee_saved_list {
-  //   body.push(Ld(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
-  // }
+
   body.push(Addi(Sp, Sp, framesize))
   body.push(Ret)
   body
@@ -336,9 +333,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       match env.vars.find(name.to_string()) {
         Some((offset, ty)) =>
           match ty {
-            Double =>
-              // println("Var Double: " + name.to_string())
-              instrs.push(Fld(freg_ret, { base: Fp, offset }))
+            Double => instrs.push(Fld(freg_ret, { base: Fp, offset }))
             _ => instrs.push(Ld(reg_ret, { base: Fp, offset }))
           }
         None =>
