@@ -32,7 +32,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
 
   // 编译主体
   let main_env = {
-    vars: Map::new(),
+    vars: @immut/hashmap.new(),
     current_offset: -24,
     fundefs: input.fundefs,
   }
@@ -44,7 +44,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   main.push(Addi(Sp, Sp, main_framesize))
   main.push(Ret)
   functions.push({ name: "minimbt_main", export: true, body: main })
-  // println("functions: " + functions.to_string())
+
   functions
 }
 
@@ -53,13 +53,8 @@ fn emit_fun(
   fundef : @closure.FuncDef,
   fundefs : Array[@closure.FuncDef]
 ) -> Array[RvAsm] {
-  // println("fundef: " + fundef.name._.to_string())
-
-  // println("fundef: " + fundef.to_string())
   let body = []
   let framesize = calculate_framesize(fundef)
-  // + reg_callee_saved_list.length() * 8
-  // println("framesize: " + framesize.to_string())
   // 函数序言
   // 分配栈空间
   body.push(Addi(Sp, Sp, -framesize))
@@ -68,25 +63,19 @@ fn emit_fun(
   // 保存帧指针
   body.push(Sd(Fp, { base: Sp, offset: framesize - 16 }))
 
-  // // 保存被调用者保存的寄存器
-  // for i, reg in reg_callee_saved_list {
-  //   body.push(Sd(reg, { base: Sp, offset: framesize - (i + 3) * 8 }))
-  // }
-
   // 更新帧指针
   body.push(Addi(Fp, Sp, framesize))
-  let env = {
+  let mut env = {
     // 保存参数
-    vars: Map::new(),
+    vars: @immut/hashmap.new(),
     current_offset: -24,
-    // current_offset: -24 - reg_callee_saved_list.length() * 8, // 从-24开始，留出ra和fp的空间
     fundefs,
   }
   // 如果是闭包函数，先处理自由变量
   if fundef.is_closure {
     let offset = env.current_offset
     body.push(Sd(S11, { base: Fp, offset }))
-    env.vars.set(fundef.old_name.to_string(), (offset, fundef.ty))
+    env = env.add(fundef.old_name.to_string(), offset, fundef.ty)
     env.current_offset -= 8
     for i, arg in fundef.formal_free_vars {
       // 从闭包对象(s11)中加载自由变量，偏移为8*i+8 (第一个8字节是函数指针)
@@ -94,7 +83,7 @@ fn emit_fun(
       // 保存到栈上
       let offset = env.current_offset
       body.push(Sd(T0, { base: Fp, offset }))
-      env.vars.set(arg.0.to_string(), (offset, arg.1))
+      env = env.add(arg.0.to_string(), offset, arg.1)
       env.current_offset -= 8
     }
   }
@@ -110,7 +99,7 @@ fn emit_fun(
           // 其他类型使用通用寄存器和指令
           body.push(Sd(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
       }
-      env.vars.set(arg.0.to_string(), (offset, arg.1))
+      env = env.add(arg.0.to_string(), offset, arg.1)
       env.current_offset -= 8
     } else {
       // 如果参数超过8个，则需要从栈上读取
@@ -128,7 +117,7 @@ fn emit_fun(
           body.push(Sd(T0, { base: Fp, offset }))
         }
       }
-      env.vars.set(arg.0.to_string(), (offset, arg.1))
+      env = env.add(arg.0.to_string(), offset, arg.1)
       env.current_offset -= 8
     }
   }
@@ -233,18 +222,30 @@ pub fn AssemblyFunction::output(
 // 添加一个环境结构来跟踪变量位置
 ///|
 struct Env {
-  vars : Map[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
+  vars : @immut/hashmap.T[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
   mut current_offset : Int // 当前可用的栈偏移
   fundefs : Array[@closure.FuncDef] // 函数定义
 }
 
+fn find(self : Env, key : String) -> (Int, @closure.LowType) {
+  self.vars.find(key).unwrap()
+}
+
+fn find_type(self : Env, key : String) -> @closure.LowType {
+  self.vars.find(key).unwrap().1
+}
+fn add(self : Env, name : String, offset : Int, lowtype : @closure.LowType) -> Env {
+  let vars = self.vars.add(name.to_string(), (offset, lowtype))
+  Env::{ vars, current_offset: self.current_offset, fundefs: self.fundefs}
+}
 ///|
 fn Env::varOffset(env : Env, name : @typing.Name) -> Int {
-  env.vars.get(name.to_string()).unwrap().0
+  env.vars.find(name.to_string()).unwrap().0
 }
 
 ///|
 fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
+  let mut env = env
   // let instrs = [Comment(expr.to_string())]
   let instrs = []
   match expr {
@@ -322,7 +323,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           ClosureFn(_, _) => instrs.push(Sd(reg_ret, { base: Fp, offset }))
           _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
         }
-        env.vars.set(name.to_string(), (offset, ty))
+        env = env.add(name.to_string(), offset, ty)
         // 更新环境
         env.current_offset -= 8
       }
@@ -332,7 +333,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     Var(name) =>
       // 从环境中查找变量的偏移
-      match env.vars.get(name.to_string()) {
+      match env.vars.find(name.to_string()) {
         Some((offset, ty)) =>
           match ty {
             Double =>
@@ -359,7 +360,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
 
       // 4. 存储捕获的变量
       for i, var in closure.actual_free_vars {
-        match env.vars.get(var.to_string()) {
+        match env.vars.find(var.to_string()) {
           Some((offset, _)) => {
             instrs.push(Ld(T0, { base: Fp, offset }))
             instrs.push(Sd(T0, { base: reg_ret, offset: (i + 1) * 8 }))
@@ -377,7 +378,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Sd(reg_ret, { base: Fp, offset }))
 
       // 6. 更新环境
-      env.vars.set(name.to_string(), (offset, _ty))
+      env = env.add(name.to_string(), offset, _ty)
       env.current_offset -= 8
 
       // 7. 编译剩余表达式，使用新环境
@@ -385,8 +386,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     CallClosure(f, args) => {
       for i, arg in args {
-        let arg_type = get_var_type(arg, env)
-        match env.vars.get(arg.to_string()) {
+        let arg_type = env.find(arg.to_string()).1
+        match env.vars.find(arg.to_string()) {
           Some((offset, _)) =>
             if i < reg_arg_list.length() {
               match arg_type {
@@ -417,7 +418,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             println("Warning: Arg not found in environment: " + arg.to_string())
         }
       }
-      match env.vars.get(f.to_string()) {
+      match env.vars.find(f.to_string()) {
         Some((offset, _)) => {
           // 3. 加载函数指针并调用
           instrs.push(Ld(S11, { base: Fp, offset }))
@@ -452,7 +453,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     CallDirect(label, args) => {
       for i, arg in args {
         if i < reg_arg_list.length() {
-          match env.vars.get(arg.to_string()) {
+          match env.vars.find(arg.to_string()) {
             Some((offset, ty)) =>
               match ty {
                 Double =>
@@ -506,10 +507,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             }
           }
         } else {
-          let offset = env.vars.get(arg.to_string()).unwrap().0
+          let offset = env.vars.find(arg.to_string()).unwrap().0
           let stack_offset = -(i - reg_arg_list.length() + 1) * 8
           // 超出寄存器数量的参数存入栈
-          match get_var_type(arg, env) {
+          match env.find_type(arg.to_string()) {
             Double => {
               instrs.push(Fld(Ft0, { base: Fp, offset }))
               instrs.push(Fsd(Ft0, { base: Sp, offset: stack_offset }))
@@ -524,7 +525,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       match env.fundefs.search_by(fn(fundef) { fundef.name._ == label._ }) {
         Some(_) => instrs.push(Call(Label(label._)))
         None =>
-          match env.vars.get(label._) {
+          match env.vars.find(label._) {
             Some((offset, _)) => {
               // 3. 加载函数指针并调用
               instrs.push(Ld(S11, { base: Fp, offset }))
@@ -534,15 +535,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             None => instrs.push(Call(Label(label._)))
           }
       }
-      // 恢复参数寄存器 - 使用保存时的偏移量
-      // let restore_offset = save_area_offset
-      // for i = 0; i < args_to_save; i = i + 1 {
-      //   // println(restore_offset - (i * 8))
-      //   instrs.push(
-      //     Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset: restore_offset - (i * 8) }),
-      //   )
-      // }
-      // println("\n")
     }
     MakeTuple(elems) => {
       // 1. 分配元组空间
@@ -569,7 +561,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       for i, name_ty in names {
         instrs.push(Ld(T1, { base: T0, offset: i * 8 }))
         instrs.push(Sd(T1, { base: Fp, offset: env.current_offset }))
-        env.vars.set(name_ty.0.to_string(), (env.current_offset, name_ty.1))
+        env = env.add(name_ty.0.to_string(), env.current_offset, name_ty.1)
         env.current_offset -= 8
       }
       instrs.append(compile_expr(e, env))
@@ -613,7 +605,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Add(T0, T0, T1))
 
       // 4. 加载并存储值
-      let value_offset = env.vars.get(value.to_string()).unwrap().0
+      let value_offset = env.vars.find(value.to_string()).unwrap().0
       match get_array_element_type(array, env) {
         Double => {
           instrs.push(Fld(Fa0, { base: Fp, offset: value_offset }))
@@ -629,56 +621,16 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         }
       }
     }
-    ExternalArray(label) =>
-      // 外部数组
-      instrs.push(La(reg_ret, label._))
+    ExternalArray(label) =>  instrs.push(La(reg_ret, label._))
   }
-  // println("instrs: " + instrs.to_string())
   instrs
-}
-
-///|
-fn get_var_type(name : @typing.Name, env : Env) -> @closure.LowType {
-  for var in env.vars {
-    if var.0 == name.to_string() {
-      // println("var: " + var.0.to_string())
-      // println("var type: " + var.1.1.to_string())
-      return var.1.1
-    }
-  }
-  // 在函数定义中查找变量类型
-  // println("get_var_type: " + name.to_string())
-  for fundef in env.fundefs {
-    // 检查参数
-    for _index, arg in fundef.args {
-      // println("arg: " + arg.0.to_string())
-      // println("name: " + name.to_string())
-      if arg.0 == name {
-        // println("arg type: " + arg.1.to_string())
-        return arg.1
-      }
-    }
-    // 检查自由变量
-    for _index, free_var in fundef.formal_free_vars {
-      if free_var.0 == name {
-        // println("free_var: " + free_var.0.to_string())
-        // println("free_var type: " + free_var.1.to_string())
-        return free_var.1
-      }
-    }
-  }
-  // 默认返回整数类型
-  Ptr
 }
 
 // 添加一个辅助函数来获取数组元素类型
 ///|
 fn get_array_element_type(array : @typing.Name, env : Env) -> @closure.LowType {
-  match get_var_type(array, env) {
-    Array(elem_type) => {
-      let _ = elem_type
-      elem_type
-    }
+  match env.find_type(array.to_string()) {
+    Array(elem_type) => elem_type
     _ => Ptr // 默认类型
   }
 }
