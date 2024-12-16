@@ -15,11 +15,9 @@ impl IndentLogger {
   outdent(Self) -> Unit
   write_string(Self, String) -> Unit
 }
+impl Logger for IndentLogger
 
 // Type aliases
 
 // Traits
-
-// Extension Methods
-impl Logger for IndentLogger
 

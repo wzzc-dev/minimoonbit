@@ -5,6 +5,7 @@ enum Stages {
   Knf
   KnfOpt
   Closure
+  Ssa
   Asm
   Finished
 } derive(Show, Eq, Compare)
@@ -17,6 +18,7 @@ fn Stages::from_string(s : String) -> Stages? {
     "knf" => Some(Stages::Knf)
     "knf-opt" => Some(Stages::KnfOpt)
     "closure" => Some(Stages::Closure)
+    "ssa" => Some(Stages::Ssa)
     "riscv" => Some(Stages::Asm)
     "finished" => Some(Stages::Finished)
     _ => None
@@ -31,6 +33,7 @@ fn Stages::next(self : Stages) -> Stages {
     Stages::Knf => Stages::KnfOpt
     Stages::KnfOpt => Stages::Closure
     Stages::Closure => Stages::Asm
+    Stages::Ssa => Stages::Asm
     Stages::Asm => Stages::Finished
     Stages::Finished => Stages::Finished
   }
@@ -47,6 +50,8 @@ struct CompileStatus {
   mut knf : @knf.Knf?
   mut opt_knf : @knf.Knf?
   mut closure_ir : @closure.Program?
+  mut ssa : @ssa.Ssa?
+  mut llvmir : @llvmir.LLVMIR?
   mut asm : Array[@riscv.AssemblyFunction]?
   mut js : String?
   mut wasm : String?
@@ -68,6 +73,8 @@ fn CompileStatus::initialize(
     knf: None,
     opt_knf: None,
     closure_ir: None,
+    ssa: None,
+    llvmir: None,
     asm: None,
     js: None,
     wasm: None,
@@ -84,13 +91,14 @@ fn CompileStatus::initialize(
       v.opt_knf = Some(@knf.Knf::from_json!(@json.parse!(file)))
       v.knf_env.init_counter_from_existing(v.opt_knf.unwrap())
     }
+    Ssa => v.closure_ir = Some(@closure.Program::from_json!(@json.parse!(file)))
     _ => fail!("invalid start stage")
   }
   v
 }
 
 ///| Run the next stage of compilation. Returns true if the compilation is finished.
-fn CompileStatus::step(self : CompileStatus, js : Bool, wasm : Bool) -> Bool {
+fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
   if self.curr_stage >= self.end_stage {
     return true
   }
@@ -121,17 +129,28 @@ fn CompileStatus::step(self : CompileStatus, js : Bool, wasm : Bool) -> Bool {
       )
       self.closure_ir = Some(closure_ir)
     }
+    Ssa => {
+      let ssa = @ssa.to_ssa(self.closure_ir.unwrap())
+      self.ssa = Some(ssa)
+    }
     Asm =>
-      if js {
-        // 添加生成 JavaScript 代码的逻辑
-        let js_code = @js.emit(self.closure_ir.unwrap())
-        self.js = Some(js_code)
-      } else if wasm {
-        let wasm_code = @wasm.emit(self.closure_ir.unwrap())
-        self.wasm = Some(wasm_code)
-      } else {
-        let real_asm = @riscv.emit(self.closure_ir.unwrap())
-        self.asm = Some(real_asm)
+      match backend {
+        JS => {
+          let js_code = @js.emit(self.closure_ir.unwrap())
+          self.js = Some(js_code)
+        }
+        WASM => {
+          let wasm_code = @wasm.emit(self.closure_ir.unwrap())
+          self.wasm = Some(wasm_code)
+        }
+        LLVMIR => {
+          let llvmir = @llvmir.to_llvmir(self.closure_ir.unwrap())
+          self.llvmir = Some(llvmir)
+        }
+        RISCV => {
+          let real_asm = @riscv.emit(self.closure_ir.unwrap())
+          self.asm = Some(real_asm)
+        }
       }
     Finished => ()
   }
@@ -143,8 +162,7 @@ fn CompileStatus::step(self : CompileStatus, js : Bool, wasm : Bool) -> Bool {
 fn CompileStatus::output(
   self : CompileStatus,
   json : Bool,
-  js : Bool,
-  wasm : Bool
+  outTy : Backend
 ) -> String {
   if json {
     match self.curr_stage {
@@ -153,6 +171,7 @@ fn CompileStatus::output(
       Knf => @json.stringify(self.typechecked.unwrap().to_json())
       KnfOpt => @json.stringify(self.knf.unwrap().to_json())
       Closure => @json.stringify(self.opt_knf.unwrap().to_json())
+      Ssa => @json.stringify(self.closure_ir.unwrap().to_json())
       Asm => @json.stringify(self.closure_ir.unwrap().to_json())
       Finished => @riscv.print_functions(self.asm.unwrap())
     }
@@ -163,15 +182,14 @@ fn CompileStatus::output(
       Knf => self.typechecked.unwrap().to_string()
       KnfOpt => self.knf.unwrap().to_string()
       Closure => self.opt_knf.unwrap().to_string()
+      Ssa => self.closure_ir.unwrap().to_string()
       Asm => self.closure_ir.unwrap().to_string()
       Finished =>
-        if js {
-          // 如果是生成 JavaScript，直接返回生成的代码
-          self.js.unwrap()
-        } else if wasm {
-          self.wasm.unwrap()
-        } else {
-          @riscv.print_functions(self.asm.unwrap())
+        match outTy {
+          JS => self.js.unwrap()
+          WASM => self.wasm.unwrap()
+          LLVMIR => @llvmir.print_functions(self.llvmir.unwrap())
+          RISCV => @riscv.print_functions(self.asm.unwrap())
         }
     }
   }
@@ -191,10 +209,12 @@ fn main {
   let end_stage = Ref::new(Stages::Finished)
   let knf_interpreter = Ref::new(false)
   let closure_interpreter = Ref::new(false)
+  let ssa_interpreter = Ref::new(false)
   let out_file = Ref::new("-")
   let print = Ref::new([])
   let js = Ref::new(false)
   let wasm = Ref::new(false)
+  let llvmir = Ref::new(false)
   // 
   @ArgParser.parse(
     [
@@ -235,6 +255,12 @@ fn main {
         "",
         @ArgParser.Set(closure_interpreter),
         "Run with closure interpreter",
+      ),
+      (
+        "--ssa-interpreter",
+        "",
+        @ArgParser.Set(ssa_interpreter),
+        "Run with Ssa interpreter",
       ),
       (
         "--out-file",
@@ -281,6 +307,7 @@ fn main {
       ),
       ("--js", "", @ArgParser.Set(js), "Generate JavaScript code"),
       ("--wasm", "", @ArgParser.Set(wasm), "Generate WebAssembly code"),
+      ("--llvmir", "", @ArgParser.Set(llvmir), "Generate llvmir"),
     ],
     fn(s) {
       if file.is_empty().not() {
@@ -298,6 +325,9 @@ fn main {
   }
   if closure_interpreter.val {
     end_stage.val = Stages::Closure
+  }
+  if ssa_interpreter.val {
+    end_stage.val = Stages::Ssa
   }
   let stages_to_print = print.val.map(
     fn(s) {
@@ -325,14 +355,22 @@ fn main {
       @util.die("Initialization error")
     }
   }
-
   // Run stages
   while true {
     let stg = status.curr_stage
-    let stop = status.step(js.val, wasm.val)
+    let ty = if js.val {
+        JS
+      } else if wasm.val {
+        WASM
+      } else if llvmir.val {
+        LLVMIR
+      } else {
+        RISCV
+      }
+    let stop = status.step(ty)
     if stages_to_print.contains(stg) {
       println("Stage: \{stg}")
-      println(status.output(json.val, js.val, wasm.val))
+      println(status.output(json.val, ty))
     }
     if stop {
       break
@@ -360,12 +398,31 @@ fn main {
         @util.die("Closure interpreter error")
       }
     }
+  } else if ssa_interpreter.val {
+    println(status.ssa.unwrap())
   } else {
-    let out_string = status.output(json.val, js.val, wasm.val)
+    let ty = if js.val {
+      JS
+    } else if wasm.val {
+      WASM
+    } else if llvmir.val {
+      LLVMIR
+    } else {
+      RISCV
+    }
+    let out_string = status.output(json.val, ty)
     if out_file.val == "-" {
       println(out_string)
     } else {
       @fs.write_string_to_file(path=out_file.val, content=out_string)
     }
   }
+}
+
+///|
+enum Backend {
+  JS
+  WASM
+  LLVMIR
+  RISCV
 }

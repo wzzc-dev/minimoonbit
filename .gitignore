@@ -26,3 +26,4 @@ rvlinux
 test-exe-file
 out.js
 out.wasm
+out.ir

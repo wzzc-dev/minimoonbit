@@ -44,7 +44,6 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   main.push(Addi(Sp, Sp, main_framesize))
   main.push(Ret)
   functions.push({ name: "minimbt_main", export: true, body: main })
-
   functions
 }
 
@@ -126,7 +125,6 @@ fn emit_fun(
   body.append(compile_expr(fundef.body, env))
   body.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
   body.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
-
   body.push(Addi(Sp, Sp, framesize))
   body.push(Ret)
   body
@@ -224,17 +222,26 @@ struct Env {
   fundefs : Array[@closure.FuncDef] // 函数定义
 }
 
+///|
 fn find(self : Env, key : String) -> (Int, @closure.LowType) {
   self.vars.find(key).unwrap()
 }
 
+///|
 fn find_type(self : Env, key : String) -> @closure.LowType {
   self.vars.find(key).unwrap().1
 }
-fn add(self : Env, name : String, offset : Int, lowtype : @closure.LowType) -> Env {
+///|
+fn add(
+  self : Env,
+  name : String,
+  offset : Int,
+  lowtype : @closure.LowType
+) -> Env {
   let vars = self.vars.add(name.to_string(), (offset, lowtype))
-  Env::{ vars, current_offset: self.current_offset, fundefs: self.fundefs}
+  Env::{ vars, current_offset: self.current_offset, fundefs: self.fundefs }
 }
+
 ///|
 fn Env::varOffset(env : Env, name : @typing.Name) -> Int {
   env.vars.find(name.to_string()).unwrap().0
@@ -616,7 +623,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         }
       }
     }
-    ExternalArray(label) =>  instrs.push(La(reg_ret, label._))
+    ExternalArray(label) => instrs.push(La(reg_ret, label._))
   }
   instrs
 }

@@ -526,20 +526,6 @@ fn expr(
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("expr: " + tokens.to_string())
   Parser(exprEq).or(exprLe).or(addSubLevelExpr).parse(tokens)
-  // Parser(addSubLevelExpr)
-  // .zeroOrOnce(ptoken_eq.or(ptoken_le).and(addSubLevelExpr))
-  // .map(
-  //   fn {
-  //     (expr, None) => expr
-  //     (expr, Some((ops, expr2))) =>
-  //       match ops {
-  //         EQ => @types.Syntax::Eq(expr, expr2)
-  //         LE => @types.Syntax::LE(expr, expr2)
-  //         _ => panic()
-  //       }
-  //   },
-  // )
-  // .parse(tokens)
 }
 
 ///|

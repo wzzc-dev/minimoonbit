@@ -1,12 +1,17 @@
 package moonbitlang/minimbt/parser
 
+alias @moonbitlang/minimbt as @minimbt
+
 // Values
+fn parse_from_string(String) -> @minimbt.Syntax
 
 // Types and methods
+type Parser
+
+pub(all) type! ParserErr String
+impl ToJson for ParserErr
 
 // Type aliases
 
 // Traits
-
-// Extension Methods
 

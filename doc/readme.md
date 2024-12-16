@@ -1,5 +1,6 @@
 # doc
 
+`moon run src/bin/main.mbt -- --closure-interpreter <input>`
 
 • RISC-V 相关测试：
 
