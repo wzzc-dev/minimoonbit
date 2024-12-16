@@ -467,7 +467,7 @@ pub let extenv : Map[String, @types.Type] = {
 
 ///|
 pub fn typing(e : @types.Syntax) -> @types.Syntax!TyErr {
-  unify!(Unit, infer!(@immut/sorted_map.empty(), e))
+  unify!(Unit, infer!(@immut/sorted_map.new(), e))
   // println("type check ok")
   // println("extenv: " + extenv.to_string())
   // println("typed program: " + e.to_string())
@@ -482,7 +482,7 @@ pub fn get_type(
   m : @immut/hashmap.T[String, @types.Type],
   e : @types.Syntax
 ) -> @types.Type!TyErr {
-  let mut sort_map : LocalCtx = @immut/sorted_map.empty()
+  let mut sort_map : LocalCtx = @immut/sorted_map.new()
   m.each(fn { k, v => sort_map = sort_map._.add(k, v) })
   infer!(sort_map, e)
 }

@@ -1,12 +1,54 @@
 package moonbitlang/minimbt/lex
 
 // Values
+fn lex(Context) -> Unit
 
 // Types and methods
+pub(all) struct Context {
+  str : String
+  offset : Int
+  array : Array[Token]
+}
+
+pub(all) enum Token {
+  TRUE
+  FALSE
+  UNIT
+  BOOL
+  INT
+  DOUBLE
+  ARRAY
+  NOT
+  IF
+  ELSE
+  FN
+  LET
+  NUMBER(Int)
+  IDENTIFIER(String)
+  DOT
+  Add
+  Sub
+  Mul
+  Div
+  ASSIGN
+  EQ
+  LE
+  LPAREN
+  RPAREN
+  LBRACKET
+  RBRACKET
+  LCURLYBRACKET
+  RCURLYBRACKET
+  ARROW
+  COLON
+  SEMICOLON
+  COMMA
+  WS
+  COMMENT
+}
+impl Show for Token
 
 // Type aliases
 
 // Traits
-
-// Extension Methods
 

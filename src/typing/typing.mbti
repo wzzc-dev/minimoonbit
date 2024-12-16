@@ -1,12 +1,24 @@
 package moonbitlang/minimbt/typing
 
+alias @moonbitlang/core/immut/hashmap as @hashmap
+alias @moonbitlang/minimbt as @minimbt
+
 // Values
+let extenv : Map[String, @minimbt.Type]
+
+fn get_type(@hashmap.T[String, @minimbt.Type], @minimbt.Syntax) -> @minimbt.Type!TyErr
+
+fn infer(LocalCtx, @minimbt.Syntax) -> @minimbt.Type!TyErr
+
+fn typing(@minimbt.Syntax) -> @minimbt.Syntax!TyErr
 
 // Types and methods
+type LocalCtx
+
+pub(all) type! TyErr String
+impl ToJson for TyErr
 
 // Type aliases
 
 // Traits
-
-// Extension Methods
 
