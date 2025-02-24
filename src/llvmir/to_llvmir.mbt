@@ -72,6 +72,7 @@ fn convert_expr_to_instructions(expr: @closure.Expr) -> Array[Instruction] {
             ));
         }
         // ... 处理其他表达式类型 ...
+        _ => panic()
     }
     instructions
 }
@@ -92,6 +93,7 @@ fn convert_type(ty: @closure.LowType) -> Type {
             Type::Function(return_type, param_types)
         }
         // 如果有其他类型，可以继续添加匹配分支
+        _ => panic()
     }
 }
 
@@ -121,6 +123,7 @@ fn convert_value_to_instruction(var: String, value: @closure.Expr) -> Instructio
             Type::Integer(32),  // 这里可能需要根据实际类型调整
             Value::Parameter(name.to_string())
         )
+        _ => panic()
     }
 }
 
@@ -131,7 +134,7 @@ fn convert_operand_to_value(operand: @closure.Expr) -> Value {
         // Bool(b) => Value::Constant(if b { 1 } else { 0 })
         // Float(f) => Value::FloatConstant(f)
         // Var(name) => Value::Register(name)
-        // _ => panic!("Unsupported operand type")
+        _ => panic()
     }
 }
 

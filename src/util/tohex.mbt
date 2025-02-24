@@ -1,6 +1,6 @@
 ///|
 pub fn i32_to_hex(v : Int) -> String {
-  let buf = @buffer.Buffer::new()
+  let buf = @buffer.new()
   buf.write_string("0x")
   for i = 7; i >= 0; i = i - 1 {
     let nibble = (v >> (i * 4)) & 0xf
@@ -15,7 +15,7 @@ pub fn i32_to_hex(v : Int) -> String {
 
 ///|
 pub fn i64_to_hex(v : Int64) -> String {
-  let buf = @buffer.Buffer::new()
+  let buf = @buffer.new()
   buf.write_string("0x")
   for i = 15; i >= 0; i = i - 1 {
     let nibble = (v >> (i * 4)) & 0xf
