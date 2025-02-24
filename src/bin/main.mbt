@@ -113,7 +113,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
       self.typechecked = Some(typechecked.unwrap())
     }
     Knf => {
-      let pre = @knf.syntax_preprocess(self.knf_env, self.typechecked.unwrap())
+      let pre = @knf.KnfEnv::syntax_preprocess(self.knf_env, self.typechecked.unwrap())
       let knf = self.knf_env.to_knf?(pre)
       self.knf = Some(knf.unwrap())
     }
@@ -310,7 +310,7 @@ fn main {
       ("--llvmir", "", @ArgParser.Set(llvmir), "Generate llvmir"),
     ],
     fn(s) {
-      if file.is_empty().not() {
+      if not(file.is_empty()) {
         @util.die("multiple files are given")
       }
       file = Some(s)

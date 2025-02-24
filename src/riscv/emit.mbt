@@ -201,7 +201,7 @@ pub(all) struct AssemblyFunction {
 ///|
 pub fn AssemblyFunction::output(
   self : AssemblyFunction,
-  logger : Logger
+  logger : &Logger
 ) -> Unit {
   let name = self.name
   if self.export {
@@ -261,12 +261,12 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(FmvDX(freg_ret, T0))
     }
     Neg(x) => {
-      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, x) }))
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, x) }))
       instrs.push(Neg(reg_ret, T0))
     }
     Add(x, y) | Sub(x, y) | Mul(x, y) | Div(x, y) => {
-      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, x) }))
-      instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, y) }))
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, x) }))
+      instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, y) }))
       match expr {
         Add(_) => instrs.push(Add(reg_ret, T0, T1))
         Sub(_) => instrs.push(Sub(reg_ret, T0, T1))
@@ -275,12 +275,12 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       }
     }
     FNeg(x) => {
-      instrs.push(Fld(Ft0, { base: Fp, offset: varOffset(env, x) }))
+      instrs.push(Fld(Ft0, { base: Fp, offset: Env::varOffset(env, x) }))
       instrs.push(FnegD(freg_ret, Ft0))
     }
     FAdd(x, y) | FSub(x, y) | FMul(x, y) | FDiv(x, y) => {
-      instrs.push(Fld(Ft0, { base: Fp, offset: varOffset(env, x) }))
-      instrs.push(Fld(Ft1, { base: Fp, offset: varOffset(env, y) }))
+      instrs.push(Fld(Ft0, { base: Fp, offset: Env::varOffset(env, x) }))
+      instrs.push(Fld(Ft1, { base: Fp, offset: Env::varOffset(env, y) }))
       match expr {
         FAdd(_) => instrs.push(FaddD(freg_ret, Ft0, Ft1))
         FSub(_) => instrs.push(FsubD(freg_ret, Ft0, Ft1))
@@ -289,8 +289,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       }
     }
     IfEq(x, y, e1, e2) => {
-      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, x) }))
-      instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, y) }))
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, x) }))
+      instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, y) }))
       // 相等比较分支
       let label_else = gen_label("else")
       let label_end = gen_label("end")
@@ -302,8 +302,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Label(label_end._))
     }
     IfLe(x, y, e1, e2) => {
-      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, x) }))
-      instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, y) }))
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, x) }))
+      instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, y) }))
       // println("A0: " + A0.to_string() + " A1: " + A1.to_string())
       // 小于等于比较分支
       let label_else = gen_label("else")
@@ -548,7 +548,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 2. 存储元素
       for i, elem in elems {
         // 加载元素值（使用Ld而不是Lw）
-        instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, elem) }))
+        instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, elem) }))
         // 存储到元组中
         instrs.push(Sd(T1, { base: T0, offset: i * 8 }))
       }
@@ -559,7 +559,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     LetTuple(names, tuple, e) => {
       // 元组解构
       // 从元组加载各个字段
-      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, tuple) }))
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, tuple) }))
       for i, name_ty in names {
         instrs.push(Ld(T1, { base: T0, offset: i * 8 }))
         instrs.push(Sd(T1, { base: Fp, offset: env.current_offset }))
@@ -570,10 +570,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     ArrayGet(array, index) => {
       // 1. 加载数组基地址
-      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, array) }))
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, array) }))
 
       // 2. 加载索引值并根据类型计算偏移
-      instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, index) }))
+      instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
       match get_array_element_type(array, env) {
         Double => instrs.push(Slli(T1, T1, 3)) // 浮点数: 8字节
         Int => instrs.push(Slli(T1, T1, 2)) // 整数: 4字节
@@ -597,10 +597,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     ArrayPut(array, index, value) => {
       // 1. 加载数组基地址
-      instrs.push(Ld(T0, { base: Fp, offset: varOffset(env, array) }))
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, array) }))
 
       // 2. 加载并计算索引偏移
-      instrs.push(Ld(T1, { base: Fp, offset: varOffset(env, index) }))
+      instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
       instrs.push(Slli(T1, T1, 3))
 
       // 3. 安全地计算目标地址
