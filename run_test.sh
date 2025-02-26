@@ -17,15 +17,14 @@ for MBT_FILE in test/test_src/*.mbt; do
   zig build-exe -target riscv64-linux -femit-bin=test-exe-file "$OUTPUT_FILE" ./riscv_rt/zig-out/lib/libmincaml.a -O Debug -fno-strip -mcpu=baseline_rv64 &&
   
   # 运行模拟器并将输出提取到临时文件（只取 >>> 前内容）
-  ./rvlinux -n test-exe-file | sed '/>>>/q' > output.txt
+  ./rvlinux -n test-exe-file | sed '/>>>/q' | awk 1 > output.txt
 
-  # 确保输出文件以换行符结尾
-  sed -i -e '$a\' output.txt
-  
+  # 确保输出文件以换行符结尾，并规范化行尾
+
   # 检查对应的 .ans 文件是否存在
   if [[ -f "$ANS_FILE" ]]; then
-    # 比较运行结果和 .ans 文件的内容
-    if diff -q --strip-trailing-cr output.txt "$ANS_FILE" > /dev/null; then
+    # 比较运行结果和 .ans 文件的内容（忽略行尾差异）
+    if cmp -s <(tr -d '\r' < output.txt) <(tr -d '\r' < "$ANS_FILE"); then
       echo "Test $MBT_FILE passed: Output matches $ANS_FILE"
     else
       echo "Test $MBT_FILE failed: Output differs from $ANS_FILE"
