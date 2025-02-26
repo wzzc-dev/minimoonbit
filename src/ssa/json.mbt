@@ -9,7 +9,7 @@ pub fn Ssa::to_json(self : Ssa) -> Json {
 ///|
 pub fn Ssa::from_json(json : Json) -> Ssa! {
   match json {
-    { "ssa": ssa, } => {
+    { "ssa": ssa, ..} => {
       
       { ssa: ssa.to_string() }
     }
