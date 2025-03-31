@@ -1611,7 +1611,7 @@ test {
 
 test {
   let tokens = []
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/adder.mbt").unwrap()
+  let _test2 = @fs.read_file_to_string?("test/test_src/adder.mbt").unwrap()
   @lex.lex({ str: _test2, offset: 0, array: tokens })
   // println(tokens)
   let (prog, _) = parser.parse(tokens[:]).unwrap()
