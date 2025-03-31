@@ -344,7 +344,7 @@ fn main {
   } else {
     file.unwrap()
   }
-  let contents = @fs.read_file_to_string?(path=file).unwrap()
+  let contents = @fs.read_file_to_string?(file).unwrap()
 
   // Compilation
   let status = match
@@ -414,7 +414,7 @@ fn main {
     if out_file.val == "-" {
       println(out_string)
     } else {
-      @fs.write_string_to_file(path=out_file.val, content=out_string)
+      let _ = @fs.write_string_to_file?(out_file.val, out_string)
     }
   }
 }

@@ -549,7 +549,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
 pub(all) type! KnfErr String derive(ToJson)
 
 test {
-  let list = @fs.read_dir!(path="test/test_src")
+  let list = @fs.read_dir!("test/test_src")
   println(list)
   for file in list {
     println(file)
@@ -561,7 +561,7 @@ test {
     //   println("matmul-flat mbt file")
     //   continue
     // }
-    let _test2 = @fs.read_file_to_string?(path="test/test_src/" + file).unwrap()
+    let _test2 = @fs.read_file_to_string?("test/test_src/" + file).unwrap()
     let parse = @parser.parse_from_string(_test2)
     try {
       let typed = @typing.typing!(parse)
@@ -583,7 +583,7 @@ test {
 }
 
 test {
-  let _test2 = @fs.read_file_to_string?(path="test/test_src/matmul.mbt").unwrap() //cls-reg-bug.mbt
+  let _test2 = @fs.read_file_to_string?("test/test_src/matmul.mbt").unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   println(parse)
   try {
