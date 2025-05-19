@@ -216,7 +216,7 @@ pub fn AssemblyFunction::output(
 
 // 添加一个环境结构来跟踪变量位置
 ///|
-struct Env {
+pub struct Env {
   vars : @immut/hashmap.T[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
   mut current_offset : Int // 当前可用的栈偏移
   fundefs : Array[@closure.FuncDef] // 函数定义
@@ -224,12 +224,12 @@ struct Env {
 
 ///|
 fn find(self : Env, key : String) -> (Int, @closure.LowType) {
-  self.vars.find(key).unwrap()
+  self.vars.get(key).unwrap()
 }
 
 ///|
 fn find_type(self : Env, key : String) -> @closure.LowType {
-  self.vars.find(key).unwrap().1
+  self.vars.get(key).unwrap().1
 }
 ///|
 fn add(
@@ -244,7 +244,7 @@ fn add(
 
 ///|
 fn Env::varOffset(env : Env, name : @typing.Name) -> Int {
-  env.vars.find(name.to_string()).unwrap().0
+  env.vars.get(name.to_string()).unwrap().0
 }
 
 ///|
@@ -337,7 +337,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     Var(name) =>
       // 从环境中查找变量的偏移
-      match env.vars.find(name.to_string()) {
+      match env.vars.get(name.to_string()) {
         Some((offset, ty)) =>
           match ty {
             Double => instrs.push(Fld(freg_ret, { base: Fp, offset }))
@@ -362,7 +362,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
 
       // 4. 存储捕获的变量
       for i, var in closure.actual_free_vars {
-        match env.vars.find(var.to_string()) {
+        match env.vars.get(var.to_string()) {
           Some((offset, _)) => {
             instrs.push(Ld(T0, { base: Fp, offset }))
             instrs.push(Sd(T0, { base: reg_ret, offset: (i + 1) * 8 }))
@@ -389,7 +389,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     CallClosure(f, args) => {
       for i, arg in args {
         let arg_type = env.find(arg.to_string()).1
-        match env.vars.find(arg.to_string()) {
+        match env.vars.get(arg.to_string()) {
           Some((offset, _)) =>
             if i < reg_arg_list.length() {
               match arg_type {
@@ -420,7 +420,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             println("Warning: Arg not found in environment: " + arg.to_string())
         }
       }
-      match env.vars.find(f.to_string()) {
+      match env.vars.get(f.to_string()) {
         Some((offset, _)) => {
           // 3. 加载函数指针并调用
           instrs.push(Ld(S11, { base: Fp, offset }))
@@ -455,7 +455,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     CallDirect(label, args) => {
       for i, arg in args {
         if i < reg_arg_list.length() {
-          match env.vars.find(arg.to_string()) {
+          match env.vars.get(arg.to_string()) {
             Some((offset, ty)) =>
               match ty {
                 Double =>
@@ -509,7 +509,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             }
           }
         } else {
-          let offset = env.vars.find(arg.to_string()).unwrap().0
+          let offset = env.vars.get(arg.to_string()).unwrap().0
           let stack_offset = -(i - reg_arg_list.length() + 1) * 8
           // 超出寄存器数量的参数存入栈
           match env.find_type(arg.to_string()) {
@@ -527,7 +527,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       match env.fundefs.search_by(fn(fundef) { fundef.name._ == label._ }) {
         Some(_) => instrs.push(Call(Label(label._)))
         None =>
-          match env.vars.find(label._) {
+          match env.vars.get(label._) {
             Some((offset, _)) => {
               // 3. 加载函数指针并调用
               instrs.push(Ld(S11, { base: Fp, offset }))
@@ -607,7 +607,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Add(T0, T0, T1))
 
       // 4. 加载并存储值
-      let value_offset = env.vars.find(value.to_string()).unwrap().0
+      let value_offset = env.vars.get(value.to_string()).unwrap().0
       match get_array_element_type(array, env) {
         Double => {
           instrs.push(Fld(Fa0, { base: Fp, offset: value_offset }))

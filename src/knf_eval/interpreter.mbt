@@ -1,5 +1,5 @@
 ///|
-struct KnfInterpreter {
+pub struct KnfInterpreter {
   extern_fns : Map[String, (Array[Value]) -> Value]
   mut init_env : InterpreterLocalVars
 }
@@ -22,7 +22,7 @@ pub(all) enum Value {
 } derive(Show)
 
 ///|
-pub fn Value::op_equal(self : Value, other : Value) -> Bool {
+pub impl Eq for Value with op_equal(self : Value, other : Value) -> Bool {
   match (self, other) {
     (Unit, Unit) => true
     (Int(x), Int(y)) => x == y
@@ -37,7 +37,7 @@ pub fn Value::op_equal(self : Value, other : Value) -> Bool {
 
 ///|
 pub fn KnfInterpreter::new() -> KnfInterpreter {
-  { extern_fns: Map::new(), init_env: InterpreterLocalVars::new() }
+  { extern_fns: Map::new(), init_env: @immut/hashmap.new()}
 }
 
 ///|
@@ -52,7 +52,7 @@ pub fn KnfInterpreter::add_extern_fn(
 
 ///|
 fn find(env : InterpreterLocalVars, name : Name) -> Value!Failure {
-  env.find(name).or_error!(Failure("variable not found: \{name}"))
+  env.get(name).or_error!(Failure("variable not found: \{name}"))
 }
 
 ///|

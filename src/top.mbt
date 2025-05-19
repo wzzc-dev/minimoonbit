@@ -55,6 +55,9 @@ pub(all) enum Type {
   Ptr
 } derive(Show)
 
+pub impl ToJson for Type with to_json(self : Type)-> Json {
+  self.to_string().to_json()
+}
 ///|
 pub fn Type::is_ptr_like(self : Type) -> Bool {
   match self {
@@ -98,7 +101,22 @@ pub fn Type::size_of(self : Type, size_of_ptr : Int) -> Int {
 }
 
 ///|
-pub fn Type::op_equal(self : Type, other : Type) -> Bool {
+// pub fn Type::op_equal(self : Type, other : Type) -> Bool {
+//   match (self, other) {
+//     (Unit, Unit) => true
+//     (Bool, Bool) => true
+//     (Int, Int) => true
+//     (Double, Double) => true
+//     (Fun(xs, x), Fun(ys, y)) => xs == ys && x == y
+//     (Tuple(xs), Tuple(ys)) => xs == ys
+//     (Array(x), Array(y)) => x == y
+//     (Ptr, Ptr) => true
+//     (Var(x), Var(y)) => x.val == y.val
+//     _ => false
+//   }
+// }
+
+pub impl Eq for Type with op_equal(self, other) -> Bool {
   match (self, other) {
     (Unit, Unit) => true
     (Bool, Bool) => true

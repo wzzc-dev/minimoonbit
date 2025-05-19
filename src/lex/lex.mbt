@@ -49,6 +49,7 @@ pub fn lex(context : Context) -> Unit {
         array.push(LE)
         context.offset += 2
       } else {
+        println(str[context.offset + 1])
         println("< unknown char")
         panic()
       }

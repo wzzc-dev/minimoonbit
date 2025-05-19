@@ -19,7 +19,7 @@ pub fn emit(input : @closure.Program) -> String {
       output += "function \{name._.to_string()}(env, "
 
       // 添加函数参数
-      output += String::concat(
+      output += @string.concat(
         func.args.map(fn(arg) { arg.0.to_string() }),
         separator=", ",
       )
@@ -34,7 +34,7 @@ pub fn emit(input : @closure.Program) -> String {
       output += "\n}\n\n"
     } else {
       output += "function \{name._.to_string()}("
-      output += String::concat(
+      output += @string.concat(
         func.args.map(fn(arg) { arg.0.to_string() }),
         separator=",",
       )
@@ -103,7 +103,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
         emit_expr(e)
       } else {
         // 生成 bind 调用来创建闭包
-        let free_vars = String::concat(
+        let free_vars = @string.concat(
           env.actual_free_vars.map(fn(v) { v.name.to_string() }),
           separator=",",
         )
@@ -146,7 +146,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
     LetTuple(names_tys, e1, e2) =>
       "(() => {\n  " +
       "const " +
-      String::concat(
+      @string.concat(
         names_tys.map(fn(name) { name.0.to_string() }),
         separator=",",
       ) +

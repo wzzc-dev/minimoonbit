@@ -1558,7 +1558,7 @@ let semicolon : Parser[@lex.Token] = ptoken(
 )
 
 ///|
-type Parser[V] (ArrayView[@lex.Token]) -> (V, ArrayView[@lex.Token])?
+pub type Parser[V] (ArrayView[@lex.Token]) -> (V, ArrayView[@lex.Token])?
 
 ///|
 fn parse[V](

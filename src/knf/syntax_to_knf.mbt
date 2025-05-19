@@ -553,7 +553,7 @@ test {
   println(list)
   for file in list {
     println(file)
-    guard file.ends_with(".mbt") else {
+    guard file.has_suffix(".mbt") else {
       println("not mbt file")
       continue
     }
@@ -585,13 +585,13 @@ test {
 test {
   let _test2 = @fs.read_file_to_string?("test/test_src/matmul.mbt").unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
-  println(parse)
+  // println(parse)
   try {
     let typed = @typing.typing!(parse)
-    println(typed)
+    println("typed")
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = KnfEnv::syntax_preprocess(env, typed)
-    println(pre)
+    println("pre")
     let knf = KnfEnv::to_knf!(env, pre)
     println(knf)
   } catch {

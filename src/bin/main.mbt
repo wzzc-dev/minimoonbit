@@ -197,8 +197,8 @@ fn CompileStatus::output(
 
 ///|
 fn main {
-  let argv = @sys.get_cli_args()
-  // println(argv)
+  let argv = @sys.get_cli_args()[1:]
+  println(argv)
   let mut file = None
   let knf_opt_iters = Ref::new(10)
   let knf_opt_inline_threshold = Ref::new(10)
@@ -225,7 +225,7 @@ fn main {
           fn(s) {
             match Stages::from_string(s) {
               Some(stage) => start_stage.val = stage
-              None => @util.die("Invalid stage")
+              None => @util.die("--start-stage Invalid stage")
             }
           },
         ),
@@ -238,7 +238,7 @@ fn main {
           fn(s) {
             match Stages::from_string(s) {
               Some(stage) => end_stage.val = stage
-              None => @util.die("Invalid stage")
+              None => @util.die("--end-stage Invalid stage")
             }
           },
         ),
@@ -316,9 +316,11 @@ fn main {
       file = Some(s)
     },
     "",
-    argv.split_at(2).1,
+    argv.to_array()
   )
 
+  // println(end_stage)
+  
   // Configure pipeline
   if knf_interpreter.val {
     end_stage.val = Stages::Knf
@@ -329,9 +331,10 @@ fn main {
   if ssa_interpreter.val {
     end_stage.val = Stages::Ssa
   }
+  
   let stages_to_print = print.val.map(
     fn(s) {
-      match Stages::from_string(s) {
+      match Stages::from_string(s.to_string()) {
         Some(stage) => stage
         None => @util.die("Invalid stage to print: \{s}")
       }
