@@ -6,8 +6,8 @@ pub fn to_json(self : Type) -> Json {
     Int => "Int"
     Double => "Float"
     Fun(params, result) =>
-      ["Fun", params.map(Type::to_json) |> Json::Array, result.to_json()]
-    Tuple(types) => ["Tuple", types.map(Type::to_json) |> Json::Array]
+      ["Fun", params.map(Type::to_json) |> Json::array, result.to_json()]
+    Tuple(types) => ["Tuple", types.map(Type::to_json) |> Json::array]
     Array(t) => ["Array", t.to_json()]
     Var({ val: None }) => ["Var", "None"]
     Var({ val: Some(t) }) => ["Var", ["Some", t.to_json()]]
@@ -30,9 +30,9 @@ pub fn Type::from_json(self : Json) -> Type!Error {
     "Bool" => Bool
     "Int" => Int
     "Float" => Double
-    ["Fun", [.. as params], result] =>
+    ["Fun", [.. params], result] =>
       Fun(from!(params), result |> Type::from_json!())
-    ["Tuple", [.. as types]] => Tuple(from!(types))
+    ["Tuple", [.. types]] => Tuple(from!(types))
     ["Array", t] => Array(t |> Type::from_json!())
     ["Var", "None"] => Var({ val: None })
     ["Var", ["Some", t]] => Var({ val: Some(t |> Type::from_json!()) })
@@ -71,10 +71,10 @@ test {
 ///|
 pub fn Fundef::to_json(self : Fundef) -> Json {
   {
-    "name": [self.name.0 |> Json::String, self.name.1.to_json()],
+    "name": [self.name.0 |> Json::string, self.name.1.to_json()],
     "args": [
       ..self.args.map(
-        fn { (name, ty) => ([name |> Json::String, ty.to_json()] : Json) },
+        fn { (name, ty) => ([name |> Json::string, ty.to_json()] : Json) },
       ),
     ],
     "body": self.body.to_json(),
@@ -108,7 +108,7 @@ pub fn Fundef::from_json(json : Json) -> Fundef!Error {
   }
 
   match json {
-    { "name": [name, ty], "args": [.. as args], "body": body, .. } => {
+    { "name": [name, ty], "args": [.. args], "body": body, .. } => {
       let name = match name.as_string() {
         Some(name) => name
         None => fail!("invalid field name: should contain a string and a type")
@@ -130,28 +130,28 @@ pub fn Syntax::to_json(self : Syntax) -> Json {
   match self {
     Unit => "Unit"
     Bool(b) => ["Bool", if b { true } else { false }]
-    Int(i) => ["Int", Json::Number(i.to_double())]
-    Double(f) => ["Float", Json::Number(f)]
+    Int(i) => ["Int", Json::number(i.to_double())]
+    Double(f) => ["Float", Json::number(f)]
     Not(e) => ["Not", e.to_json()]
     Neg(e, kind=Some(Double)) => ["FNeg", e.to_json()]
     Neg(e, kind=_) => ["Neg", e.to_json()]
     Prim(e1, e2, op, kind~) => {
       let op = if kind == Some(Double) { "F\{op}" } else { "{op}" }
-      [op |> Json::String, e1.to_json(), e2.to_json()]
+      [op |> Json::string, e1.to_json(), e2.to_json()]
     }
     Eq(e1, e2) => ["Eq", e1.to_json(), e2.to_json()]
     LE(e1, e2) => ["LE", e1.to_json(), e2.to_json()]
     If(e1, e2, e3) => ["If", e1.to_json(), e2.to_json(), e3.to_json()]
     Let((x, t), e1, e2) =>
-      ["Let", [x |> Json::String, t.to_json()], e1.to_json(), e2.to_json()]
-    Var(id) => ["Var", id |> Json::String]
+      ["Let", [x |> Json::string, t.to_json()], e1.to_json(), e2.to_json()]
+    Var(id) => ["Var", id |> Json::string]
     LetRec(funcdef, e) => ["LetRec", funcdef.to_json(), e.to_json()]
-    App(e, es) => ["App", e.to_json(), es.map(Syntax::to_json) |> Json::Array]
-    Tuple(es) => ["Tuple", es.map(Syntax::to_json) |> Json::Array]
+    App(e, es) => ["App", e.to_json(), es.map(Syntax::to_json) |> Json::array]
+    Tuple(es) => ["Tuple", es.map(Syntax::to_json) |> Json::array]
     LetTuple(def, value, body) =>
       [
         "LetTuple",
-        [..def.map(fn { (x, t) => ([x |> Json::String, t.to_json()] : Json) })],
+        [..def.map(fn { (x, t) => ([x |> Json::string, t.to_json()] : Json) })],
         value.to_json(),
         body.to_json(),
       ]
@@ -269,7 +269,7 @@ pub fn Syntax::from_json(json : Json) -> Syntax! {
       }
     ["LetRec", funcdef, e] =>
       LetRec(funcdef |> Fundef::from_json!(), e |> Syntax::from_json!())
-    ["App", e, [.. as es]] => {
+    ["App", e, [.. es]] => {
       fn from_json(values : ArrayView[Json]) -> Array[Syntax]! {
         let array = []
         for i = 0; i < values.length(); i = i + 1 {
@@ -280,7 +280,7 @@ pub fn Syntax::from_json(json : Json) -> Syntax! {
 
       App(e |> Syntax::from_json!(), from_json!(es))
     }
-    ["Tuple", [.. as es]] => {
+    ["Tuple", [.. es]] => {
       fn from_json(values : ArrayView[Json]) -> Array[Syntax]! {
         let array = []
         for i = 0; i < values.length(); i = i + 1 {
@@ -291,7 +291,7 @@ pub fn Syntax::from_json(json : Json) -> Syntax! {
 
       Tuple(from_json!(es))
     }
-    ["LetTuple", [.. as def], value, body] => {
+    ["LetTuple", [.. def], value, body] => {
       fn from_json(values : ArrayView[Json]) -> Array[(String, Type)]! {
         let array = []
         for i = 0; i < values.length(); i = i + 1 {

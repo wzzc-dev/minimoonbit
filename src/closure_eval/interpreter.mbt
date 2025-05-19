@@ -1,5 +1,5 @@
 ///|
-struct ClosureInterpreter {
+pub struct ClosureInterpreter {
   extern_fns : Map[String, (Array[Value]) -> Value]
   functions : Map[String, @closure.FuncDef]
 }
@@ -22,7 +22,7 @@ pub(all) enum Value {
 } derive(Show)
 
 ///|
-pub fn Value::op_equal(self : Value, other : Value) -> Bool {
+pub impl Eq for Value with op_equal(self : Value, other : Value) -> Bool {
   match (self, other) {
     (Unit, Unit) => true
     (Int(x), Int(y)) => x == y
@@ -51,7 +51,7 @@ pub fn ClosureInterpreter::add_extern_fn(
 
 ///|
 fn find(env : InterpreterLocalVars, name : Name) -> Value!Failure {
-  env.find(name).or_error!(Failure("variable not found: \{name}"))
+  env.get(name).or_error!(Failure("variable not found: \{name}"))
 }
 
 ///|

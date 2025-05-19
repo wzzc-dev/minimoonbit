@@ -2,8 +2,8 @@
 pub fn Expr::to_json(self : Expr) -> Json {
   match self {
     Expr::Unit => ["Unit"]
-    Expr::Int(i) => ["Int", Number(i.to_double())]
-    Expr::Double(d) => ["Double", Number(d)]
+    Expr::Int(i) => ["Int", Json::number(i.to_double())]
+    Expr::Double(d) => ["Double", Json::number(d)]
     Expr::Neg(n) => ["Neg", n.to_json()]
     Expr::Add(n1, n2) => ["Add", n1.to_json(), n2.to_json()]
     Expr::Sub(n1, n2) => ["Sub", n1.to_json(), n2.to_json()]
@@ -210,17 +210,17 @@ pub fn FuncDef::to_json(self : FuncDef) -> Json {
       let res = []
       for nt in self.args {
         let (n, t) = nt
-        res.push(Json::Array([n.to_json(), t.to_json()]))
+        res.push(Json::array([n.to_json(), t.to_json()]))
       }
-      Array(res)
+      Json::array(res)
     },
     "formal_free_vars": {
       let res = []
       for nt in self.formal_free_vars {
         let (n, t) = nt
-        res.push(Json::Array([n.to_json(), t.to_json()]))
+        res.push(Json::array([n.to_json(), t.to_json()]))
       }
-      Array(res)
+      Json::array(res)
     },
     "body": self.body.to_json(),
   }
@@ -273,7 +273,7 @@ pub fn FuncDef::from_json(json : Json) -> FuncDef! {
 ///|
 pub fn Program::to_json(self : Program) -> Json {
   {
-    "fundefs": Array(self.fundefs.map(FuncDef::to_json)),
+    "fundefs": Json::array(self.fundefs.map(FuncDef::to_json)),
     "body": self.body.to_json(),
   }
 }

@@ -37,3 +37,7 @@ pub fn LowType::size_of(self : LowType, size_of_ptr : Int) -> Int {
     _ => if self.is_ptr_like() { size_of_ptr } else { 4 }
   }
 }
+
+pub impl ToJson for LowType with to_json(self : LowType) -> Json {
+  self.to_string().to_json()
+}

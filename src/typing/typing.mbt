@@ -1,6 +1,5 @@
 ///|
 pub(all) type! TyErr String derive(ToJson)
-
 ///|
 fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit!TyErr {
   // println("unify:" + t1.to_string() + " t2: " + t2.to_string())
