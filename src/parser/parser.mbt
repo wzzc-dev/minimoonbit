@@ -1294,7 +1294,7 @@ fn functionType(
 ///|
 fn ptoken(predicate : (@lex.Token) -> Bool) -> Parser[@lex.Token] {
   fn {
-    [hd, .. as tl] => if predicate(hd) { Some((hd, tl)) } else { None }
+    [hd, .. tl] => if predicate(hd) { Some((hd, tl)) } else { None }
     [] => None
   }
 }
