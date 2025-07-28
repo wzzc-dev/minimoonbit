@@ -55,9 +55,11 @@ pub(all) enum Type {
   Ptr
 } derive(Show)
 
-pub impl ToJson for Type with to_json(self : Type)-> Json {
+///|
+pub impl ToJson for Type with to_json(self : Type) -> Json {
   self.to_string().to_json()
 }
+
 ///|
 pub fn Type::is_ptr_like(self : Type) -> Bool {
   match self {
@@ -144,8 +146,8 @@ pub fn Type::repr(self : Type) -> Type {
         }
         None => tvar
       }
-    Fun(xs, x) => Fun(xs.map(fn { t => t.repr() }), x.repr())
-    Tuple(xs) => Tuple(xs.map(fn { t => t.repr() }))
+    Fun(xs, x) => Fun(xs.map(t => t.repr()), x.repr())
+    Tuple(xs) => Tuple(xs.map(t => t.repr()))
     Array(x) => Array(x.repr())
   }
 }

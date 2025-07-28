@@ -38,6 +38,7 @@ pub fn LowType::size_of(self : LowType, size_of_ptr : Int) -> Int {
   }
 }
 
+///|
 pub impl ToJson for LowType with to_json(self : LowType) -> Json {
   self.to_string().to_json()
 }

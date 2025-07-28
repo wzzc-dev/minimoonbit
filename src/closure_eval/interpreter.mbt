@@ -5,10 +5,10 @@ pub struct ClosureInterpreter {
 }
 
 ///|
-pub typealias Name = @types.Name
+pub typealias @types.Name
 
 ///|
-pub typealias InterpreterLocalVars = @immut/hashmap.T[Name, Value]
+pub typealias @immut/hashmap.T[Name, Value] as InterpreterLocalVars
 
 ///|
 pub(all) enum Value {
@@ -44,183 +44,183 @@ pub fn ClosureInterpreter::new() -> ClosureInterpreter {
 pub fn ClosureInterpreter::add_extern_fn(
   self : ClosureInterpreter,
   name : String,
-  f : (Array[Value]) -> Value
+  f : (Array[Value]) -> Value,
 ) -> Unit {
   self.extern_fns.set(name, f)
 }
 
 ///|
-fn find(env : InterpreterLocalVars, name : Name) -> Value!Failure {
-  env.get(name).or_error!(Failure("variable not found: \{name}"))
+fn find(env : InterpreterLocalVars, name : Name) -> Value raise Failure {
+  env.get(name).or_error(Failure("variable not found: \{name}"))
 }
 
 ///|
 pub fn ClosureInterpreter::eval_full(
   self : ClosureInterpreter,
-  expr : @closure.Program
-) -> Value!Failure {
+  expr : @closure.Program,
+) -> Value raise Failure {
   for f in expr.fundefs {
-    self.functions.set(f.name._, f)
+    self.functions.set(f.name.inner(), f)
   }
   let env = @immut/hashmap.new()
-  self.eval!(env, expr.body)
+  self.eval(env, expr.body)
 }
 
 ///|
 pub fn ClosureInterpreter::eval(
   self : ClosureInterpreter,
   env : InterpreterLocalVars,
-  expr : @closure.Expr
-) -> Value!Failure {
+  expr : @closure.Expr,
+) -> Value raise Failure {
   // println("eval: " + expr.to_string())
   match expr {
     Unit => Unit
     Int(i) => Int(i)
     Double(d) => Double(d)
-    Var(v) => find!(env, v)
+    Var(v) => find(env, v)
     Neg(x) => {
-      let x = find!(env, x)
+      let x = find(env, x)
       match x {
         Int(x) => Int(-x)
-        _ => fail!("type mismatch, neg expects Int")
+        _ => fail("type mismatch, neg expects Int")
       }
     }
     Add(x, y) => {
-      let x = find!(env, x)
-      let y = find!(env, y)
+      let x = find(env, x)
+      let y = find(env, y)
       match (x, y) {
         (Int(x), Int(y)) => Int(x + y)
-        _ => fail!("type mismatch, add expects Int")
+        _ => fail("type mismatch, add expects Int")
       }
     }
     Sub(x, y) => {
-      let x = find!(env, x)
-      let y = find!(env, y)
+      let x = find(env, x)
+      let y = find(env, y)
       match (x, y) {
         (Int(x), Int(y)) => Int(x - y)
-        _ => fail!("type mismatch, sub expects Int")
+        _ => fail("type mismatch, sub expects Int")
       }
     }
     Mul(x, y) => {
-      let x = find!(env, x)
-      let y = find!(env, y)
+      let x = find(env, x)
+      let y = find(env, y)
       match (x, y) {
         (Int(x), Int(y)) => Int(x * y)
-        _ => fail!("type mismatch, mul expects Int")
+        _ => fail("type mismatch, mul expects Int")
       }
     }
     Div(x, y) => {
-      let x = find!(env, x)
-      let y = find!(env, y)
+      let x = find(env, x)
+      let y = find(env, y)
       match (x, y) {
         (Int(x), Int(y)) => Int(x / y)
-        _ => fail!("type mismatch, div expects Int")
+        _ => fail("type mismatch, div expects Int")
       }
     }
     FNeg(x) => {
-      let x = find!(env, x)
+      let x = find(env, x)
       match x {
         Double(x) => Double(-x)
-        _ => fail!("type mismatch, fneg expects Double")
+        _ => fail("type mismatch, fneg expects Double")
       }
     }
     FAdd(x, y) => {
-      let x = find!(env, x)
-      let y = find!(env, y)
+      let x = find(env, x)
+      let y = find(env, y)
       match (x, y) {
         (Double(x), Double(y)) => Double(x + y)
-        _ => fail!("type mismatch, fadd expects Double")
+        _ => fail("type mismatch, fadd expects Double")
       }
     }
     FSub(x, y) => {
-      let x = find!(env, x)
-      let y = find!(env, y)
+      let x = find(env, x)
+      let y = find(env, y)
       match (x, y) {
         (Double(x), Double(y)) => Double(x - y)
-        _ => fail!("type mismatch, fsub expects Double")
+        _ => fail("type mismatch, fsub expects Double")
       }
     }
     FMul(x, y) => {
-      let x = find!(env, x)
-      let y = find!(env, y)
+      let x = find(env, x)
+      let y = find(env, y)
       match (x, y) {
         (Double(x), Double(y)) => Double(x * y)
-        _ => fail!("type mismatch, fmul expects Double")
+        _ => fail("type mismatch, fmul expects Double")
       }
     }
     FDiv(x, y) => {
-      let x = find!(env, x)
-      let y = find!(env, y)
+      let x = find(env, x)
+      let y = find(env, y)
       match (x, y) {
         (Double(x), Double(y)) => Double(x / y)
-        _ => fail!("type mismatch, fdiv expects Double")
+        _ => fail("type mismatch, fdiv expects Double")
       }
     }
     IfEq(x, y, e1, e2) => {
-      let x = find!(env, x)
-      let y = find!(env, y)
+      let x = find(env, x)
+      let y = find(env, y)
       match (x, y) {
         (Int(x), Int(y)) =>
           if x == y {
-            self.eval!(env, e1)
+            self.eval(env, e1)
           } else {
-            self.eval!(env, e2)
+            self.eval(env, e2)
           }
         (Double(x), Double(y)) =>
           if x == y {
-            self.eval!(env, e1)
+            self.eval(env, e1)
           } else {
-            self.eval!(env, e2)
+            self.eval(env, e2)
           }
-        _ => fail!("type mismatch, ifeq expects Int or Double")
+        _ => fail("type mismatch, ifeq expects Int or Double")
       }
     }
     IfLe(x, y, e1, e2) => {
-      let x = find!(env, x)
-      let y = find!(env, y)
+      let x = find(env, x)
+      let y = find(env, y)
       match (x, y) {
         (Int(x), Int(y)) =>
           if x <= y {
-            self.eval!(env, e1)
+            self.eval(env, e1)
           } else {
-            self.eval!(env, e2)
+            self.eval(env, e2)
           }
         (Double(x), Double(y)) =>
           if x <= y {
-            self.eval!(env, e1)
+            self.eval(env, e1)
           } else {
-            self.eval!(env, e2)
+            self.eval(env, e2)
           }
-        _ => fail!("type mismatch, ifle expects Int or Double")
+        _ => fail("type mismatch, ifle expects Int or Double")
       }
     }
     Let((x, _), e1, e2) => {
-      let v = self.eval!(env, e1)
+      let v = self.eval(env, e1)
       let new_env = env.add(x, v)
-      self.eval!(new_env, e2)
+      self.eval(new_env, e2)
     }
     MakeClosure((n, _), c, e) => {
       let closure = self.functions
-        .get(c.name._)
-        .or_error!(Failure("closure not found: " + n.to_string()))
+        .get(c.name.inner())
+        .or_error(Failure("closure not found: " + n.to_string()))
       let fv = []
       for x in c.actual_free_vars {
-        fv.push(find!(env, x))
+        fv.push(find(env, x))
       }
       let new_env = env.add(n, Closure(closure, fv))
-      self.eval!(new_env, e)
+      self.eval(new_env, e)
     }
     CallDirect(l, xs) => {
       let args = []
       for x in xs {
-        args.push(find!(env, x))
+        args.push(find(env, x))
       }
-      match self.functions.get(l._) {
-        Some(f) => self.eval_fn!(f, args, [])
+      match self.functions.get(l.inner()) {
+        Some(f) => self.eval_fn(f, args, [])
         None => {
           let ext_fn = self.extern_fns
-            .get(l._)
-            .or_error!(
+            .get(l.inner())
+            .or_error(
               Failure(
                 "Given function \{l} is not found in both internal and external functions",
               ),
@@ -230,57 +230,57 @@ pub fn ClosureInterpreter::eval(
       }
     }
     CallClosure(n, xs) => {
-      let closure = find!(env, n)
+      let closure = find(env, n)
       let args = []
       for x in xs {
-        args.push(find!(env, x))
+        args.push(find(env, x))
       }
       match closure {
-        Closure(f, fv) => self.eval_fn!(f, args, fv)
-        _ => fail!("type mismatch, callclosure expects Closure")
+        Closure(f, fv) => self.eval_fn(f, args, fv)
+        _ => fail("type mismatch, callclosure expects Closure")
       }
     }
     MakeTuple(xs) => {
       let vs = []
       for x in xs {
-        vs.push(find!(env, x))
+        vs.push(find(env, x))
       }
       Tuple(vs)
     }
     LetTuple(xts, y, e) => {
       let mut new_env = env
-      let y = find!(env, y)
+      let y = find(env, y)
       match y {
         Tuple(vs) => {
           let len = xts.length()
           if len != vs.length() {
-            fail!("tuple size mismatch")
+            fail("tuple size mismatch")
           }
           for i = 0; i < len; i = i + 1 {
             let (x, _) = xts[i]
             new_env = new_env.add(x, vs[i])
           }
         }
-        _ => fail!("type mismatch, lettuple expects Tuple")
+        _ => fail("type mismatch, lettuple expects Tuple")
       }
-      self.eval!(new_env, e)
+      self.eval(new_env, e)
     }
     ArrayGet(arr, idx) => {
-      let arr = find!(env, arr)
-      let idx = find!(env, idx)
+      let arr = find(env, arr)
+      let idx = find(env, idx)
       match (arr, idx) {
         (Array(arr), Int(idx)) => arr[idx]
-        _ => fail!("type mismatch, get expects Array and Int")
+        _ => fail("type mismatch, get expects Array and Int")
       }
     }
     ArrayPut(arr, idx, v) => {
-      let arr = find!(env, arr)
-      let idx = find!(env, idx)
-      let v = find!(env, v)
+      let arr = find(env, arr)
+      let idx = find(env, idx)
+      let v = find(env, v)
       match (arr, idx) {
         (Array(arr), Int(idx)) => arr[idx] = v
         _ =>
-          fail!(
+          fail(
             "type mismatch, put expects Array and Int" +
             "arrayput got arr: " +
             arr.to_string() +
@@ -290,7 +290,7 @@ pub fn ClosureInterpreter::eval(
       }
       Unit
     }
-    ExternalArray(_) => fail!("ExternalArray is not supported")
+    ExternalArray(_) => fail("ExternalArray is not supported")
   }
 }
 
@@ -299,8 +299,8 @@ pub fn ClosureInterpreter::eval_fn(
   self : ClosureInterpreter,
   func : @closure.FuncDef,
   args : Array[Value],
-  fv : Array[Value]
-) -> Value!Failure {
+  fv : Array[Value],
+) -> Value raise Failure {
   let mut env = @immut/hashmap.new()
   for i = 0; i < func.args.length(); i = i + 1 {
     let (x, _) = func.args[i]
@@ -311,5 +311,5 @@ pub fn ClosureInterpreter::eval_fn(
     env = env.add(x, fv[i])
   }
   env = env.add(func.old_name, Closure(func, fv))
-  self.eval!(env, func.body)
+  self.eval(env, func.body)
 }

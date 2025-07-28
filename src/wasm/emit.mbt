@@ -21,8 +21,8 @@ pub fn emit(input : @closure.Program) -> String {
 
   // 处理所有函数定义
   for fundef in input.fundefs {
-    if not(extenv.contains(fundef.name._)) {
-      output += "  (func $" + fundef.name._ + " "
+    if not(extenv.contains(fundef.name.inner())) {
+      output += "  (func $" + fundef.name.inner() + " "
 
       // 如果是闭包函数，添加环境指针参数
       if fundef.is_closure {
@@ -119,7 +119,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
 
     // 函数调用
     CallDirect(func, args) => {
-      let mut result = "(call $" + func._
+      let mut result = "(call $" + func.inner()
       for arg in args {
         result += " " + arg.to_string()
       }

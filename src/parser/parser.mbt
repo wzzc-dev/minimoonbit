@@ -1,13 +1,13 @@
 ///|
 fn program(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   Parser(topLevel).parse(tokens)
 }
 
 ///|
 fn topLevel(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("topLevel: " + tokens.to_string())
   Parser(toplevelFnDecl).or(topLetDecl).parse(tokens)
@@ -15,24 +15,24 @@ fn topLevel(
 
 ///|
 fn topLetDecl(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("topLetDecl: " + tokens.to_string())
-  ptoken(
-    fn {
+  ptoken(fn(token) {
+    match token {
       @lex.Token::LET => true
       _ => false
-    },
-  )
-  .and(identifier)
-  .and(ptoken_colon)
-  .and(parseType)
-  .and(ptoken_assign)
-  .and(expr)
-  .and(semicolon)
+    }
+  })
+  .parser_and(identifier)
+  .parser_and(ptoken_colon)
+  .parser_and(parseType)
+  .parser_and(ptoken_assign)
+  .parser_and(expr)
+  .parser_and(semicolon)
   .zeroOrOnce(topLevel)
-  .map(
-    fn {
+  .map(fn(input) {
+    match input {
       (
         ((((((_, @lex.Token::IDENTIFIER(id)), _), _type), _), expr), _),
         Some(topLevel),
@@ -54,64 +54,61 @@ fn topLetDecl(
       //   println("Invalid top let decl declaration" + tokens.to_string())
       //   panic()
       // }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 ///|
 fn toplevelFnDecl(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   Parser(mainFnDecl)
   .or(topFnDecl)
-  .and(semicolon)
+  .parser_and(semicolon)
   .zeroOrOnce(topLevel)
-  .map(
-    fn {
+  .map(fn(input) {
+    match input {
       (((name, args, body), _), Some(topLevel)) =>
         // println("top_let_decl: name" + name.to_string())
         @types.Syntax::LetRec({ name, args, body }, topLevel)
       (((name, args, body), _), None) =>
         // println("top_let_decl: name None" + name.to_string())
         @types.Syntax::LetRec({ name, args, body }, @types.Syntax::Unit)
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 ///|
 fn mainFnDecl(
-  tokens : ArrayView[@lex.Token]
-) ->
-     (
-       ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
-       ArrayView[@lex.Token],
-     )? {
+  tokens : ArrayView[@lex.Token],
+) -> (
+  ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
+  ArrayView[@lex.Token],
+)? {
   // println("main_fn_decl: " + tokens.to_string())
-  ptoken(
-    fn {
+  ptoken(fn(token) {
+    match token {
       @lex.Token::FN => true
       _ => false
-    },
-  )
-  .and(
-    ptoken(
-      fn {
+    }
+  })
+  .parser_and(
+    ptoken(fn(token) {
+      match token {
         @lex.Token::IDENTIFIER("main") => true
         @lex.Token::IDENTIFIER("init") => true
         _ => false
-      },
-    ),
+      }
+    }),
   )
-  .and(fnBody)
-  .map(
-    fn {
-      (_, fnBody) =>
-        // println("main_fn_decl: fnBody: " + fnBody.to_string())
-        (("main", @types.Type::Fun([], @types.Type::Unit)), [], fnBody)
-    },
-  )
+  .parser_and(fnBody)
+  .map(fn(input) {
+    match input {
+      ((_, _), fnBody) => (("main", @types.Type::Fun([], @types.Type::Unit)), [], fnBody)
+    }
+  })
   .parse(tokens)
 }
 
@@ -120,52 +117,53 @@ fn mainFnDecl(
 
 ///|
 fn topFnDecl(
-  tokens : ArrayView[@lex.Token]
-) ->
-     (
-       ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
-       ArrayView[@lex.Token],
-     )? {
+  tokens : ArrayView[@lex.Token],
+) -> (
+  ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
+  ArrayView[@lex.Token],
+)? {
   // println("top_fn_decl: " + tokens.to_string())
   ptoken_fn
-  .and(identifier)
-  .and(lparen)
+  .parser_and(identifier)
+  .parser_and(lparen)
   .zeroOrOnce(paramList)
-  .and(rparen)
-  .and(arrow)
-  .and(parseType)
-  .and(fnBody)
-  .map(
-    fn(input) {
-      // println("top_fn_decl input : " + input.to_string())
-      match input {
+  .parser_and(rparen)
+  .parser_and(arrow)
+  .parser_and(parseType)
+  .parser_and(fnBody)
+  .map(fn(input) {
+    // println("top_fn_decl input : " + input.to_string())
+    match input {
+      (
         (
-          (
-            (((((_, @lex.Token::IDENTIFIER(id)), _), Some(param_list)), _), _),
-            type_,
-          ),
-          fnBody,
-        ) => {
-          let fun_type = param_list.map(fn { (_, type_) => type_ })
-          ((id, @types.Fun(fun_type, type_)), param_list, fnBody)
-        }
-        (((((((_, @lex.Token::IDENTIFIER(id)), _), None), _), _), type_), fnBody
-        ) => ((id, @types.Fun([], type_)), [], fnBody)
-        (((((((_, ident), _), _), _), _), type_), fnBody) => {
-          println("Invalid top fn decl declaration" + tokens.to_string())
-          println(
-            "ident: " +
-            ident.to_string() +
-            " type: " +
-            type_.to_string() +
-            " fnBody: " +
-            fnBody.to_string(),
-          )
-          panic()
-        }
+          (((((_, @lex.Token::IDENTIFIER(id)), _), Some(param_list)), _), _),
+          type_,
+        ),
+        fnBody,
+      ) => {
+        let fun_type = param_list.map(fn(input) {
+          match input {
+            (_, type_) => type_
+          }
+        })
+        ((id, @types.Fun(fun_type, type_)), param_list, fnBody)
       }
-    },
-  )
+      (((((((_, @lex.Token::IDENTIFIER(id)), _), None), _), _), type_), fnBody) =>
+        ((id, @types.Fun([], type_)), [], fnBody)
+      (((((((_, ident), _), _), _), _), type_), fnBody) => {
+        println("Invalid top fn decl declaration" + tokens.to_string())
+        println(
+          "ident: " +
+          ident.to_string() +
+          " type: " +
+          type_.to_string() +
+          " fnBody: " +
+          fnBody.to_string(),
+        )
+        panic()
+      }
+    }
+  })
   .parse(tokens)
 }
 
@@ -173,12 +171,12 @@ fn topFnDecl(
 
 ///|
 fn paramList(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (Array[(String, @types.Type)], ArrayView[@lex.Token])? {
   Parser(param)
-  .and(comma.and(param).many())
-  .map(
-    fn {
+  .parser_and(comma.parser_and(param).many())
+  .map(fn(input) {
+    match input {
       (param, param_list) => {
         // println("param_list")
         let params = [param]
@@ -188,8 +186,8 @@ fn paramList(
         }
         params
       }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
@@ -197,18 +195,18 @@ fn paramList(
 
 ///|
 fn param(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> ((String, @types.Type), ArrayView[@lex.Token])? {
   identifier
-  .and(typeAnnotation)
-  .map(
-    fn {
+  .parser_and(typeAnnotation)
+  .map(fn(input) {
+    match input {
       (@lex.Token::IDENTIFIER(i), t) => (i, t)
       _ =>
         // println("Invalid param")
         panic()
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
@@ -216,21 +214,21 @@ fn param(
 
 ///|
 fn fnBody(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("fnBody: " + tokens.to_string())
   lcurlybracket
-  .and(stmt)
-  .and(rcurlybracket)
-  .map(
-    fn {
+  .parser_and(stmt)
+  .parser_and(rcurlybracket)
+  .map(fn(input) {
+    match input {
       ((_, stmt), _) => stmt
       // {
       // println("fnBody: stmt :" + stmt.to_string())
 
       // }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
@@ -241,22 +239,21 @@ fn fnBody(
 
 ///|
 fn nontopFnDecl(
-  tokens : ArrayView[@lex.Token]
-) ->
-     (
-       ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
-       ArrayView[@lex.Token],
-     )? {
+  tokens : ArrayView[@lex.Token],
+) -> (
+  ((String, @types.Type), Array[(String, @types.Type)], @types.Syntax),
+  ArrayView[@lex.Token],
+)? {
   // println("nontop_fn_decl: " + tokens.to_string())
   ptoken_fn
-  .and(identifier)
-  .and(lparen)
+  .parser_and(identifier)
+  .parser_and(lparen)
   .zeroOrOnce(nonTopParamList)
-  .and(rparen)
-  .zeroOrOnce(arrow.and(parseType))
-  .and(fnBody)
-  .map(
-    fn {
+  .parser_and(rparen)
+  .zeroOrOnce(arrow.parser_and(parseType))
+  .parser_and(fnBody)
+  .map(fn(input) {
+    match input {
       ((((((_, @lex.Token::IDENTIFIER(id)), _), param_list), _), type_), fnBody) => {
         // println("nontop_fn_decl")
         // println("nontop_fn_decl: id: " + id.to_string())
@@ -267,7 +264,11 @@ fn nontopFnDecl(
           Some(type_) => type_
           None => []
         }
-        let fun_type = params.map(fn { (_, type_) => type_ })
+        let fun_type = params.map(fn(input) {
+          match input {
+            (_, type_) => type_
+          }
+        })
         let type_ = match type_ {
           Some((_, type_)) => @types.Type::Fun(fun_type, type_)
           None => @types.Type::Fun(fun_type, Var({ val: None }))
@@ -281,8 +282,8 @@ fn nontopFnDecl(
         println("Invalid non top level declaration")
         panic()
       }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 // nontop_param_list:
@@ -290,18 +291,22 @@ fn nontopFnDecl(
 
 ///|
 fn nonTopParamList(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (Array[(String, @types.Type)], ArrayView[@lex.Token])? {
   Parser(nonTopParam)
-  .and(comma.and(nonTopParam).many())
-  .map(
-    fn {
+  .parser_and(comma.parser_and(nonTopParam).many())
+  .map(fn(input) {
+    match input {
       (first, param_list) => {
-        let param_list = param_list.map(fn { (_, x) => x })
+        let param_list = param_list.map(fn(input) {
+          match input {
+            (_, x) => x
+          }
+        })
         [first, ..param_list]
       }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
@@ -309,12 +314,12 @@ fn nonTopParamList(
 
 ///|
 fn nonTopParam(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> ((String, @types.Type), ArrayView[@lex.Token])? {
   identifier
   .zeroOrOnce(typeAnnotation)
-  .map(
-    fn {
+  .map(fn(input) {
+    match input {
       (@lex.Token::IDENTIFIER(id), type_annotation) =>
         match type_annotation {
           Some(type_annotation) => (id, type_annotation)
@@ -323,14 +328,14 @@ fn nonTopParam(
       _ =>
         // println("Invalid non top level declaration")
         panic()
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 ///|
 fn stmt(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("stmt: " + tokens.to_string())
   Parser(letTupleStmt)
@@ -343,21 +348,21 @@ fn stmt(
 
 ///|
 fn letTupleStmt(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("letTupleStmt: " + tokens.to_string())
   ptoken_let
-  .and(lparen)
-  .and(identifier)
-  .and(comma.and(identifier).many())
-  .and(rparen)
+  .parser_and(lparen)
+  .parser_and(identifier)
+  .parser_and(comma.parser_and(identifier).many())
+  .parser_and(rparen)
   .zeroOrOnce(typeAnnotation)
-  .and(ptoken_assign)
-  .and(expr)
-  .and(semicolon)
-  .and(stmt)
-  .map(
-    fn {
+  .parser_and(ptoken_assign)
+  .parser_and(expr)
+  .parser_and(semicolon)
+  .parser_and(stmt)
+  .map(fn(input) {
+    match input {
       (
         (
           (
@@ -413,8 +418,8 @@ fn letTupleStmt(
         println("Invalid let statement")
         panic()
       }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 // let_stmt:
@@ -422,18 +427,18 @@ fn letTupleStmt(
 
 ///|
 fn letStmt(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("letStmt: " + tokens.to_string())
   ptoken_let
-  .and(identifier)
+  .parser_and(identifier)
   .zeroOrOnce(typeAnnotation)
-  .and(ptoken_assign)
-  .and(expr)
-  .and(semicolon)
-  .and(stmt)
-  .map(
-    fn {
+  .parser_and(ptoken_assign)
+  .parser_and(expr)
+  .parser_and(semicolon)
+  .parser_and(stmt)
+  .map(fn(input) {
+    match input {
       (
         (
           ((((_, @lex.Token::IDENTIFIER(id)), Some(type_annotation)), _), expr),
@@ -449,53 +454,61 @@ fn letStmt(
       _ =>
         // println("Invalid let statement")
         panic()
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
+
+
 
 // type_annotation: COLON type;
 
 ///|
 fn typeAnnotation(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Type, ArrayView[@lex.Token])? {
-  ptoken_colon.and(parseType).map(fn { (_, t) => t }).parse(tokens)
+  ptoken_colon.parser_and(parseType).map(fn(input) {
+    match input {
+      (_, t) => t
+    }
+  }).parse(tokens)
 }
 
 // fn_decl_stmt: nontop_fn_decl ';' stmt;
+
 ///|
 fn fnDeclStmt(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("fnDeclStmt: " + tokens.to_string())
   Parser(nontopFnDecl)
-  .and(semicolon)
-  .and(stmt)
-  .map(
-    fn {
+  .parser_and(semicolon)
+  .parser_and(stmt)
+  .map(fn(input) {
+    match input {
       (((name, args, body), _), stmt) =>
         // println("fnDeclStmt: " + ((name, args, body), stmt).to_string())
         @types.Syntax::LetRec({ name, args, body }, stmt)
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 // // x[y] = z;
 // assign_stmt: get_expr '=' expr ';' stmt;
+
 ///|
 fn assignStmt(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("assignStmt: " + tokens.to_string())
   Parser(getOrApplyLevelExpr)
-  .and(ptoken_assign)
-  .and(expr)
-  .and(semicolon)
-  .and(stmt)
-  .map(
-    fn {
+  .parser_and(ptoken_assign)
+  .parser_and(expr)
+  .parser_and(semicolon)
+  .parser_and(stmt)
+  .map(fn(input) {
+    match input {
       ((((get_expr, _), expr), _), stmt) =>
         match get_expr {
           Get(arr, idx) =>
@@ -505,8 +518,8 @@ fn assignStmt(
             @types.Syntax::Let(("_", Var({ val: None })), get_expr, stmt)
           }
         }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
@@ -514,7 +527,7 @@ fn assignStmt(
 
 ///|
 fn exprStmt(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("exprStmt: " + tokens.to_string())
   Parser(expr).parse(tokens)
@@ -522,234 +535,223 @@ fn exprStmt(
 
 ///|
 fn expr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("expr: " + tokens.to_string())
   Parser(exprEq).or(exprLe).or(addSubLevelExpr).parse(tokens)
 }
 
+
+
 ///|
 fn exprEq(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   Parser(addSubLevelExpr)
-  .and(ptoken_eq)
-  .and(expr)
-  .map(fn { ((expr, _), expr2) => @types.Syntax::Eq(expr, expr2) })
+  .parser_and(ptoken_eq)
+  .parser_and(expr)
+  .map(fn(input) {
+    match input {
+      ((expr, _), expr2) => @types.Syntax::Eq(expr, expr2)
+    }
+  })
   .parse(tokens)
 }
 
 ///|
-let ptoken_le : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_le : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
     @lex.Token::LE => true
     _ => false
-  },
-)
+  }
+})
+
+
+
 
 ///|
 fn exprLe(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("exprLe: " + tokens.to_string())
   Parser(addSubLevelExpr)
-  .and(ptoken_le)
-  .and(expr)
-  .map(fn { ((expr, _), expr2) => @types.Syntax::LE(expr, expr2) })
+  .parser_and(ptoken_le)
+  .parser_and(expr)
+  .map(fn(input) {
+    match input {
+      ((expr, _), expr2) => @types.Syntax::LE(expr, expr2)
+    }
+  })
   .parse(tokens)
 }
 
+
+
+
 ///|
 fn addSubLevelExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   Parser(mulDivLevelExpr)
-  .and(ptoken_plus.or(ptoken_minus).and(mulDivLevelExpr).many())
-  .map(
-    fn {
+  .parser_and(ptoken_plus.or(ptoken_minus).parser_and(mulDivLevelExpr).many())
+  .map(fn(input) {
+    match input {
       (e, list) => {
         if list.is_empty() {
           return e
         }
-        let result = list.fold(
-          init=e,
-          fn {
-            e, (Add, expr) => Prim(e, expr, Add, kind=None)
-            e, (Sub, expr) => Prim(e, expr, Sub, kind=None)
-            _, (t, _) => {
+        let result = list.fold(init=e, fn(e, input) {
+          match input {
+            (Add, expr) => Prim(e, expr, Add, kind=None)
+            (Sub, expr) => Prim(e, expr, Sub, kind=None)
+            (t, _) => {
               println(" Add or Sub not " + t.to_string())
               panic()
             }
-          },
-        )
+          }
+        })
         result
       }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
-///|
-let ptoken_plus : Parser[@lex.Token] = ptoken(
-  fn {
-    @lex.Token::Add => true
-    _ => false
-  },
-)
+
 
 ///|
-let ptoken_minus : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_plus : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
+    @lex.Token::Add => true
+    _ => false
+  }
+})
+
+///|
+let ptoken_minus : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
     @lex.Token::Sub => true
     _ => false
-  },
-)
+  }
+})
 
 // mul_div_level_expr:
 //  if_level_expr
 //  | if_level_expr '*' mul_div_level_expr
 //  | if_level_expr '/' mul_div_level_expr;
 
-///|
-fn mulDivLevelExpr(
-  tokens : ArrayView[@lex.Token]
-) -> (@types.Syntax, ArrayView[@lex.Token])? {
 
-  // Parser(ifLevelExpr)
-  // .zeroOrOnce(ptoken_star.or(ptoken_slash).and(ifLevelExpr).many())
-  // .map(
-  //   fn {
-  //     (expr, None) => expr
-  //     // (expr, Some((@lex.Mul, expr2))) =>
-  //     //   @types.Syntax::Prim(expr, expr2, @types.Op::Mul, kind=None)
-  //     // (expr, Some((@lex.Div, expr2))) =>
-  //     //   @types.Syntax::Prim(expr, expr2, @types.Op::Div, kind=None)
-  //     (e, Some(list)) => {
-  //       let result = list.fold(
-  //         init=e,
-  //         fn {
-  //           e, (Mul, expr) => Prim(e, expr, Mul, kind=None)
-  //           e, (Div, expr) => Prim(e, expr, Div, kind=None)
-  //           _, (t, _) => {
-  //             println(" Mul or Div not " + t.to_string())
-  //             panic()
-  //           }
-  //         },
-  //       )
-  //       result
-  //     }
-  //     // _ => {
-  //     //   println("Invalid mulDivLevelExpr")
-  //     //   panic()
-  //     // }
-  //   },
-  // )
-  // .parse(tokens)
+
+fn mulDivLevelExpr(
+  tokens : ArrayView[@lex.Token],
+) -> (@types.Syntax, ArrayView[@lex.Token])? {
   Parser(ifLevelExpr)
-  .zeroOrOnce(
-    ptoken_star.and(mulDivLevelExpr).or(ptoken_slash.and(mulDivLevelExpr)),
+ .zeroOrOnce(
+    ptoken_star.parser_and(mulDivLevelExpr).or(ptoken_slash.parser_and(mulDivLevelExpr)),
   )
   .map(
-    fn {
-      (expr, None) => expr
-      (expr, Some((@lex.Mul, expr2))) =>
-        @types.Syntax::Prim(expr, expr2, @types.Op::Mul, kind=None)
-      (expr, Some((@lex.Div, expr2))) =>
-        @types.Syntax::Prim(expr, expr2, @types.Op::Div, kind=None)
-      _ => {
-        println("Invalid mulDivLevelExpr")
-        panic()
+    fn(input){
+      match input {
+        (expr, None) => expr
+        (expr, Some((t, expr2))) => {
+          match t {
+            @lex.Token::Mul => Prim(expr, expr2, Mul, kind=None)
+            @lex.Token::Div => Prim(expr, expr2, Div, kind=None)
+            _ => {
+              println(" Mul or Div not " + t.to_string())
+              panic()
+            }
+          }
+        }
       }
-    },
+    }
   )
   .parse(tokens)
 }
-
 ///|
-let ptoken_star : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_star : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
     @lex.Token::Mul => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let ptoken_slash : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_slash : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
     @lex.Token::Div => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
 fn ifLevelExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("ifLevelExpr: " + tokens.to_string())
   Parser(getOrApplyLevelExpr).or(ifExpr).parse(tokens)
 }
 
 ///|
-let ptoken_if : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_if : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
     @lex.Token::IF => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let ptoken_else : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_else : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
     @lex.Token::ELSE => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
 fn ifExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("ifExpr: " + tokens.to_string())
   ptoken_if
-  .and(expr)
-  .and(blockExpr)
-  .zeroOrOnce(ptoken_else.and(blockExpr))
-  .map(
-    fn {
+  .parser_and(expr)
+  .parser_and(blockExpr)
+  .zeroOrOnce(ptoken_else.parser_and(blockExpr))
+  .map(fn(input) {
+    match input {
       (((_, expr), block_expr), Some((_, block_expr2))) =>
         @types.Syntax::If(expr, block_expr, block_expr2)
       (((_, expr), block_expr), None) =>
         @types.Syntax::If(expr, block_expr, Unit)
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 ///|
 fn getOrApplyLevelExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("getOrApplyLevelExpr: " + tokens.to_string())
   // Parser(getExpr).or(applyExpr).or(valueExpr).parse(tokens)
   Parser(valueExpr)
-  .and(
+  .parser_and(
     lbracket
     .or(lparen)
-    .zeroOrOnce(Parser(expr).and(comma.and(expr).many()))
-    .and(rbracket.or(rparen))
+    .zeroOrOnce(Parser(expr).parser_and(comma.parser_and(expr).many()))
+    .parser_and(rbracket.or(rparen))
     .many(),
     // )
   )
-  .map(
-    fn {
+  .map(fn(input) {
+    match input {
       (expr, list) => {
         if list.is_empty() {
           return expr
         }
-        let result = list.fold(
-          init=expr,
-          fn {
-            e, ((l, None), _) =>
+        let result = list.fold(init=expr, fn(acc, item) {
+          match (acc, item) {
+            (e, ((l, None), _)) =>
               match l {
                 LBRACKET => {
                   println(
@@ -763,8 +765,8 @@ fn getOrApplyLevelExpr(
                   panic()
                 }
               }
-            e, ((l, Some((expr1, list))), _) => {
-              let tails = list.map(fn { (_, e2) => e2 })
+            (e, ((l, Some((expr1, list))), _)) => {
+              let tails = list.map(e2 => e2.1)
               // println("applyExpr tails: " + tails.to_string())
               // println("applyExpr l: " + l.to_string())
               match l {
@@ -782,15 +784,14 @@ fn getOrApplyLevelExpr(
                 _ => panic()
               }
             }
-          },
-        )
+          }
+        })
         result
       }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
-
 // fn getExpr(
 //   tokens : ArrayView[@lex.Token]
 // ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -946,7 +947,7 @@ fn getOrApplyLevelExpr(
 
 ///|
 fn valueExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("valueExpr: " + tokens.to_string())
   Parser(unitExpr)
@@ -967,161 +968,192 @@ fn valueExpr(
 
 ///|
 fn unitExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  lparen.and(rparen).map(fn { _ => @types.Syntax::Unit }).parse(tokens)
+  lparen
+  .parser_and(rparen)
+  .map(fn(input) {
+    match input {
+      _ => @types.Syntax::Unit
+    }
+  })
+  .parse(tokens)
 }
 
 ///|
 fn groupExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  lparen.and(expr).and(rparen).map(fn { ((_, expr), _) => expr }).parse(tokens)
+  lparen.parser_and(expr).parser_and(rparen).map(expr => expr.0.1).parse(tokens)
 }
 // tuple_expr: '(' expr (',' expr)* ')'; // (x, y)
 
 ///|
 fn tupleExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   lparen
-  .and(expr)
-  .and(
-    ptoken(
-      fn {
+  .parser_and(expr)
+  .parser_and(
+    ptoken(fn(input) {
+      match input {
         @lex.Token::COMMA => true
         _ => false
-      },
-    )
-    .and(expr)
+      }
+    })
+    .parser_and(expr)
     .many(),
   )
-  .and(rparen)
-  .map(
-    fn {
+  .parser_and(rparen)
+  .map(fn(input) {
+    match input {
       (((_, first), arr), _) => {
         // println("tuple_expr: " + arr.to_string())
         if arr.is_empty() {
           return first
         }
-        let expr = arr.map(fn { (_, expr) => expr })
+        let expr = arr.map(fn(input) {
+          match input {
+            (_, expr) => expr
+          }
+        })
         @types.Syntax::Tuple([first, ..expr])
       }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 // block_expr: '{' stmt '}'; // { blah; blah; }
+
 ///|
 fn blockExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("blockExpr: " + tokens.to_string())
   lcurlybracket
-  .and(stmt)
-  .and(rcurlybracket)
-  .map(fn { ((_, stmts), _) => stmts })
+  .parser_and(stmt)
+  .parser_and(rcurlybracket)
+  .map(fn(input) {
+    match input {
+      ((_, stmts), _) => stmts
+    }
+  })
   .parse(tokens)
 }
 
 // bool_expr: 'true' | 'false';
+
 ///|
 fn boolExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  ptoken(
-    fn {
+  ptoken(fn(input) {
+    match input {
       @lex.Token::TRUE => true
       @lex.Token::FALSE => true
       _ => false
-    },
-  )
-  .map(
-    fn {
+    }
+  })
+  .map(fn(input) {
+    match input {
       TRUE => @types.Syntax::Bool(true)
       FALSE => @types.Syntax::Bool(false)
       _ => panic()
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 // neg_expr: '-' value_expr;
+
 ///|
 fn negExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   ptoken_minus
-  .and(valueExpr)
-  .map(fn { (_, expr) => @types.Syntax::Neg(expr, kind=None) })
+  .parser_and(valueExpr)
+  .map(fn(input) {
+    match input {
+      (_, expr) => @types.Syntax::Neg(expr, kind=None)
+    }
+  })
   .parse(tokens)
 }
 
 // floating_point_expr: NUMBER '.' NUMBER?; // 1.0 | 1.
+
 ///|
 fn floatingPointExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("floatingPointExpr: " + tokens.to_string())
   ptoken_number
-  .and(dot)
+  .parser_and(dot)
   .zeroOrOnce(ptoken_number)
-  .map(
-    fn {
+  .map(fn(input) {
+    match input {
       ((NUMBER(num1), _), Some(NUMBER(num2))) => {
-        let d = @strconv.parse_double?(
-          num1.to_string() + "." + num2.to_string(),
-        ).unwrap()
-        @types.Syntax::Double(d)
+        let d = try? @strconv.parse_double(
+            num1.to_string() + "." + num2.to_string(),
+          )
+        @types.Syntax::Double(d.unwrap())
       }
       ((NUMBER(num1), _), None) => {
-        let d = @strconv.parse_double?(num1.to_string() + "." + "0".to_string()).unwrap()
-        @types.Syntax::Double(d)
+        let d = try? @strconv.parse_double(
+            num1.to_string() + "." + "0".to_string(),
+          )
+        @types.Syntax::Double(d.unwrap())
       }
       _ =>
         // println("floatingPointExpr: not handled, input: " + tokens.to_string())
         panic()
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 // int_expr: NUMBER; // 1
+
 ///|
 fn intExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("intExpr: " + tokens.to_string())
-  ptoken(
-    fn {
+  ptoken(fn(input) {
+    match input {
       @lex.Token::NUMBER(_) => true
       _ => false
-    },
-  )
-  .map(
-    fn {
+    }
+  })
+  .map(fn(input) {
+    match input {
       NUMBER(num) =>
         // println("intExpr: " + num.to_string())
         @types.Syntax::Int(num)
       _ =>
         // println("intExpr: not handled, input: " + tokens.to_string())
         panic()
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 // not_expr: 'not' '(' expr ')'; // not(x)
+
 ///|
 fn notExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   ptoken_not
-  .and(lparen)
-  .and(expr)
-  .and(rparen)
-  .map(fn { ((_, expr), _) => @types.Syntax::Not(expr) })
+  .parser_and(lparen)
+  .parser_and(expr)
+  .parser_and(rparen)
+  .map(fn(input) {
+    match input {
+      ((_, expr), _) => @types.Syntax::Not(expr)
+    }
+  })
   .parse(tokens)
 }
 // array_make_expr:
@@ -1129,68 +1161,70 @@ fn notExpr(
 
 ///|
 fn arrayMakeExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   ptoken_array
-  .and(ptoken_colon)
-  .and(ptoken_colon)
-  .and(ptoken_make)
-  .and(lparen)
-  .and(expr)
-  .and(comma)
-  .and(expr)
-  .and(rparen)
-  .map(
-    fn { ((((_, expr1), _), expr2), _) => @types.Syntax::Array(expr1, expr2) },
-  )
+  .parser_and(ptoken_colon)
+  .parser_and(ptoken_colon)
+  .parser_and(ptoken_make)
+  .parser_and(lparen)
+  .parser_and(expr)
+  .parser_and(comma)
+  .parser_and(expr)
+  .parser_and(rparen)
+  .map(fn(input) {
+    match input {
+      ((((_, expr1), _), expr2), _) => @types.Syntax::Array(expr1, expr2)
+    }
+  })
   .parse(tokens)
 }
 // identifier_expr: IDENTIFIER;
 
 ///|
 fn identifierExpr(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  ptoken(
-    fn {
+  ptoken(fn(input) {
+    match input {
       @lex.Token::IDENTIFIER(_) => true
       _ => false
-    },
-  )
-  .map(
-    fn {
+    }
+  })
+  .map(fn(input) {
+    match input {
       @lex.Token::IDENTIFIER(id) => @types.Syntax::Var(id)
       _ =>
         // println("identifierExpr: not handled")
         panic()
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 ///|
 fn parseType(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Type, ArrayView[@lex.Token])? {
   // println("parseType:" + tokens.to_string())
-  ptoken(
-    fn {
+  ptoken(fn(input) {
+    match input {
       @lex.Token::UNIT => true
       @lex.Token::BOOL => true
       @lex.Token::INT => true
       @lex.Token::DOUBLE => true
       _ => false
-    },
-  )
-  .map(
-    fn {
+    }
+  })
+  .map(fn(input) {
+    match input {
       UNIT => @types.Type::Unit
       BOOL => @types.Type::Bool
       INT => @types.Type::Int
       DOUBLE => @types.Type::Double
       _ => panic()
-    },
-  )
+    }
+  })
   .or(arrayType)
   .or(functionType)
   .or(tupleType)
@@ -1199,20 +1233,20 @@ fn parseType(
 
 ///|
 fn arrayType(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Type, ArrayView[@lex.Token])? {
   // println("arrayType: " + tokens.to_string())
   ptoken_array
-  .and(lbracket)
-  .and(parseType)
-  .and(rbracket)
-  .map(
-    fn {
+  .parser_and(lbracket)
+  .parser_and(parseType)
+  .parser_and(rbracket)
+  .map(fn(input) {
+    match input {
       ((_, type_), _) =>
         // println("arrayType type_: " + type_.to_string())
         @types.Type::Array(type_)
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
@@ -1220,144 +1254,139 @@ fn arrayType(
 
 ///|
 fn tupleType(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Type, ArrayView[@lex.Token])? {
   // println("tupleType: " + tokens.to_string())
   lparen
-  .and(parseType)
-  .and(
-    ptoken(
-      fn {
+  .parser_and(parseType)
+  .parser_and(
+    ptoken(fn(input) {
+      match input {
         @lex.Token::COMMA => true
         _ => false
-      },
-    )
-    .and(parseType)
+      }
+    })
+    .parser_and(parseType)
     .many(),
   )
-  .and(rparen)
-  .map(
-    fn {
+  .parser_and(rparen)
+  .map(fn(input) {
+    match input {
       (((_, t), arr_t), _) => {
         // println("tupleType: t: " + t.to_string())
         // println("tupleType: arr_t: " + arr_t.to_string())
-        let r_arr = arr_t.map(fn { (_, t) => t })
+        let r_arr = arr_t.map(fn(input) {
+          match input {
+            (_, t) => t
+          }
+        })
         // println("tupleType: [t, ..r_arr]: " + [t, ..r_arr].to_string())
         @types.Type::Tuple([t, ..r_arr])
       }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 // function_type:
 // 	'(' type (',' type)* ')' '->' type; // (Int, Bool) -> Int
 
 ///|
-let arrow : Parser[@lex.Token] = ptoken(
-  fn {
+let arrow : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
     @lex.Token::ARROW => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
 fn functionType(
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (@types.Type, ArrayView[@lex.Token])? {
   // println("functionType: " + tokens.to_string())
   lparen
-  .and(parseType)
-  .and(
-    ptoken(
-      fn {
+  .parser_and(parseType)
+  .parser_and(
+    ptoken(fn(input) {
+      match input {
         @lex.Token::COMMA => true
         _ => false
-      },
-    )
-    .and(parseType)
+      }
+    })
+    .parser_and(parseType)
     .many(),
   )
-  .and(rparen)
-  .and(arrow)
-  .and(parseType)
-  .map(
-    fn {
+  .parser_and(rparen)
+  .parser_and(arrow)
+  .parser_and(parseType)
+  .map(fn(input) {
+    match input {
       (((((_, type_), arr), _), _), type2) => {
-        let arr_t = arr.map(fn { (_, t) => t })
+        let arr_t = arr.map(t => t.1)
         @types.Type::Fun([type_, ..arr_t], type2)
       }
-    },
-  )
+    }
+  })
   .parse(tokens)
 }
 
 ///|
 fn ptoken(predicate : (@lex.Token) -> Bool) -> Parser[@lex.Token] {
-  fn {
-    [hd, .. tl] => if predicate(hd) { Some((hd, tl)) } else { None }
-    [] => None
+  fn(input) {
+    match input {
+      [hd, .. tl] => if predicate(hd) { Some((hd, tl)) } else { None }
+      [] => None
+    }
   }
 }
 
 ///|
-fn map[I, O](self : Parser[I], f : (I) -> O) -> Parser[O] {
-  fn {
-    input =>
-      match self.parse(input) {
-        Some((token, rest)) => Some((f(token), rest))
-        None => None
-      }
+fn[I, O] map(self : Parser[I], f : (I) -> O) -> Parser[O] {
+  fn(input) {
+    match self.parse(input) {
+      Some((token, rest)) => Some((f(token), rest))
+      None => None
+    }
   }
 }
 
 ///|
-fn and[V1, V2](self : Parser[V1], parser2 : Parser[V2]) -> Parser[(V1, V2)] {
-  fn {
-    input =>
-      self
-      .parse(input)
-      .bind(
-        fn {
-          (value, rest) =>
-            parser2
-            .parse(rest)
-            .map(fn { (value2, rest2) => ((value, value2), rest2) })
-        },
-      )
+// fn and[V1, V2](self : Parser[V1], parser2 : Parser[V2]) -> Parser[(V1, V2)] {
+//   fn(input) {
+//     self
+//     .parse(input)
+//     .bind(
+//       fn {
+//         (value, rest) =>
+//           parser2
+//           .parse(rest)
+//           .map(fn { (value2, rest2) => ((value, value2), rest2) })
+//       },
+//     )
+//   }
+// }
+
+fn[V1, V2] parser_and(self : Parser[V1], parser2 : Parser[V2]) -> Parser[(V1, V2)] {
+  fn(input) {
+    self
+    .parse(input)
+    .bind(value_rest => parser2
+      .parse(value_rest.1)
+      .map(value2_rest2 => ((value_rest.0, value2_rest2.0), value2_rest2.1)))
   }
 }
 
 ///|
-fn or[V](self : Parser[V], parser2 : Parser[V]) -> Parser[V] {
-  fn {
-    input =>
-      match self.parse(input) {
-        None => parser2.parse(input)
-        Some(_) as result => result
-      }
+fn[V] or(self : Parser[V], parser2 : Parser[V]) -> Parser[V] {
+  fn(input) {
+    match self.parse(input) {
+      None => parser2.parse(input)
+      Some(_) as result => result
+    }
   }
 }
 
 ///|
-fn log[V](self : Parser[V]) -> Parser[V] {
-  fn {
-    input =>
-      match self.parse(input) {
-        None =>
-          // println("None")
-          // println(input)
-          None
-        Some(_) as result => result
-        // println("Some")
-        // println(input)
-
-        // }
-      }
-  }
-}
-
-///|
-fn many[Value : Show](self : Parser[Value]) -> Parser[Array[Value]] {
+fn[Value] many(self : Parser[Value]) -> Parser[Array[Value]] {
   fn(input) {
     let cumul = []
     let mut rest = input
@@ -1373,22 +1402,17 @@ fn many[Value : Show](self : Parser[Value]) -> Parser[Array[Value]] {
 }
 
 ///|
-fn zeroOrOnce[V1, V2](
+fn[V1, V2] zeroOrOnce(
   self : Parser[V1],
-  parser2 : Parser[V2]
+  parser2 : Parser[V2],
 ) -> Parser[(V1, V2?)] {
   fn(input) {
     self
     .parse(input)
-    .bind(
-      fn {
-        (v1, rest) =>
-          match parser2.parse(rest) {
-            None => Some(((v1, None), rest))
-            Some((v2, rest2)) => Some(((v1, Some(v2)), rest2))
-          }
-      },
-    )
+    .bind(v1_rest => match parser2.parse(v1_rest.1) {
+      None => Some(((v1_rest.0, None), v1_rest.1))
+      Some((v2, rest2)) => Some(((v1_rest.0, Some(v2)), rest2))
+    })
     // match self.parse(input) {
     //   Some((v1, rest)) =>
     //     match parser2.parse(rest) {
@@ -1399,181 +1423,175 @@ fn zeroOrOnce[V1, V2](
     // }
   }
 }
-
 ///|
-fn Parser::refval[Value](refval : Ref[Parser[Value]]) -> Parser[Value] {
-  fn(input) { refval.val.parse(input) }
-}
-
-///|
-let ptoken_array : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_array : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::ARRAY => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let ptoken_make : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_make : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::IDENTIFIER("make") => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let ptoken_not : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_not : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::NOT => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let ptoken_number : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_number : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::NUMBER(_) => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let ptoken_fn : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_fn : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::FN => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let ptoken_let : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_let : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::LET => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let dot : Parser[@lex.Token] = ptoken(
-  fn {
+let dot : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::DOT => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let ptoken_assign : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_assign : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::ASSIGN => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let ptoken_eq : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_eq : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::EQ => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let ptoken_colon : Parser[@lex.Token] = ptoken(
-  fn {
+let ptoken_colon : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::COLON => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let comma : Parser[@lex.Token] = ptoken(
-  fn {
+let comma : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::COMMA => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let lparen : Parser[@lex.Token] = ptoken(
-  fn {
+let lparen : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::LPAREN => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let rparen : Parser[@lex.Token] = ptoken(
-  fn {
+let rparen : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::RPAREN => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let lbracket : Parser[@lex.Token] = ptoken(
-  fn {
+let lbracket : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::LBRACKET => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let rbracket : Parser[@lex.Token] = ptoken(
-  fn {
+let rbracket : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::RBRACKET => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let lcurlybracket : Parser[@lex.Token] = ptoken(
-  fn {
+let lcurlybracket : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::LCURLYBRACKET => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let rcurlybracket : Parser[@lex.Token] = ptoken(
-  fn {
+let rcurlybracket : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::RCURLYBRACKET => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let identifier : Parser[@lex.Token] = ptoken(
-  fn {
+let identifier : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     @lex.Token::IDENTIFIER(_) => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
-let semicolon : Parser[@lex.Token] = ptoken(
-  fn {
+let semicolon : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
     SEMICOLON => true
     _ => false
-  },
-)
+  }
+})
 
 ///|
 pub type Parser[V] (ArrayView[@lex.Token]) -> (V, ArrayView[@lex.Token])?
 
 ///|
-fn parse[V](
+fn[V] parse(
   self : Parser[V],
-  tokens : ArrayView[@lex.Token]
+  tokens : ArrayView[@lex.Token],
 ) -> (V, ArrayView[@lex.Token])? {
-  // println("parsing: " + tokens.to_string())
-  (self._)(tokens)
+  println("parsing: " + tokens.to_string())
+  self.inner()(tokens)
 }
 
 ///|
 let parser : Parser[@types.Syntax] = Parser(program)
 
 ///|
-pub(all) type! ParserErr String derive(ToJson)
+pub(all) suberror ParserErr String derive(ToJson)
 
 ///|
 pub fn parse_from_string(str : String) -> @types.Syntax {
@@ -1585,6 +1603,7 @@ pub fn parse_from_string(str : String) -> @types.Syntax {
   prog
 }
 
+///|
 test {
   let tokens = []
   let test1 =
@@ -1609,17 +1628,20 @@ test {
   println(prog)
 }
 
+///|
 test {
   let tokens = []
-  let _test2 = @fs.read_file_to_string?("test/test_src/adder.mbt").unwrap()
+  let _test2 = @fs.read_file_to_string("test/test_src/adder.mbt")
+  // println(_test2)
   @lex.lex({ str: _test2, offset: 0, array: tokens })
   // println(tokens)
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println(prog)
 }
 
+///|
 test {
   let x = ["1", "2", "3", "4"]
-  let res = x.fold(init="0", fn { n, i => "F(" + n + "," + i + ")" })
+  let res = x.fold(init="0", (n, i) => "F(" + n + "," + i + ")")
   println(res)
 }

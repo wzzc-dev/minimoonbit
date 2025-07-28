@@ -12,7 +12,7 @@ pub fn emit(input : @closure.Program) -> String {
   // 生成所有函数
   for func in input.fundefs {
     let name = func.name
-    if extenv.contains(func.name._) {
+    if extenv.contains(func.name.inner()) {
       continue
     }
     if func.is_closure {
@@ -122,7 +122,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
       result
     }
     CallDirect(func, args) => {
-      let mut result = func._ + "("
+      let mut result = func.inner() + "("
       for i, arg in args {
         if i > 0 {
           result += ", "

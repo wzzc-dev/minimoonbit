@@ -1,3 +1,4 @@
+///|
 pub(all) struct LLVMIR {
-    name: String
+  name : String
 } derive(ToJson)

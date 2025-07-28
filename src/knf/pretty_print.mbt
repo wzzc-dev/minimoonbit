@@ -12,7 +12,7 @@ pub fn Knf::to_pretty_print(self : Knf) -> PrettyKnf {
 fn PrettyKnf::print_one_level(
   self : PrettyKnf,
   logger : @util.IndentLogger,
-  val : Knf
+  val : Knf,
 ) -> Unit {
   match val {
     Unit => logger.write_string("Unit")

@@ -20,14 +20,14 @@ pub fn Name::to_string(self : Name) -> String {
 }
 
 ///|
-pub(all) type! NameFromStringError {
+pub(all) suberror NameFromStringError {
   InvalidSlotNumber(String, String)
 }
 
 ///|
 pub impl Show for NameFromStringError with output(
   self : NameFromStringError,
-  logger : &Logger
+  logger : &Logger,
 ) -> Unit {
   match self {
     NameFromStringError::InvalidSlotNumber(e, slot_s) =>
@@ -36,29 +36,29 @@ pub impl Show for NameFromStringError with output(
 }
 
 ///|
-pub fn Name::from_string(s : String) -> Name!NameFromStringError {
+pub fn Name::from_string(s : String) -> Name raise NameFromStringError {
   match s.find(".") {
     Some(first_dot) => {
       let name = s.substring(start=0, end=first_dot)
       let slot_s = s.substring(start=first_dot + 1, end=s.length())
       try {
-        let slot = @strconv.parse_int!(slot_s, base=10)
+        let slot = @strconv.parse_int(slot_s, base=10)
         Name::name_and_slot(name, slot)
       } catch {
         @strconv.StrConvError(e) =>
           raise NameFromStringError::InvalidSlotNumber(e, slot_s)
       }
     }
-    None => {
-      if s.has_prefix("_") && 
-        s.length() > 1 && 
+    None =>
+      if s.has_prefix("_") &&
+        s.length() > 1 &&
         s
         .substring(start=1, end=s.length())
         .iter()
         .all(fn(c) { c >= '0' && c <= '9' }) {
         let slot_s = s.substring(start=1, end=s.length())
         try {
-          let slot = @strconv.parse_int!(slot_s, base=10)
+          let slot = @strconv.parse_int(slot_s, base=10)
           Name::slot_only(slot)
         } catch {
           @strconv.StrConvError(e) =>
@@ -67,7 +67,6 @@ pub fn Name::from_string(s : String) -> Name!NameFromStringError {
       } else {
         Name::name_only(s)
       }
-    }
   }
 }
 
@@ -91,15 +90,15 @@ pub fn Name::to_json(self : Name) -> Json {
   self.to_string().to_json()
 }
 
+///|
 pub impl ToJson for Name with to_json(self : Name) -> Json {
   self.to_string().to_json()
 }
 
-
 ///|
-pub fn Name::from_json(json : Json) -> Name! {
+pub fn Name::from_json(json : Json) -> Name raise {
   match json {
-    Json::String(s) => Name::from_string!(s)
-    _ => fail!("Name::from_json: expected a string, but got \{json}")
+    Json::String(s) => Name::from_string(s)
+    _ => fail("Name::from_json: expected a string, but got \{json}")
   }
 }

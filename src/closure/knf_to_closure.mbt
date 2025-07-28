@@ -1,40 +1,36 @@
 ///|
-pub typealias LocalEnv = @immut/hashmap.T[Name, LowType]
+pub typealias @immut/hashmap.T[Name, LowType] as LocalEnv
 
 ///|
 pub fn knf_program_to_closure(
   prog : @knf.Knf,
-  extern_env : Map[String, Type]
+  extern_env : Map[String, Type],
 ) -> Program {
   // println("knf ir: " + prog.to_string())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
-  extern_env.each(
-    fn(name, ty) {
-      let mut low_type : LowType = Unit
-      let args_low_ty = []
-      match ty {
-        Fun(args_ty, ty) => {
-          low_type = ty_to_low_type(ty, false)
-          for ty in args_ty {
-            args_low_ty.push(ty_to_low_type(ty, false))
-          }
+  extern_env.each(fn(name, ty) {
+    let mut low_type : LowType = Unit
+    let args_low_ty = []
+    match ty {
+      Fun(args_ty, ty) => {
+        low_type = ty_to_low_type(ty, false)
+        for ty in args_ty {
+          args_low_ty.push(ty_to_low_type(ty, false))
         }
-        _ => @util.die("LetRec: " + ty.to_string())
       }
-      fundefs.push(
-        {
-          name: name.to_string(),
-          old_name: @types.Name::from_string?(name).unwrap(),
-          is_closure: false,
-          ty: low_type,
-          args: [],
-          formal_free_vars: [],
-          body: Unit,
-        },
-      )
-    },
-  )
+      _ => @util.die("LetRec: " + ty.to_string())
+    }
+    fundefs.push({
+      name: name.to_string(),
+      old_name: @types.Name::from_string?(name).unwrap(),
+      is_closure: false,
+      ty: low_type,
+      args: [],
+      formal_free_vars: [],
+      body: Unit,
+    })
+  })
   let body : Expr = knf_to_closure(fundefs, prog)
   // println("==========================")
   // println("closure ir:")
@@ -127,15 +123,13 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     Apply(name, arr_name) => {
       // 参数是函数类型
       let is_capture = match
-        env.filter(
-          fn(def) {
-            // println("def: " + def.to_string())
-            match def.args.search_by(fn(var) { var.0 == name }) {
-              Some(_) => true
-              None => false
-            }
-          },
-        ) {
+        env.filter(fn(def) {
+          // println("def: " + def.to_string())
+          match def.args.search_by(fn(var) { var.0 == name }) {
+            Some(_) => true
+            None => false
+          }
+        }) {
         [] => false
         _ => true
       }
@@ -167,9 +161,9 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       }
     Tuple(arr_name) => MakeTuple(arr_name)
     LetTuple(arr_name_ty, name, cont) => {
-      let arr_name = arr_name_ty.map(
-        fn { (name, ty) => (name, ty_to_low_type(ty, false)) },
-      )
+      let arr_name = arr_name_ty.map(fn {
+        (name, ty) => (name, ty_to_low_type(ty, false))
+      })
       LetTuple(arr_name, name, knf_to_closure(env, cont))
     }
     Put(name, name1, name2) => ArrayPut(name, name1, name2)
@@ -181,7 +175,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
 
 ///|
 fn fv_to_array(
-  fv : @hashset.T[FreeVarWithType]
+  fv : @hashset.T[FreeVarWithType],
 ) -> Array[(@types.Name, LowType)] {
   let res = []
   fv.each(fn(fv) { res.push((fv.name, fv.ty)) })
@@ -240,7 +234,7 @@ impl Compare for FreeVarWithType with compare(self, other) {
 ///|
 impl Eq for FreeVarWithType with op_equal(
   self : FreeVarWithType,
-  other : FreeVarWithType
+  other : FreeVarWithType,
 ) {
   self.name == other.name
 }

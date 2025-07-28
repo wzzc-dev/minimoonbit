@@ -32,7 +32,7 @@ pub impl Logger for IndentLogger with write_substring(
   self : IndentLogger,
   s : String,
   start : Int,
-  len : Int
+  len : Int,
 ) -> Unit {
   // Find the next newline character
   let mut start = start
@@ -73,6 +73,9 @@ pub impl Logger for IndentLogger with write_char(self : IndentLogger, c : Char) 
 }
 
 ///|
-pub impl Logger for IndentLogger with write_string(self : IndentLogger, s : String) -> Unit {
+pub impl Logger for IndentLogger with write_string(
+  self : IndentLogger,
+  s : String,
+) -> Unit {
   &Logger::write_substring(self, s, 0, s.length())
 }

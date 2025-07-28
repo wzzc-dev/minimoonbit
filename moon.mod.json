@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "deps": {
     "Yoorkin/ArgParser": "0.1.9",
-    "moonbitlang/x": "0.4.23"
+    "moonbitlang/x": "0.4.31"
   },
   "readme": "README.md",
   "license": "BSD-3-Clause",

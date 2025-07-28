@@ -1,8 +1,8 @@
 ///|
-pub typealias Name = @types.Name
+pub typealias @types.Name
 
 ///|
-pub typealias Type = @types.Type
+pub typealias @types.Type
 
 ///|
 pub(all) enum Knf {

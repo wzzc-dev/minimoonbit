@@ -107,8 +107,9 @@ pub fn lex(context : Context) -> Unit {
 ///|
 fn lex_number_rest(context : Context, number : String) -> Unit {
   let { offset, str, array } = context
+  let number_ = try? @strconv.parse_int(number)
   if offset >= str.length() {
-    array.push(NUMBER(@strconv.parse_int?(number).unwrap()))
+    array.push(NUMBER(number_.unwrap()))
     return
   }
   let ch = str[offset]
@@ -116,7 +117,7 @@ fn lex_number_rest(context : Context, number : String) -> Unit {
     context.offset += 1
     lex_number_rest(context, number + ch.to_string())
   } else {
-    array.push(NUMBER(@strconv.parse_int?(number).unwrap()))
+    array.push(NUMBER(number_.unwrap()))
   }
 }
 
@@ -197,37 +198,37 @@ pub(all) enum Token {
   COMMENT
 } derive(Show)
 
-// test {
-//   let tokens = []
-//   lex(
-//     {
-//       str: #| fn main() {
-//            #|    let hello = "world"
-//            #|    println(hello)
-//            #| }
-//       ,
-//       offset: 0,
-//       array: tokens,
-//     },
-//   )
-//   println(tokens)
+test {
+  let tokens = []
+  let source = #| fn main() {
+               #|    let hello = "world"
+               #|    println(hello)
+               #| }
+  lex(
+    {
+      str: source,
+      offset: 0,
+      array: tokens,
+    },
+  )
+  println(tokens)
 
-//   // let (prog, _) = parseType(tokens[:]).unwrap()
-//   // println(prog)  
+  // let (prog, _) = parseType(tokens[:]).unwrap()
+  // println(prog)  
 
-// }
-// test {
-//   let tokens = []
-//   lex(
-//     {
-//       str: "let x = x",
-//       offset: 0,
-//       array: tokens,
-//     },
-//   )
-//   println(tokens)
+}
+test {
+  let tokens = []
+  lex(
+    {
+      str: "let x = x",
+      offset: 0,
+      array: tokens,
+    },
+  )
+  println(tokens)
 
-//   // let (prog, _) = parseType(tokens[:]).unwrap()
-//   // println(prog)  
+  // let (prog, _) = parseType(tokens[:]).unwrap()
+  // println(prog)  
 
-// }
+}

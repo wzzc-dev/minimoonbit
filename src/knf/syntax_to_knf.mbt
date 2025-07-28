@@ -1,5 +1,5 @@
 ///|
-pub typealias LocalEnv = @immut/hashmap.T[String, Type]
+pub typealias @immut/hashmap.T[String, Type] as LocalEnv
 
 ///|
 struct KnfEnv {
@@ -15,7 +15,7 @@ pub fn KnfEnv::new(externals : @immut/hashmap.T[String, Type]) -> KnfEnv {
 ///|
 pub fn KnfEnv::init_counter_from_existing(
   self : KnfEnv,
-  existing : Knf
+  existing : Knf,
 ) -> Unit {
   self.counter = knf_max_counter(existing) + 1
 }
@@ -37,9 +37,9 @@ fn KnfEnv::new_named_temp(self : KnfEnv, name : Name) -> Name {
 ///|
 fn KnfEnv::get_knf(
   self : KnfEnv,
-  syn : @types.Syntax
-) -> (Name, Type, Knf)!KnfErr {
-  let ty = KnfEnv::get_type!(self.externals, syn)
+  syn : @types.Syntax,
+) -> (Name, Type, Knf) raise KnfErr {
+  let ty = KnfEnv::get_type(self.externals, syn)
   match syn {
     Var(name) => {
       let name = @types.Name::from_string?(name).unwrap()
@@ -47,40 +47,46 @@ fn KnfEnv::get_knf(
     }
     _ => {
       let name = self.new_temp()
-      (name, ty, KnfEnv::to_knf!(self, syn))
+      (name, ty, KnfEnv::to_knf(self, syn))
     }
   }
 }
 
 ///|
-fn KnfEnv::get_type(env : LocalEnv, syn : @types.Syntax) -> @types.Type!KnfErr {
-  try {
-    @typing.get_type!(env, syn)
-  } catch {
+fn KnfEnv::get_type(
+  env : LocalEnv,
+  syn : @types.Syntax,
+) -> @types.Type raise KnfErr {
+  @typing.get_type(env, syn) catch {
     TyErr(x) => raise KnfErr(x)
   }
 }
 
 ///|
-pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Failure
+pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { // !Failure
   match s {
     Unit => Unit
     Int(i) => Int(i)
     Double(d) => Double(d)
     Var(name) => Var(@types.Name::from_string?(name).unwrap())
     Bool(b) => if b { Int(1) } else { Int(0) }
-    Not(syn) => KnfEnv::to_knf!(self, If(syn, Int(0), Int(1)))
+    Not(syn) => KnfEnv::to_knf(self, If(syn, Int(0), Int(1)))
     If(syn1, syn2, syn3) =>
       // println("if: " + syn1.to_string())
       match syn1 {
         Eq(lhs, rhs) => {
-          let (l_name, l_ty, lknf) = KnfEnv::get_knf!(self, lhs)
-          let (r_name, r_ty, rknf) = KnfEnv::get_knf!(self, rhs)
+          let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
+          let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
           match lhs {
             Var(_) =>
               match rhs {
                 Var(_) =>
-                  IfEq(l_name, r_name, KnfEnv::to_knf!(self, syn2), KnfEnv::to_knf!(self, syn3))
+                  IfEq(
+                    l_name,
+                    r_name,
+                    KnfEnv::to_knf(self, syn2),
+                    KnfEnv::to_knf(self, syn3),
+                  )
                 _ =>
                   Let(
                     (r_name, r_ty),
@@ -88,8 +94,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
                     IfEq(
                       l_name,
                       r_name,
-                      KnfEnv::to_knf!(self, syn2),
-                      KnfEnv::to_knf!(self, syn3),
+                      KnfEnv::to_knf(self, syn2),
+                      KnfEnv::to_knf(self, syn3),
                     ),
                   )
               }
@@ -102,8 +108,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
                     IfEq(
                       l_name,
                       r_name,
-                      KnfEnv::to_knf!(self, syn2),
-                      KnfEnv::to_knf!(self, syn3),
+                      KnfEnv::to_knf(self, syn2),
+                      KnfEnv::to_knf(self, syn3),
                     ),
                   )
                 _ =>
@@ -116,8 +122,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
                       IfEq(
                         l_name,
                         r_name,
-                        KnfEnv::to_knf!(self, syn2),
-                        KnfEnv::to_knf!(self, syn3),
+                        KnfEnv::to_knf(self, syn2),
+                        KnfEnv::to_knf(self, syn3),
                       ),
                     ),
                   )
@@ -125,15 +131,20 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
           }
         }
         LE(lhs, rhs) => {
-          let (l_name, l_ty, lknf) = KnfEnv::get_knf!(self, lhs)
-          let (r_name, r_ty, rknf) = KnfEnv::get_knf!(self, rhs)
+          let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
+          let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
           // println("LE: " + (l_name, l_ty, lknf).to_string())
           // println("LE: " + (r_name, r_ty, rknf).to_string())
           match lhs {
             Var(_) =>
               match rhs {
                 Var(_) =>
-                  IfLe(l_name, r_name, KnfEnv::to_knf!(self, syn2), KnfEnv::to_knf!(self, syn3))
+                  IfLe(
+                    l_name,
+                    r_name,
+                    KnfEnv::to_knf(self, syn2),
+                    KnfEnv::to_knf(self, syn3),
+                  )
                 _ =>
                   // println("LE: rhs is  a variable" + r_name.to_string())
                   Let(
@@ -142,8 +153,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
                     IfLe(
                       l_name,
                       r_name,
-                      KnfEnv::to_knf!(self, syn2),
-                      KnfEnv::to_knf!(self, syn3),
+                      KnfEnv::to_knf(self, syn2),
+                      KnfEnv::to_knf(self, syn3),
                     ),
                   )
               }
@@ -156,8 +167,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
                     IfLe(
                       l_name,
                       r_name,
-                      KnfEnv::to_knf!(self, syn2),
-                      KnfEnv::to_knf!(self, syn3),
+                      KnfEnv::to_knf(self, syn2),
+                      KnfEnv::to_knf(self, syn3),
                     ),
                   )
                 _ =>
@@ -170,8 +181,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
                       IfLe(
                         l_name,
                         r_name,
-                        KnfEnv::to_knf!(self, syn2),
-                        KnfEnv::to_knf!(self, syn3),
+                        KnfEnv::to_knf(self, syn2),
+                        KnfEnv::to_knf(self, syn3),
                       ),
                     ),
                   )
@@ -189,9 +200,14 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         //     IfLe(l_name, r_name, KnfEnv::to_knf!(self, syn2), KnfEnv::to_knf!(self, syn3)),
         //   ),
         // )
-        Not(b) => KnfEnv::to_knf!(self, If(b, syn3, syn2))
-        Bool(b) => if b { KnfEnv::to_knf!(self, syn2) } else { KnfEnv::to_knf!(self, syn3) }
-        _ => KnfEnv::to_knf!(self, If(Eq(syn1, Bool(false)), syn3, syn2))
+        Not(b) => KnfEnv::to_knf(self, If(b, syn3, syn2))
+        Bool(b) =>
+          if b {
+            KnfEnv::to_knf(self, syn2)
+          } else {
+            KnfEnv::to_knf(self, syn3)
+          }
+        _ => KnfEnv::to_knf(self, If(Eq(syn1, Bool(false)), syn3, syn2))
       }
     Neg(syn, kind~) =>
       // let knf = KnfEnv::get_knf!(self, syn)
@@ -205,7 +221,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
             }
             _ => {
               let name = self.new_temp()
-              let k = KnfEnv::to_knf!(self, syn)
+              let k = KnfEnv::to_knf(self, syn)
               Let((name, Int), k, Neg(name))
             }
           }
@@ -217,15 +233,15 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
             }
             _ => {
               let name = self.new_temp()
-              let k = KnfEnv::to_knf!(self, syn)
+              let k = KnfEnv::to_knf(self, syn)
               Let((name, Double), k, FNeg(name))
             }
           }
         _ => raise KnfErr("the type of negation is unknown")
       }
     Prim(lsyn, rsyn, op, kind~) => {
-      let (l_name, _, l) = KnfEnv::get_knf!(self, lsyn)
-      let (r_name, _, r) = KnfEnv::get_knf!(self, rsyn)
+      let (l_name, _, l) = KnfEnv::get_knf(self, lsyn)
+      let (r_name, _, r) = KnfEnv::get_knf(self, rsyn)
       // println("l_name = " + l_name.to_string())
       // println("r_name = " + r_name.to_string())
       // println("lsyn = " + lsyn.to_string())
@@ -275,36 +291,39 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         _ => raise KnfErr("the type of prim is unknown")
       }
     }
-    Eq(syn1, syn2) => KnfEnv::to_knf!(self, If(Eq(syn1, syn2), Bool(true), Bool(false)))
-    LE(syn1, syn2) => KnfEnv::to_knf!(self, If(LE(syn1, syn2), Bool(true), Bool(false)))
+    Eq(syn1, syn2) =>
+      KnfEnv::to_knf(self, If(Eq(syn1, syn2), Bool(true), Bool(false)))
+    LE(syn1, syn2) =>
+      KnfEnv::to_knf(self, If(LE(syn1, syn2), Bool(true), Bool(false)))
     Let((name, ty), syn, rest) => {
-      let knf = KnfEnv::to_knf!(self, syn)
+      let knf = KnfEnv::to_knf(self, syn)
       let new_env = {
         counter: self.counter,
         externals: self.externals.add(name, ty),
       }
-      let rest_knf = KnfEnv::to_knf!(new_env, rest)
-      let name =@types.Name::name_only(name)
+      let rest_knf = KnfEnv::to_knf(new_env, rest)
+      let name = @types.Name::name_only(name)
       Let((name, ty), knf, rest_knf)
     }
     LetRec({ name: (name, ty), args, body }, rest) => {
       let fun_name = @types.Name::from_string?(name).unwrap()
       let mut env_body = self.externals.add(name, ty)
       let env_fun = self.externals.add(name, ty)
-      let fun_args = args.map(
-        fn {
-          t => {
-            env_body = env_body.add(t.0, t.1)
-            let x = @types.Name::from_string?(t.0).unwrap()
-            (x, t.1)
-          }
-        },
-      )
-      let fun_body = KnfEnv::to_knf!(
+      let fun_args = args.map(fn {
+        t => {
+          env_body = env_body.add(t.0, t.1)
+          let x = @types.Name::from_string?(t.0).unwrap()
+          (x, t.1)
+        }
+      })
+      let fun_body = KnfEnv::to_knf(
         { counter: self.counter, externals: env_body },
         body,
       )
-      let rest = KnfEnv::to_knf!({ counter: self.counter, externals: env_fun }, rest)
+      let rest = KnfEnv::to_knf(
+        { counter: self.counter, externals: env_fun },
+        rest,
+      )
       LetRec({ name: fun_name, ty, args: fun_args, body: fun_body }, rest)
     }
     App(syn, args_syns) => {
@@ -348,8 +367,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         self : KnfEnv,
         f : Name,
         args_names : Array[Name],
-        s : Array[@types.Syntax]
-      ) -> Knf!KnfErr {
+        s : Array[@types.Syntax],
+      ) -> Knf raise KnfErr {
         let ss = s.pop()
         match ss {
           None =>
@@ -368,18 +387,18 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
               Apply(f, args_names)
             }
           Some(ss) => {
-            let ty = KnfEnv::get_type!(self.externals, ss)
+            let ty = KnfEnv::get_type(self.externals, ss)
             match ss {
               Var(str) => {
                 let x = @types.Name::from_string?(str).unwrap()
                 args_names.insert(0, x)
-                let_app!(self, f, args_names, s)
+                let_app(self, f, args_names, s)
               }
               _ => {
                 let x = self.new_temp()
-                let k = KnfEnv::to_knf!(self, ss)
+                let k = KnfEnv::to_knf(self, ss)
                 args_names.insert(0, x)
-                Let((x, ty), k, let_app!(self, f, args_names, s))
+                Let((x, ty), k, let_app(self, f, args_names, s))
               }
             }
           }
@@ -389,18 +408,18 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       fn let_args(
         self : KnfEnv,
         syn : @types.Syntax,
-        syns : Array[@types.Syntax]
-      ) -> Knf!KnfErr {
-        let ty_s = KnfEnv::get_type!(self.externals, syn)
+        syns : Array[@types.Syntax],
+      ) -> Knf raise KnfErr {
+        let ty_s = KnfEnv::get_type(self.externals, syn)
         match syn {
           Var(str) => {
             let x = @types.Name::from_string?(str).unwrap()
-            let_app!(self, x, [], syns)
+            let_app(self, x, [], syns)
           }
           _ => {
             let x = self.new_temp()
-            let k = KnfEnv::to_knf!(self, syn)
-            Let((x, ty_s), k, let_app!(self, x, [], syns))
+            let k = KnfEnv::to_knf(self, syn)
+            Let((x, ty_s), k, let_app(self, x, [], syns))
           }
         }
       }
@@ -408,35 +427,35 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       match syn {
         Var(f) =>
           if @typing.extenv.contains(f) {
-            let_app!(self, @types.Name::from_string?(f).unwrap(), [], args_syns)
+            let_app(self, @types.Name::from_string?(f).unwrap(), [], args_syns)
           } else {
-            let_args!(self, syn, args_syns)
+            let_args(self, syn, args_syns)
           }
-        _ => let_args!(self, syn, args_syns)
+        _ => let_args(self, syn, args_syns)
       }
     }
     Tuple(syns) => {
       let syns_names = Array::new()
-      fn let_tuple(syns : Array[@types.Syntax]) -> Knf!KnfErr {
+      fn let_tuple(syns : Array[@types.Syntax]) -> Knf raise KnfErr {
         match syns.pop() {
           None => Tuple(syns_names)
           Some(syn) => {
-            let (name, ty, knf) = KnfEnv::get_knf!(self, syn)
+            let (name, ty, knf) = KnfEnv::get_knf(self, syn)
             match syn {
               Var(_) => {
                 syns_names.push(name)
-                let_tuple!(syns)
+                let_tuple(syns)
               }
               _ => {
                 syns_names.push(name)
-                Let((name, ty), knf, let_tuple!(syns))
+                Let((name, ty), knf, let_tuple(syns))
               }
             }
           }
         }
       }
 
-      let_tuple!(syns)
+      let_tuple(syns)
     }
     LetTuple(args, syn, rest) => {
       //println("Enter LetTuple")
@@ -444,15 +463,16 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       for i in args {
         env_tuple = env_tuple.add(i.0, i.1)
       }
-      let after = KnfEnv::to_knf!({ counter: self.counter, externals: env_tuple }, rest)
-      let arr_nm_ty = args.map(
-        fn {
-          t => {
-            let nm =@types.Name::name_only(t.0)
-            (nm, t.1)
-          }
-        },
+      let after = KnfEnv::to_knf(
+        { counter: self.counter, externals: env_tuple },
+        rest,
       )
+      let arr_nm_ty = args.map(fn {
+        t => {
+          let nm = @types.Name::name_only(t.0)
+          (nm, t.1)
+        }
+      })
       match syn {
         Var(str) => {
           let x = @types.Name::from_string?(str).unwrap()
@@ -460,14 +480,14 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
         }
         _ => {
           let x = self.new_temp()
-          let k = KnfEnv::to_knf!(self, s)
+          let k = KnfEnv::to_knf(self, s)
           Let((x, Unit), k, LetTuple(arr_nm_ty, x, after))
         }
       }
     }
     Get(e1, e2) => {
-      let (name1, e1_ty, knf1) = KnfEnv::get_knf!(self, e1)
-      let (name2, e2_ty, knf2) = KnfEnv::get_knf!(self, e2)
+      let (name1, e1_ty, knf1) = KnfEnv::get_knf(self, e1)
+      let (name2, e2_ty, knf2) = KnfEnv::get_knf(self, e2)
       match e1 {
         Var(_) =>
           match e2 {
@@ -491,9 +511,9 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       // println(syn1)
       // println(syn2)
       // println(syn3) 
-      let (name1, s1_ty, knf1) = KnfEnv::get_knf!(self, syn1)
-      let (name2, s2_ty, knf2) = KnfEnv::get_knf!(self, syn2)
-      let (name3, s3_ty, knf3) = KnfEnv::get_knf!(self, syn3)
+      let (name1, s1_ty, knf1) = KnfEnv::get_knf(self, syn1)
+      let (name2, s2_ty, knf2) = KnfEnv::get_knf(self, syn2)
+      let (name3, s3_ty, knf3) = KnfEnv::get_knf(self, syn3)
       Let(
         (name1, s1_ty),
         knf1,
@@ -505,22 +525,20 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
       )
     }
     Array(e1, e2) => {
-      let (name1, e1_ty, knf1) = KnfEnv::get_knf!(self, e1)
-      let (name2, e2_ty, knf2) = KnfEnv::get_knf!(self, e2)
+      let (name1, e1_ty, knf1) = KnfEnv::get_knf(self, e1)
+      let (name2, e2_ty, knf2) = KnfEnv::get_knf(self, e2)
       fn genArray(name1 : Name, name2 : Name) {
         match e2_ty {
           Int =>
             ExternalFunctionApplication("minimbt_create_array", [name1, name2])
           Double =>
-            ExternalFunctionApplication(
-              "minimbt_create_float_array",
-              [name1, name2],
-            )
+            ExternalFunctionApplication("minimbt_create_float_array", [
+              name1, name2,
+            ])
           _ =>
-            ExternalFunctionApplication(
-              "minimbt_create_ptr_array",
-              [name1, name2],
-            )
+            ExternalFunctionApplication("minimbt_create_ptr_array", [
+              name1, name2,
+            ])
         }
       }
 
@@ -546,10 +564,11 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf!KnfErr { // !Fail
 }
 
 ///|
-pub(all) type! KnfErr String derive(ToJson)
+pub(all) suberror KnfErr String derive(ToJson)
 
+///|
 test {
-  let list = @fs.read_dir!("test/test_src")
+  let list = @fs.read_dir("test/test_src")
   println(list)
   for file in list {
     println(file)
@@ -564,9 +583,9 @@ test {
     let _test2 = @fs.read_file_to_string?("test/test_src/" + file).unwrap()
     let parse = @parser.parse_from_string(_test2)
     try {
-      let typed = @typing.typing!(parse)
+      let typed = @typing.typing(parse)
       // println(typed)
-      let knf = KnfEnv::to_knf!(KnfEnv::new(@immut/hashmap.new()), typed)
+      let knf = KnfEnv::to_knf(KnfEnv::new(@immut/hashmap.new()), typed)
       println(knf)
     } catch {
       @typing.TyErr(s) => {
@@ -582,17 +601,18 @@ test {
   }
 }
 
+///|
 test {
   let _test2 = @fs.read_file_to_string?("test/test_src/matmul.mbt").unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   // println(parse)
   try {
-    let typed = @typing.typing!(parse)
+    let typed = @typing.typing(parse)
     println("typed")
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = KnfEnv::syntax_preprocess(env, typed)
     println("pre")
-    let knf = KnfEnv::to_knf!(env, pre)
+    let knf = KnfEnv::to_knf(env, pre)
     println(knf)
   } catch {
     @typing.TyErr(s) => {

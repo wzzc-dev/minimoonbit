@@ -1,5 +1,5 @@
 ///|
-pub fn die[T](msg : String) -> T {
+pub fn[T] die(msg : String) -> T {
   println("Error: " + msg)
   panic()
 }
