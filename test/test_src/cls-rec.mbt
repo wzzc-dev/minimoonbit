@@ -6,8 +6,8 @@ fn f(y: Int) -> Int {
   } else {
     x + f(y - 1)
   }
-};
+}
 
 fn main {
   print_int(f(12))
-};
+}

@@ -3,11 +3,13 @@ pub(all) enum Syntax {
   Unit
   Bool(Bool) // true false
   Int(Int) // int
+  Int64(Int64) // int64
   Double(Double) // double
   Var(String) // _
   Tuple(Array[Syntax]) // (_, _, _)
   Not(Syntax) // not(_)
   Array(Syntax, Syntax) // Array::make(_, _)
+  ArrayExpr(Array[Syntax])
   Neg(Syntax, mut kind~ : Kind?) // -_
   App(Syntax, Array[Syntax]) // _(_, _, _) or _()
   Get(Syntax, Syntax) // _[_]
@@ -15,10 +17,20 @@ pub(all) enum Syntax {
   Prim(Syntax, Syntax, Op, mut kind~ : Kind?) // _+ - * / _
   Eq(Syntax, Syntax) // _==_
   LE(Syntax, Syntax) // _<=_
+  LT(Syntax, Syntax) // _<_
+  GE(Syntax, Syntax) // _>=_
+  GT(Syntax, Syntax) // _>_
+  NE(Syntax, Syntax) // _!=_
+  And(Syntax, Syntax) // _&&_
+  Or(Syntax, Syntax) // _||_
   Let((String, Type), Syntax, Syntax) // let _: _ = _; _
   LetRec(Fundef, Syntax) // fn f() {} ; _
   LetTuple(Array[(String, Type)], Syntax, Syntax) // let (_ , _) : (_, _)= _; _
   Put(Syntax, Syntax, Syntax) // _[_] = _
+  Struct(String, Array[(String, Syntax)]) // struct { _: _, _: _ }
+  Enum(String, Array[String]) // enum { A, B, C }
+  While(Syntax, Array[Syntax]) // while x { ... }
+  Return(Syntax?) // return _;
 } derive(Show)
 
 ///|
@@ -33,6 +45,7 @@ pub(all) enum Op {
   Sub
   Mul
   Div
+  Mod
 } derive(Show, Eq)
 
 ///|
@@ -51,13 +64,17 @@ pub(all) enum Type {
   Fun(Array[Type], Type) // (_, _, _) -> _
   Tuple(Array[Type]) // (_, _, _)
   Array(Type) // Array[_]
+  Struct(String, Array[(String, Type)]) // struct { _: _, _: _ }
+  Enum(String, Array[String]) // enum { A, B, C }
   Var(Ref[Type?])
   Ptr
 } derive(Show)
 
-pub impl ToJson for Type with to_json(self : Type)-> Json {
+///|
+pub impl ToJson for Type with to_json(self : Type) -> Json {
   self.to_string().to_json()
 }
+
 ///|
 pub fn Type::is_ptr_like(self : Type) -> Bool {
   match self {
@@ -91,6 +108,8 @@ pub fn Type::size_of(self : Type, size_of_ptr : Int) -> Int {
     Bool => 4
     Int => 4
     Double => 8
+    Struct(_, fs) => fs.fold(init=0, (sum, elem) => sum + elem.1.size_of(size_of_ptr))
+    Enum(_, _) => 4
     Tuple(_) | Fun(_, _) | Array(_) | Ptr => size_of_ptr
     Var(t) =>
       match t.val {
@@ -144,9 +163,11 @@ pub fn Type::repr(self : Type) -> Type {
         }
         None => tvar
       }
-    Fun(xs, x) => Fun(xs.map(fn { t => t.repr() }), x.repr())
-    Tuple(xs) => Tuple(xs.map(fn { t => t.repr() }))
+    Fun(xs, x) => Fun(xs.map(t => t.repr()), x.repr())
+    Tuple(xs) => Tuple(xs.map(t => t.repr()))
     Array(x) => Array(x.repr())
+    Struct(name, fs) => Struct(name, fs.map(f => (f.0, f.1.repr())))
+    Enum(name, fs) => Enum(name, fs)
   }
 }
 

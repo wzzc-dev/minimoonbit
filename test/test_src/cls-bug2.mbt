@@ -7,8 +7,8 @@ fn f(n: Int) -> Unit {
     let a0 = a[0];
     a0(n - 1)
   }
-};
+}
 
 fn main{
   f(9)
-};
+}

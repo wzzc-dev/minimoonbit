@@ -7,11 +7,11 @@ fn h(p: (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)) -> Int {
         } else {
             g(-z)
         }
-    };
+    }
     g(1)
-};
+}
 
 fn main {
     let t1 = print_int(h((1, 2, 3, 4, 5, 6, 7, 8, 9, 10)));
     ()
-};
+}

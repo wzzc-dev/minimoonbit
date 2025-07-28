@@ -12,16 +12,16 @@ pub fn emit(input : @closure.Program) -> String {
   // 生成所有函数
   for func in input.fundefs {
     let name = func.name
-    if extenv.contains(func.name._) {
+    if extenv.contains(func.name.inner()) {
       continue
     }
     if func.is_closure {
-      output += "function \{name._.to_string()}(env, "
+      output += "function \{name.inner().to_string()}(env, "
 
       // 添加函数参数
-      output += @string.concat(
+      output += Array::join(
         func.args.map(fn(arg) { arg.0.to_string() }),
-        separator=", ",
+        ", ",
       )
       output += ") {\n"
       // 从环境变量中获取闭包
@@ -33,10 +33,10 @@ pub fn emit(input : @closure.Program) -> String {
       output += emit_expr(func.body)
       output += "\n}\n\n"
     } else {
-      output += "function \{name._.to_string()}("
-      output += @string.concat(
+      output += "function \{name.inner().to_string()}("
+      output += Array::join(
         func.args.map(fn(arg) { arg.0.to_string() }),
-        separator=",",
+        ",",
       )
       output += ") {\n"
       output += "  return "
@@ -57,6 +57,7 @@ pub fn emit(input : @closure.Program) -> String {
 fn emit_expr(expr : @closure.Expr) -> String {
   match expr {
     Int(n) => n.to_string()
+    Int64(n) => n.to_string()
     Double(n) => n.to_string()
     Neg(name) => "-" + name.to_string()
     Var(name) => name.to_string()
@@ -64,6 +65,8 @@ fn emit_expr(expr : @closure.Expr) -> String {
     Sub(e1, e2) => e1.to_string() + " - " + e2.to_string()
     Mul(e1, e2) => e1.to_string() + " * " + e2.to_string()
     Div(e1, e2) => e1.to_string() + " / " + e2.to_string()
+    Mod(e1, e2) => e1.to_string() + " % " + e2.to_string()
+    FMod(e1, e2) => e1.to_string() + " % " + e2.to_string()
     FNeg(name) => "-" + name.to_string()
     FAdd(e1, e2) => e1.to_string() + " + " + e2.to_string()
     FSub(e1, e2) => e1.to_string() + " - " + e2.to_string()
@@ -103,9 +106,9 @@ fn emit_expr(expr : @closure.Expr) -> String {
         emit_expr(e)
       } else {
         // 生成 bind 调用来创建闭包
-        let free_vars = @string.concat(
+        let free_vars = Array::join(
           env.actual_free_vars.map(fn(v) { v.name.to_string() }),
-          separator=",",
+          ",",
         )
         "  \{func.to_string()}.bind(null, [\{free_vars}])"
       }
@@ -122,7 +125,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
       result
     }
     CallDirect(func, args) => {
-      let mut result = func._ + "("
+      let mut result = func.inner() + "("
       for i, arg in args {
         if i > 0 {
           result += ", "
@@ -146,9 +149,9 @@ fn emit_expr(expr : @closure.Expr) -> String {
     LetTuple(names_tys, e1, e2) =>
       "(() => {\n  " +
       "const " +
-      @string.concat(
+      Array::join(
         names_tys.map(fn(name) { name.0.to_string() }),
-        separator=",",
+        ",",
       ) +
       " = " +
       e1.to_string() +

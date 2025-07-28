@@ -3,7 +3,7 @@ const std = @import("std");
 const Target = std.Target;
 
 pub fn build(b: *std.Build) void {
-    const cpu_model = Target.Query.CpuModel{ .explicit = Target.Cpu.Model.baseline(Target.Cpu.Arch.riscv64) };
+    const cpu_model = Target.Query.CpuModel{ .explicit = Target.Cpu.Model.baseline(.riscv64, .{ .tag = .linux, .version_range = .default(.riscv64, .linux, .gnu) }) };
     var disabled_features = Target.Cpu.Feature.Set.empty;
     disabled_features.addFeature(@intFromEnum(Target.riscv.Feature.c));
 

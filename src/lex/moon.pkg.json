@@ -1,1 +1,6 @@
-{}
+{
+  "import": [
+    "moonbitlang/minimbt/util",
+    "moonbitlang/x/fs"
+  ]
+}

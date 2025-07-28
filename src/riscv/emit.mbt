@@ -13,11 +13,11 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
 
   // 为每个函数定义生成汇编代码
   for fundef in input.fundefs {
-    if extenv.contains(fundef.name._) {
+    if extenv.contains(fundef.name.inner()) {
       continue
     }
     let body = emit_fun(fundef, input.fundefs)
-    functions.push({ name: fundef.name._, export: false, body })
+    functions.push({ name: fundef.name.inner(), asm_export: false, body })
   }
 
   // 主函数
@@ -43,14 +43,14 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   main.push(Ld(Fp, { base: Sp, offset: main_framesize - 16 }))
   main.push(Addi(Sp, Sp, main_framesize))
   main.push(Ret)
-  functions.push({ name: "minimbt_main", export: true, body: main })
+  functions.push({ name: "minimbt_main", asm_export: true, body: main })
   functions
 }
 
 ///|
 fn emit_fun(
   fundef : @closure.FuncDef,
-  fundefs : Array[@closure.FuncDef]
+  fundefs : Array[@closure.FuncDef],
 ) -> Array[RvAsm] {
   let body = []
   let framesize = calculate_framesize(fundef)
@@ -146,17 +146,17 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
     IfEq(_, _, e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      @math.maximum(size1, size2)
+      @cmp.maximum(size1, size2)
     }
     IfLe(_, _, e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      @math.maximum(size1, size2)
+      @cmp.maximum(size1, size2)
     }
     Let((_name, _), e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      @math.maximum(size1, size2) + 8
+      @cmp.maximum(size1, size2) + 8
     }
     Var(_) => 0
     MakeClosure((_name, _ty), _, e) => {
@@ -172,15 +172,15 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
       // println("MakeClosure: " + _name.to_string())
       // println("MakeClosure expr_space: " + expr_space.to_string())
       // 取malloc所需空间和表达式空间的较大值，加上闭包变量的存储空间
-      @math.maximum(malloc_space, expr_space) + var_space
+      @cmp.maximum(malloc_space, expr_space) + var_space
     }
     CallClosure(_, args) =>
       // RISC-V调用约定要求参数区域至少48字节
       // println("CallClosure args: " + ((args.length() + 1) * 8).to_string())
-      @math.maximum(48, (args.length() + 1) * 8) // +1 为闭包对象本身预留空间
+      @cmp.maximum(48, (args.length() + 1) * 8) // +1 为闭包对象本身预留空间
     CallDirect(_, args) =>
       // println("CallDirect args: " + (args.length() * 8).to_string())
-      @math.maximum(48, args.length() * 8) // 同样遵循48字节最小值
+      @cmp.maximum(48, args.length() * 8) // 同样遵循48字节最小值
     MakeTuple(elems) => elems.length() * 8 // 每个元素8字节
     LetTuple(names_tys, _, e) =>
       names_tys.length() * 8 + calculate_framesize_expr(e)
@@ -194,27 +194,28 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
 ///|
 pub(all) struct AssemblyFunction {
   name : String
-  export : Bool
+  asm_export : Bool
   body : Array[RvAsm]
 }
 
 ///|
 pub fn AssemblyFunction::output(
   self : AssemblyFunction,
-  logger : &Logger
+  logger : &Logger,
 ) -> Unit {
   let name = self.name
-  if self.export {
+  if self.asm_export {
     logger.write_string(".global \{name}\n")
   }
   logger.write_string("\{name}:\n")
-  for asm in self.body {
-    Show::output(asm, logger)
+  for rv_asm in self.body {
+    Show::output(rv_asm, logger)
     logger.write_string("\n")
   }
 }
 
 // 添加一个环境结构来跟踪变量位置
+
 ///|
 pub struct Env {
   vars : @immut/hashmap.T[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
@@ -231,12 +232,13 @@ fn find(self : Env, key : String) -> (Int, @closure.LowType) {
 fn find_type(self : Env, key : String) -> @closure.LowType {
   self.vars.get(key).unwrap().1
 }
+
 ///|
 fn add(
   self : Env,
   name : String,
   offset : Int,
-  lowtype : @closure.LowType
+  lowtype : @closure.LowType,
 ) -> Env {
   let vars = self.vars.add(name.to_string(), (offset, lowtype))
   Env::{ vars, current_offset: self.current_offset, fundefs: self.fundefs }
@@ -255,6 +257,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
   match expr {
     Unit => instrs.clear()
     Int(i) => instrs.push(Li(reg_ret, i.to_string()))
+    Int64(i) => instrs.push(Li(reg_ret, i.to_string()))
     Double(d) => {
       let bits = d.reinterpret_as_int64()
       instrs.push(Li(T0, bits.to_string()))
@@ -273,6 +276,14 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         Mul(_) => instrs.push(Mul(reg_ret, T0, T1))
         Div(_) | _ => instrs.push(Div(reg_ret, T0, T1))
       }
+    }
+    Mod(x, y) => {
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, x) }))
+      instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, y) }))
+      instrs.push(Rem(reg_ret, T0, T1))
+    }
+    FMod(_x, _y) => {
+      @util.die("FMod not supported")
     }
     FNeg(x) => {
       instrs.push(Fld(Ft0, { base: Fp, offset: Env::varOffset(env, x) }))
@@ -297,9 +308,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Bne(T0, T1, label_else))
       instrs.append(compile_expr(e1, env))
       instrs.push(J(label_end))
-      instrs.push(Label(label_else._))
+      instrs.push(Label(label_else.inner()))
       instrs.append(compile_expr(e2, env))
-      instrs.push(Label(label_end._))
+      instrs.push(Label(label_end.inner()))
     }
     IfLe(x, y, e1, e2) => {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, x) }))
@@ -311,9 +322,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Bgt(T0, T1, label_else))
       instrs.append(compile_expr(e1, env))
       instrs.push(J(label_end))
-      instrs.push(Label(label_else._))
+      instrs.push(Label(label_else.inner()))
       instrs.append(compile_expr(e2, env))
-      instrs.push(Label(label_end._))
+      instrs.push(Label(label_end.inner()))
     }
     Let((name, ty), e1, e2) => {
       // 计算 e1
@@ -357,12 +368,12 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Call(Label("minimbt_malloc")))
 
       // 3. 存储函数指针
-      instrs.push(La(T0, closure.name._))
+      instrs.push(La(T0, closure.name.inner()))
       instrs.push(Sd(T0, { base: reg_ret, offset: 0 }))
 
       // 4. 存储捕获的变量
-      for i, var in closure.actual_free_vars {
-        match env.vars.get(var.to_string()) {
+      for i, env_var in closure.actual_free_vars {
+        match env.vars.get(env_var.to_string()) {
           Some((offset, _)) => {
             instrs.push(Ld(T0, { base: Fp, offset }))
             instrs.push(Sd(T0, { base: reg_ret, offset: (i + 1) * 8 }))
@@ -370,7 +381,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           None =>
             println(
               "Warning: Free variable not found in environment: " +
-              var.to_string(),
+              env_var.to_string(),
             )
         }
       }
@@ -430,7 +441,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         }
         None =>
           match
-            env.fundefs.search_by(fn(fundef) { fundef.name._ == f.to_string() }) {
+            env.fundefs.search_by(fn(fundef) {
+              fundef.name.inner() == f.to_string()
+            }) {
             Some(offset) => {
               let func = env.fundefs.get(offset).unwrap()
               if func.is_closure {
@@ -444,7 +457,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                 instrs.push(Jalr(T1)) // 调用闭包函数
                 instrs.push(Ld(S11, { base: Fp, offset: closure_save_offset }))
               } else {
-                instrs.push(Call(Label(func.name._)))
+                instrs.push(Call(Label(func.name.inner())))
               }
             }
             None =>
@@ -470,9 +483,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               }
             None => {
               // 如果是函数名，需要特殊处理
-              let def_index = env.fundefs.search_by(
-                fn(fundef) { fundef.name._ == arg.to_string() },
-              )
+              let def_index = env.fundefs.search_by(fn(fundef) {
+                fundef.name.inner() == arg.to_string()
+              })
               match def_index {
                 Some(index) => {
                   let fundef = env.fundefs.get(index).unwrap()
@@ -486,7 +499,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                     instrs.push(Mv(T0, A0))
 
                     // 存储函数指针
-                    instrs.push(La(T1, fundef.name._))
+                    instrs.push(La(T1, fundef.name.inner()))
                     instrs.push(Sd(T1, { base: T0, offset: 0 }))
 
                     // 存储自由变量
@@ -499,7 +512,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                     instrs.push(Mv(reg_arg_list.get(i).unwrap(), T0))
                   } else {
                     // 如果是直接函数，只需要加载函数地址
-                    instrs.push(La(reg_arg_list.get(i).unwrap(), fundef.name._))
+                    instrs.push(
+                      La(reg_arg_list.get(i).unwrap(), fundef.name.inner()),
+                    )
                   }
                 }
                 None =>
@@ -524,17 +539,20 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           }
         }
       }
-      match env.fundefs.search_by(fn(fundef) { fundef.name._ == label._ }) {
-        Some(_) => instrs.push(Call(Label(label._)))
+      match
+        env.fundefs.search_by(fn(fundef) {
+          fundef.name.inner() == label.inner()
+        }) {
+        Some(_) => instrs.push(Call(Label(label.inner())))
         None =>
-          match env.vars.get(label._) {
+          match env.vars.get(label.inner()) {
             Some((offset, _)) => {
               // 3. 加载函数指针并调用
               instrs.push(Ld(S11, { base: Fp, offset }))
               instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
               instrs.push(Jalr(T1)) // 调用闭包函数
             }
-            None => instrs.push(Call(Label(label._)))
+            None => instrs.push(Call(Label(label.inner())))
           }
       }
     }
@@ -623,12 +641,13 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         }
       }
     }
-    ExternalArray(label) => instrs.push(La(reg_ret, label._))
+    ExternalArray(label) => instrs.push(La(reg_ret, label.inner()))
   }
   instrs
 }
 
 // 添加一个辅助函数来获取数组元素类型
+
 ///|
 fn get_array_element_type(array : @typing.Name, env : Env) -> @closure.LowType {
   match env.find_type(array.to_string()) {

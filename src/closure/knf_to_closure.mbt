@@ -1,40 +1,36 @@
 ///|
-pub typealias LocalEnv = @immut/hashmap.T[Name, LowType]
+pub typealias @immut/hashmap.T[Name, LowType] as LocalEnv
 
 ///|
 pub fn knf_program_to_closure(
   prog : @knf.Knf,
-  extern_env : Map[String, Type]
+  extern_env : Map[String, Type],
 ) -> Program {
   // println("knf ir: " + prog.to_string())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
-  extern_env.each(
-    fn(name, ty) {
-      let mut low_type : LowType = Unit
-      let args_low_ty = []
-      match ty {
-        Fun(args_ty, ty) => {
-          low_type = ty_to_low_type(ty, false)
-          for ty in args_ty {
-            args_low_ty.push(ty_to_low_type(ty, false))
-          }
+  extern_env.each(fn(name, ty) {
+    let mut low_type : LowType = Unit
+    let args_low_ty = []
+    match ty {
+      Fun(args_ty, ty) => {
+        low_type = ty_to_low_type(ty, false)
+        for ty in args_ty {
+          args_low_ty.push(ty_to_low_type(ty, false))
         }
-        _ => @util.die("LetRec: " + ty.to_string())
       }
-      fundefs.push(
-        {
-          name: name.to_string(),
-          old_name: @types.Name::from_string?(name).unwrap(),
-          is_closure: false,
-          ty: low_type,
-          args: [],
-          formal_free_vars: [],
-          body: Unit,
-        },
-      )
-    },
-  )
+      _ => @util.die("LetRec: " + ty.to_string())
+    }
+    fundefs.push({
+      name: name.to_string(),
+      old_name: (try? @types.Name::from_string(name)).unwrap(),
+      is_closure: false,
+      ty: low_type,
+      args: [],
+      formal_free_vars: [],
+      body: Unit,
+    })
+  })
   let body : Expr = knf_to_closure(fundefs, prog)
   // println("==========================")
   // println("closure ir:")
@@ -53,18 +49,21 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
   // println("knf_to_closure: " + e.to_string())
   match e {
     Int(i) => Int(i)
+    Int64(i) => Int64(i)
     Unit => Unit
     Double(d) => Double(d)
     Add(a, b) => Add(a, b)
     Sub(a, b) => Sub(a, b)
     Mul(a, b) => Mul(a, b)
     Div(a, b) => Div(a, b)
+    Mod(a, b) => Mod(a, b)
     Neg(x) => Neg(x)
     FNeg(x) => FNeg(x)
     FAdd(a, b) => FAdd(a, b)
     FSub(a, b) => FSub(a, b)
     FMul(a, b) => FMul(a, b)
     FDiv(a, b) => FDiv(a, b)
+    FMod(a, b) => FMod(a, b)
     IfEq(a, b, ka, kb) =>
       IfEq(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
     IfLe(a, b, ka, kb) =>
@@ -102,7 +101,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
           old_name: name,
           is_closure,
           ty: ty_to_low_type(ty, is_closure),
-          args: args.map(fn { (name, ty) => (name, ty_to_low_type(ty, false)) }),
+          args: args.map((name_ty) => (name_ty.0, ty_to_low_type(name_ty.1, false))),
           formal_free_vars: fv_to_array(free_vars),
           body,
         }
@@ -116,7 +115,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       env.push(def)
       let closure : Closure = {
         name: name.to_string(),
-        actual_free_vars: fv_to_array(free_vars).map(fn { fv => fv.0 }),
+        actual_free_vars: fv_to_array(free_vars).map(fv => fv.0), 
       }
       MakeClosure(
         (name, ty_to_low_type(ty, is_closure)),
@@ -127,15 +126,13 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     Apply(name, arr_name) => {
       // 参数是函数类型
       let is_capture = match
-        env.filter(
-          fn(def) {
-            // println("def: " + def.to_string())
-            match def.args.search_by(fn(var) { var.0 == name }) {
-              Some(_) => true
-              None => false
-            }
-          },
-        ) {
+        env.filter(fn(def) {
+          // println("def: " + def.to_string())
+          match def.args.search_by(fn(var_ty) { var_ty.0 == name }) {
+            Some(_) => true
+            None => false
+          }
+        }) {
         [] => false
         _ => true
       }
@@ -159,7 +156,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
           let def = env.get(index).unwrap()
           let closure : Closure = {
             name: def.name,
-            actual_free_vars: def.formal_free_vars.map(fn { fv => fv.0 }),
+            actual_free_vars: def.formal_free_vars.map(fv => fv.0),
           }
           MakeClosure((def.old_name, def.ty), closure, Var(n))
         }
@@ -167,8 +164,8 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       }
     Tuple(arr_name) => MakeTuple(arr_name)
     LetTuple(arr_name_ty, name, cont) => {
-      let arr_name = arr_name_ty.map(
-        fn { (name, ty) => (name, ty_to_low_type(ty, false)) },
+      let arr_name = arr_name_ty.map( 
+        (name_ty) => (name_ty.0, ty_to_low_type(name_ty.1, false))
       )
       LetTuple(arr_name, name, knf_to_closure(env, cont))
     }
@@ -181,7 +178,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
 
 ///|
 fn fv_to_array(
-  fv : @hashset.T[FreeVarWithType]
+  fv : @hashset.T[FreeVarWithType],
 ) -> Array[(@types.Name, LowType)] {
   let res = []
   fv.each(fn(fv) { res.push((fv.name, fv.ty)) })
@@ -196,17 +193,19 @@ fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
     Int => Int
     Double => Double
     Fun(arr_ty, ty) => {
-      let arr_low_ty = arr_ty.map(fn { ty => ty_to_low_type(ty, is_closure) })
+      let arr_low_ty = arr_ty.map((ty) => ty_to_low_type(ty, is_closure))
       match is_closure {
         true => ClosureFn(arr_low_ty, ty_to_low_type(ty, is_closure))
         false => DirectFn(arr_low_ty, ty_to_low_type(ty, is_closure))
       }
     }
     Tuple(arr_ty) =>
-      Tuple(arr_ty.map(fn { ty => ty_to_low_type(ty, is_closure) }))
+      Tuple(arr_ty.map((ty) => ty_to_low_type(ty, is_closure)))
     Array(ty) => Array(ty_to_low_type(ty, is_closure))
     Var(ty) => @util.die("ty_to_low_type: Var" + ty.to_string())
     Ptr => Ptr
+    Enum(_name, _) | Struct(_name, _) =>
+      @util.die("ty_to_low_type: Enum or Struct" + ty.to_string())
   }
 }
 
@@ -233,14 +232,14 @@ impl Hash for FreeVarWithType with hash(self) {
 }
 
 ///|
-impl Compare for FreeVarWithType with compare(self, other) {
+pub impl Compare for FreeVarWithType with compare(self, other) {
   self.name.compare(other.name)
 }
 
 ///|
 impl Eq for FreeVarWithType with op_equal(
   self : FreeVarWithType,
-  other : FreeVarWithType
+  other : FreeVarWithType,
 ) {
   self.name == other.name
 }
@@ -255,17 +254,20 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
   match e {
     Unit => @hashset.new()
     Int(_) => @hashset.new()
+    Int64(_) => @hashset.new()
     Double(_) => @hashset.new()
     Neg(x) => @hashset.of([new_fv(x, Int)])
     Add(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
     Sub(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
     Mul(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
     Div(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
+    Mod(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
     FNeg(x) => @hashset.of([new_fv(x, Double)])
     FAdd(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
     FSub(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
     FMul(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
     FDiv(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
+    FMod(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
     IfEq(a, b, ka, kb) =>
       @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
       .union(fv(ka))
@@ -292,10 +294,10 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
     }
     Apply(f, a) =>
       @hashset.of([new_fv(f, DirectFn([], Unit))]).union(
-        @hashset.from_array(a.map(fn { name => new_fv(name, Unit) })),
+        @hashset.from_array(a.map((name) => new_fv(name, Unit))),
       )
     Tuple(arr_name) =>
-      @hashset.from_array(arr_name.map(fn { name => new_fv(name, Ptr) }))
+      @hashset.from_array(arr_name.map((name) => new_fv(name, Ptr)))
     LetTuple(arr_name_ty, name, cont) => {
       let result = fv(cont)
       for _, name_ty in arr_name_ty {
@@ -308,6 +310,6 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       @hashset.of([new_fv(a, Ptr), new_fv(b, Int), new_fv(c, Ptr)])
     ExternalArray(a) => @hashset.of([new_fv(a, Ptr)])
     ExternalFunctionApplication(_, arr_name) =>
-      @hashset.from_array(arr_name.map(fn { name => new_fv(name, Ptr) }))
+      @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
   }
 }

@@ -1,3 +1,6 @@
 [submodule "libriscv"]
 	path = libriscv
 	url = https://github.com/lynzrand/libriscv.git
+[submodule "contest-2025-data"]
+	path = contest-2025-data
+	url = https://github.com/moonbitlang/contest-2025-data.git

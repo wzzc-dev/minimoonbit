@@ -1,0 +1,3 @@
+interface MiniMoonbitJson {
+  emit: 'asm' | 'llvm'
+}

@@ -88,12 +88,12 @@ pub(all) enum RvAsm {
 }
 
 ///|
-fn write3[TReg1 : Show, TReg2 : Show, TReg3 : Show](
+fn[TReg1 : Show, TReg2 : Show, TReg3 : Show] write3(
   logger : &Logger,
   op : String,
   rd : TReg1,
   rs1 : TReg2,
-  rs2 : TReg3
+  rs2 : TReg3,
 ) -> Unit {
   logger.write_string(op)
   logger.write_string(" ")
@@ -105,12 +105,12 @@ fn write3[TReg1 : Show, TReg2 : Show, TReg3 : Show](
 }
 
 ///|
-fn write2imm[TReg : Show](
+fn[TReg : Show] write2imm(
   logger : &Logger,
   op : String,
   rd : TReg,
   rs1 : TReg,
-  imm : Int
+  imm : Int,
 ) -> Unit {
   logger.write_string(op)
   logger.write_string(" ")
@@ -122,12 +122,12 @@ fn write2imm[TReg : Show](
 }
 
 ///|
-fn write2label[TReg : Show](
+fn[TReg : Show] write2label(
   logger : &Logger,
   op : String,
   rs1 : TReg,
   rs2 : TReg,
-  label : Label
+  label : Label,
 ) -> Unit {
   logger.write_string(op)
   logger.write_string(" ")
@@ -135,15 +135,15 @@ fn write2label[TReg : Show](
   logger.write_string(", ")
   rs2.output(logger)
   logger.write_string(", ")
-  logger.write_string(label._)
+  logger.write_string(label.inner())
 }
 
 ///|
-fn write2mem[TReg1 : Show, TReg2 : Show](
+fn[TReg1 : Show, TReg2 : Show] write2mem(
   logger : &Logger,
   op : String,
   rd : TReg1,
-  mem : MemAccess[TReg2, Int]
+  mem : MemAccess[TReg2, Int],
 ) -> Unit {
   logger.write_string(op)
   logger.write_string(" ")
@@ -156,11 +156,11 @@ fn write2mem[TReg1 : Show, TReg2 : Show](
 }
 
 ///|
-fn write2[TReg1 : Show, TReg2 : Show](
+fn[TReg1 : Show, TReg2 : Show] write2(
   logger : &Logger,
   op : String,
   rd : TReg1,
-  rs1 : TReg2
+  rs1 : TReg2,
 ) -> Unit {
   logger.write_string(op)
   logger.write_string(" ")
@@ -244,7 +244,7 @@ impl Show for RvAsm with output(self, logger) {
       logger.write_string("la ")
       Show::output(rd, logger)
       logger.write_string(", ")
-      logger.write_string(label._)
+      logger.write_string(label.inner())
     }
     Li(rd, imm) => {
       logger.write_string("li ")
@@ -258,7 +258,7 @@ impl Show for RvAsm with output(self, logger) {
     FmvD(rd, rs1) => write2(logger, "fmv.d", rd, rs1)
     J(label) => {
       logger.write_string("j ")
-      logger.write_string(label._)
+      logger.write_string(label.inner())
     }
     Jalr(rs1) => {
       logger.write_string("jalr ")
@@ -270,11 +270,11 @@ impl Show for RvAsm with output(self, logger) {
     }
     Call(label) => {
       logger.write_string("call ")
-      logger.write_string(label._)
+      logger.write_string(label.inner())
     }
     Tail(label) => {
       logger.write_string("tail ")
-      logger.write_string(label._)
+      logger.write_string(label.inner())
     }
     Ret => logger.write_string("ret")
     Label(label) => {

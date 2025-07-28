@@ -12,11 +12,12 @@ pub fn Knf::to_pretty_print(self : Knf) -> PrettyKnf {
 fn PrettyKnf::print_one_level(
   self : PrettyKnf,
   logger : @util.IndentLogger,
-  val : Knf
+  val : Knf,
 ) -> Unit {
   match val {
     Unit => logger.write_string("Unit")
     Int(i) => logger.write_string("Int(\{i})")
+    Int64(i) => logger.write_string("Int64(\{i})")
     Double(d) => logger.write_string("Double(\{d})")
     Neg(e) => logger.write_string("Neg(\{e})")
     Var(name) => logger.write_string("Var(\{name})")
@@ -24,11 +25,13 @@ fn PrettyKnf::print_one_level(
     Sub(e1, e2) => logger.write_string("Sub(\{e1}, \{e2})")
     Mul(e1, e2) => logger.write_string("Mul(\{e1}, \{e2})")
     Div(e1, e2) => logger.write_string("Div(\{e1}, \{e2})")
+    Mod(e1, e2) => logger.write_string("Mod(\{e1}, \{e2})")
     FNeg(e) => logger.write_string("FNeg(\{e})")
     FAdd(e1, e2) => logger.write_string("FAdd(\{e1}, \{e2})")
     FSub(e1, e2) => logger.write_string("FSub(\{e1}, \{e2})")
     FMul(e1, e2) => logger.write_string("FMul(\{e1}, \{e2})")
     FDiv(e1, e2) => logger.write_string("FDiv(\{e1}, \{e2})")
+    FMod(e1, e2) => logger.write_string("FMod(\{e1}, \{e2})")
     IfEq(e1, e2, e3, e4) => {
       logger.write_string("if (\{e1} == \{e2}) then {")
       logger.indent()

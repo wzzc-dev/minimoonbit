@@ -4,10 +4,10 @@
 OUT_PREFIX="out"
 
 # 找到所有 .mbt 结尾的文件并循环处理
-for MBT_FILE in test/test_src/cls*.mbt; do
+for MBT_FILE in contest-2025-data/test_cases/mbt/cls*.mbt; do
   # 提取文件的基础名称（不带路径和扩展名），用于匹配 .ans 文件
   BASE_NAME=$(basename "$MBT_FILE" .mbt)
-  ANS_FILE="test/test_src/$BASE_NAME.ans"
+  ANS_FILE="contest-2025-data/test_cases/ans/$BASE_NAME.ans"
   OUTPUT_FILE="$OUT_PREFIX.s"
 
   echo "Processing $MBT_FILE..."
@@ -17,9 +17,7 @@ for MBT_FILE in test/test_src/cls*.mbt; do
   zig build-exe -target riscv64-linux -femit-bin=test-exe-file "$OUTPUT_FILE" ./riscv_rt/zig-out/lib/libmincaml.a -O Debug -fno-strip -mcpu=baseline_rv64 &&
   
   # 运行模拟器并将输出提取到临时文件（只取 >>> 前内容）
-  ./rvlinux -n test-exe-file | sed '/>>>/q' | awk 1 > output.txt
-
-  # 确保输出文件以换行符结尾，并规范化行尾
+  ./rvlinux -n test-exe-file | sed '/>>>/q' | tr -d '\n' > output.txt
 
   # 检查对应的 .ans 文件是否存在
   if [[ -f "$ANS_FILE" ]]; then

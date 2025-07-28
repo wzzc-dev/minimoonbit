@@ -5,7 +5,7 @@ struct MemAccess[TBase, TOff] {
 } derive(Show)
 
 ///|
-type Label String derive(Show, Eq, Hash)
+struct Label(String) derive(Show, Eq, Hash)
 
 ///| RISC-V register
 pub(all) enum Reg {

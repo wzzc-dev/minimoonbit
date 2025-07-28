@@ -1,24 +1,27 @@
 ///|
-pub typealias Name = @types.Name
+pub typealias @types.Name
 
 ///|
-pub typealias Type = @types.Type
+pub typealias @types.Type
 
 ///|
 pub(all) enum Knf {
   Unit
   Int(Int)
+  Int64(Int64)
   Double(Double)
   Neg(Name)
   Add(Name, Name)
   Sub(Name, Name)
   Mul(Name, Name)
   Div(Name, Name)
+  Mod(Name, Name)
   FNeg(Name)
   FAdd(Name, Name)
   FSub(Name, Name)
   FMul(Name, Name)
   FDiv(Name, Name)
+  FMod(Name, Name)
   IfEq(Name, Name, Knf, Knf)
   IfLe(Name, Name, Knf, Knf)
   Let((Name, Type), Knf, Knf)

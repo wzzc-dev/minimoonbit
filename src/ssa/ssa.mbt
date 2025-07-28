@@ -1,3 +1,4 @@
+///|
 pub(all) struct Ssa {
-  ssa: String
+  ssa : String
 } derive(Show)

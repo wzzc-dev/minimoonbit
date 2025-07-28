@@ -7,7 +7,10 @@ pub(all) struct Context {
 
 ///|
 pub fn lex(context : Context) -> Unit {
-  let { offset, str, array } = context
+  let { str, offset, array } = context
+  // println("lex: " + str)
+  // println("offset: " + offset.to_string())
+  // println("array: " + array.to_string())
   if offset >= str.length() {
     return
   }
@@ -17,7 +20,7 @@ pub fn lex(context : Context) -> Unit {
       context.offset += 1
     }
     '+' => {
-      array.push(Add)
+      array.push(ADD)
       context.offset += 1
     }
     '-' =>
@@ -25,34 +28,71 @@ pub fn lex(context : Context) -> Unit {
         array.push(ARROW)
         context.offset += 2
       } else {
-        array.push(Sub)
+        array.push(SUB)
         context.offset += 1
       }
     '*' => {
-      array.push(Mul)
+      array.push(MUL)
       context.offset += 1
     }
     '/' => {
-      array.push(Div)
+      array.push(DIV)
+      context.offset += 1
+    }
+    '%' => {
+      array.push(MOD)
       context.offset += 1
     }
     '=' =>
       if str[context.offset + 1] == '=' {
-        array.push(EQ)
+        array.push(CMP_OPERATOR("=="))
         context.offset += 2
       } else {
         array.push(ASSIGN)
         context.offset += 1
       }
-    '<' =>
+    '!' => {
       if str[context.offset + 1] == '=' {
-        array.push(LE)
+        array.push(CMP_OPERATOR("!="))
         context.offset += 2
       } else {
-        println(str[context.offset + 1])
-        println("< unknown char")
-        panic()
+        array.push(NOT)
+        context.offset += 1
       }
+    }
+    '>' => {
+      if str[context.offset + 1] == '=' {
+        array.push(CMP_OPERATOR(">="))
+        context.offset += 2
+      } else {
+        array.push(CMP_OPERATOR(">"))
+        context.offset += 1
+      }
+    }
+    '<' =>
+      if str[context.offset + 1] == '=' {
+        array.push(CMP_OPERATOR("<="))
+        context.offset += 2
+      } else {
+        array.push(CMP_OPERATOR("<"))
+        context.offset += 1
+      }
+    '&' => {
+      if str[context.offset + 1] == '&' {
+        array.push(AND)
+        context.offset += 2
+      } else {
+        @util.die("Invalid character: " + str[context.offset + 1].to_string())
+      }
+    }
+    '|' => {
+      if str[context.offset + 1] == '|' {
+        array.push(OR)
+        context.offset += 2
+      } else {
+        @util.die("Invalid character: " + str[context.offset + 1].to_string())
+      }
+    }
     '(' => {
       array.push(LPAREN)
       context.offset += 1
@@ -92,13 +132,13 @@ pub fn lex(context : Context) -> Unit {
     ' ' | '\n' | '\t' | '\r' | '\\' => context.offset += 1
     ch =>
       if ch >= '0' && ch <= '9' {
-        let number = "\{str[offset]}"
+        let number = str.get_char(offset).unwrap()
         context.offset += 1
-        lex_number_rest(context, number)
+        lex_number_rest(context, number.to_string())
       } else {
-        let ident = "\{str[offset]}"
+        let ch = str.get_char(offset).unwrap()
         context.offset += 1
-        lex_other_rest(context, ident)
+        lex_other_rest(context, ch.to_string())
       }
   }
   lex(context)
@@ -106,28 +146,39 @@ pub fn lex(context : Context) -> Unit {
 
 ///|
 fn lex_number_rest(context : Context, number : String) -> Unit {
+  // println("lex_number_rest: " + number)
   let { offset, str, array } = context
+  let number_ = (try? @strconv.parse_int64(number)).unwrap()
+  
   if offset >= str.length() {
-    array.push(NUMBER(@strconv.parse_int?(number).unwrap()))
+    if number_ > 0x7fffffff {
+      array.push(BIG_NUMBER(number_))
+    } else {
+      array.push(NUMBER(number_.to_int()))
+    }
     return
   }
-  let ch = str[offset]
+  let ch = str.get_char(offset).unwrap()
   if ch >= '0' && ch <= '9' {
     context.offset += 1
     lex_number_rest(context, number + ch.to_string())
   } else {
-    array.push(NUMBER(@strconv.parse_int?(number).unwrap()))
+    if number_ > 0x7fffffff {
+      array.push(BIG_NUMBER(number_))
+    } else {
+      array.push(NUMBER(number_.to_int()))
+    }
   }
 }
 
 ///|
 fn lex_other_rest(context : Context, ident : String) -> Unit {
-  let { offset, str, array } = context
+  let { str, offset, array } = context
   if offset >= str.length() {
     array.push(matchIdentifier(ident))
     return
   }
-  let ch = str[offset]
+  let ch = str.get_char(offset).unwrap()
   if (ch >= 'a' && ch <= 'z') ||
     (ch >= 'A' && ch <= 'Z') ||
     (ch >= '0' && ch <= '9') ||
@@ -135,6 +186,8 @@ fn lex_other_rest(context : Context, ident : String) -> Unit {
     ch == '\"' {
     context.offset += 1
     lex_other_rest(context, ident + ch.to_string())
+  } else if (ch == '.'){
+    array.push(DOT)
   } else {
     array.push(matchIdentifier(ident))
   }
@@ -155,6 +208,9 @@ fn matchIdentifier(ident : String) -> Token {
     "else" => ELSE
     "fn" => FN
     "let" => LET
+    "struct" => STRUCT
+    "enum" => ENUM
+    "mut" => MUT
     _ => IDENTIFIER(ident)
   }
 }
@@ -174,14 +230,18 @@ pub(all) enum Token {
   FN
   LET
   NUMBER(Int)
+  BIG_NUMBER(Int64)
   IDENTIFIER(String)
+  CMP_OPERATOR(String)
+  AND
+  OR
   DOT
-  Add
-  Sub
-  Mul
-  Div
+  ADD
+  SUB
+  MUL
+  DIV
+  MOD
   ASSIGN
-  EQ
   LE
   LPAREN
   RPAREN
@@ -195,39 +255,58 @@ pub(all) enum Token {
   COMMA
   WS
   COMMENT
+  STRUCT
+  ENUM
+  MUT
+  WHILE
+  RETURN
 } derive(Show)
 
-// test {
-//   let tokens = []
-//   lex(
-//     {
-//       str: #| fn main() {
-//            #|    let hello = "world"
-//            #|    println(hello)
-//            #| }
-//       ,
-//       offset: 0,
-//       array: tokens,
-//     },
-//   )
-//   println(tokens)
+test {
+  let tokens = []
+  let source = #| fn main() {
+               #|    let hello = "world"
+               #|    println(hello)
+               #| }
+  println(source)
+  lex(
+    {
+      str: source,
+      offset: 0,
+      array: tokens,
+    },
+  )
+  println(tokens)
 
-//   // let (prog, _) = parseType(tokens[:]).unwrap()
-//   // println(prog)  
+  // let (prog, _) = parseType(tokens[:]).unwrap()
+  // println(prog)  
 
-// }
-// test {
-//   let tokens = []
-//   lex(
-//     {
-//       str: "let x = x",
-//       offset: 0,
-//       array: tokens,
-//     },
-//   )
-//   println(tokens)
+}
+test {
+  let tokens = []
+  lex(
+    {
+      str: "let x = x",
+      offset: 0,
+      array: tokens,
+    },
+  )
+  println(tokens)
 
-//   // let (prog, _) = parseType(tokens[:]).unwrap()
-//   // println(prog)  
-
-// }
+  // let (prog, _) = parseType(tokens[:]).unwrap()
+  // println(prog)  
+}
+test {
+  let tokens = []
+  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/clamp.mbt")
+  println(_test2)
+  lex(
+    {
+      str: _test2,
+      offset: 0,
+      array: tokens,
+    },
+  )
+  println(tokens)
+  
+}
