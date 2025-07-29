@@ -2,6 +2,7 @@
 fn program(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("program: " + tokens.to_string())
   Parser(topLevel).parse(tokens)
 }
 
@@ -1583,7 +1584,7 @@ fn[V] parse(
   self : Parser[V],
   tokens : ArrayView[@lex.Token],
 ) -> (V, ArrayView[@lex.Token])? {
-  println("parsing: " + tokens.to_string())
+  // println("parsing: " + tokens.to_string())
   self.inner()(tokens)
 }
 
@@ -1632,6 +1633,17 @@ test {
 test {
   let tokens = []
   let _test2 = @fs.read_file_to_string("test/test_src/adder.mbt")
+  // println(_test2)
+  @lex.lex({ str: _test2, offset: 0, array: tokens })
+  // println(tokens)
+  let (prog, _) = parser.parse(tokens[:]).unwrap()
+  println(prog)
+}
+
+///|
+test {
+  let tokens = []
+  let _test2 = @fs.read_file_to_string("test/test_src/ack.mbt")
   // println(_test2)
   @lex.lex({ str: _test2, offset: 0, array: tokens })
   // println(tokens)

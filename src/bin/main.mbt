@@ -52,7 +52,7 @@ struct CompileStatus {
   mut closure_ir : @closure.Program?
   mut ssa : @ssa.Ssa?
   mut llvmir : @llvmir.LLVMIR?
-  mut asm : Array[@riscv.AssemblyFunction]?
+  mut riscv_asm : Array[@riscv.AssemblyFunction]?
   mut js : String?
   mut wasm : String?
 }
@@ -75,7 +75,7 @@ fn CompileStatus::initialize(
     closure_ir: None,
     ssa: None,
     llvmir: None,
-    asm: None,
+    riscv_asm: None,
     js: None,
     wasm: None,
   }
@@ -152,7 +152,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
         }
         RISCV => {
           let real_asm = @riscv.emit(self.closure_ir.unwrap())
-          self.asm = Some(real_asm)
+          self.riscv_asm = Some(real_asm)
         }
       }
     Finished => ()
@@ -176,7 +176,7 @@ fn CompileStatus::output(
       Closure => Json::stringify(self.opt_knf.unwrap().to_json())
       Ssa => Json::stringify(self.closure_ir.unwrap().to_json())
       Asm => Json::stringify(self.closure_ir.unwrap().to_json())
-      Finished => @riscv.print_functions(self.asm.unwrap())
+      Finished => @riscv.print_functions(self.riscv_asm.unwrap())
     }
   } else {
     match self.curr_stage {
@@ -192,7 +192,7 @@ fn CompileStatus::output(
           JS => self.js.unwrap()
           WASM => self.wasm.unwrap()
           LLVMIR => @llvmir.print_functions(self.llvmir.unwrap())
-          RISCV => @riscv.print_functions(self.asm.unwrap())
+          RISCV => @riscv.print_functions(self.riscv_asm.unwrap())
         }
     }
   }
@@ -201,7 +201,7 @@ fn CompileStatus::output(
 ///|
 fn main {
   let argv = @sys.get_cli_args()[1:]
-  println(argv)
+  // println(argv)
   let mut file = None
   let knf_opt_iters = Ref::new(10)
   let knf_opt_inline_threshold = Ref::new(10)
@@ -409,7 +409,7 @@ fn main {
     }
     let out_string = status.output(json.val, ty)
     if out_file.val == "-" {
-      println(out_string)
+      // println(out_string)
     } else {
       let _ = try? @fs.write_string_to_file(out_file.val, out_string)
     }

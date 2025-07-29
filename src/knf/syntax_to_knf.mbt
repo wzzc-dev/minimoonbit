@@ -28,13 +28,6 @@ fn KnfEnv::new_temp(self : KnfEnv) -> Name {
 }
 
 ///|
-fn KnfEnv::new_named_temp(self : KnfEnv, name : Name) -> Name {
-  let counter = self.counter
-  self.counter += 1
-  { ..name, slot: counter }
-}
-
-///|
 fn KnfEnv::get_knf(
   self : KnfEnv,
   syn : @types.Syntax,
@@ -42,7 +35,7 @@ fn KnfEnv::get_knf(
   let ty = KnfEnv::get_type(self.externals, syn)
   match syn {
     Var(name) => {
-      let name = @types.Name::from_string?(name).unwrap()
+      let name = (try? @types.Name::from_string(name)).unwrap()
       (name, ty, Var(name))
     }
     _ => {
@@ -68,7 +61,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     Unit => Unit
     Int(i) => Int(i)
     Double(d) => Double(d)
-    Var(name) => Var(@types.Name::from_string?(name).unwrap())
+    Var(name) => Var((try? @types.Name::from_string(name)).unwrap())
     Bool(b) => if b { Int(1) } else { Int(0) }
     Not(syn) => KnfEnv::to_knf(self, If(syn, Int(0), Int(1)))
     If(syn1, syn2, syn3) =>
@@ -216,7 +209,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           // Knf::Let((knf.0, Int), knf.1, Neg(knf.0))
           match syn {
             Var(str) => {
-              let name = @types.Name::from_string?(str).unwrap()
+              let name = (try? @types.Name::from_string(str)).unwrap()
               Neg(name)
             }
             _ => {
@@ -228,7 +221,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         Some(Double) =>
           match syn {
             Var(str) => {
-              let name = @types.Name::from_string?(str).unwrap()
+              let name = (try? @types.Name::from_string(str)).unwrap()
               FNeg(name)
             }
             _ => {
@@ -306,13 +299,13 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       Let((name, ty), knf, rest_knf)
     }
     LetRec({ name: (name, ty), args, body }, rest) => {
-      let fun_name = @types.Name::from_string?(name).unwrap()
+      let fun_name = (try? @types.Name::from_string(name)).unwrap()
       let mut env_body = self.externals.add(name, ty)
       let env_fun = self.externals.add(name, ty)
-      let fun_args = args.map(fn {
+      let fun_args = args.map({
         t => {
           env_body = env_body.add(t.0, t.1)
-          let x = @types.Name::from_string?(t.0).unwrap()
+          let x = (try? @types.Name::from_string(t.0)).unwrap()
           (x, t.1)
         }
       })
@@ -390,7 +383,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
             let ty = KnfEnv::get_type(self.externals, ss)
             match ss {
               Var(str) => {
-                let x = @types.Name::from_string?(str).unwrap()
+                let x = (try? @types.Name::from_string(str)).unwrap()
                 args_names.insert(0, x)
                 let_app(self, f, args_names, s)
               }
@@ -413,7 +406,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         let ty_s = KnfEnv::get_type(self.externals, syn)
         match syn {
           Var(str) => {
-            let x = @types.Name::from_string?(str).unwrap()
+            let x = (try? @types.Name::from_string(str)).unwrap()
             let_app(self, x, [], syns)
           }
           _ => {
@@ -427,7 +420,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       match syn {
         Var(f) =>
           if @typing.extenv.contains(f) {
-            let_app(self, @types.Name::from_string?(f).unwrap(), [], args_syns)
+            let_app(self, (try? @types.Name::from_string(f)).unwrap(), [], args_syns)
           } else {
             let_args(self, syn, args_syns)
           }
@@ -467,7 +460,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         { counter: self.counter, externals: env_tuple },
         rest,
       )
-      let arr_nm_ty = args.map(fn {
+      let arr_nm_ty = args.map({
         t => {
           let nm = @types.Name::name_only(t.0)
           (nm, t.1)
@@ -475,7 +468,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       })
       match syn {
         Var(str) => {
-          let x = @types.Name::from_string?(str).unwrap()
+          let x = (try? @types.Name::from_string(str)).unwrap()
           LetTuple(arr_nm_ty, x, after)
         }
         _ => {
@@ -580,7 +573,7 @@ test {
     //   println("matmul-flat mbt file")
     //   continue
     // }
-    let _test2 = @fs.read_file_to_string?("test/test_src/" + file).unwrap()
+    let _test2 = (try? @fs.read_file_to_string("test/test_src/" + file)).unwrap()
     let parse = @parser.parse_from_string(_test2)
     try {
       let typed = @typing.typing(parse)
@@ -603,7 +596,7 @@ test {
 
 ///|
 test {
-  let _test2 = @fs.read_file_to_string?("test/test_src/matmul.mbt").unwrap() //cls-reg-bug.mbt
+  let _test2 = (try? @fs.read_file_to_string("test/test_src/matmul.mbt")).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   // println(parse)
   try {

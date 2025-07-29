@@ -54,8 +54,8 @@ pub fn FuncDef::to_json(self : FuncDef) -> Json {
 pub fn Knf::from_json(json : Json) -> Knf raise {
   match json {
     ["Unit"] => Unit
-    ["Int", Number(i)] => Int(i.to_int())
-    ["Double", Number(d)] => Double(d)
+    ["Int", Number(i, ..)] => Int(i.to_int())
+    ["Double", Number(d, ..)] => Double(d)
     ["Neg", n] => Neg(Name::from_json(n))
     ["Add", n1, n2] => Add(Name::from_json(n1), Name::from_json(n2))
     ["Sub", n1, n2] => Sub(Name::from_json(n1), Name::from_json(n2))

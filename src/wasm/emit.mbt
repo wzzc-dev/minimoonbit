@@ -156,11 +156,11 @@ fn emit_expr(expr : @closure.Expr) -> String {
       result += "  (local.set $env_ptr (global.get $heap))\n"
 
       // 存储环境变量
-      for i, var in closure.actual_free_vars {
+      for i, env_var in closure.actual_free_vars {
         result += "  (i32.store offset=" +
           (i * 4).to_string() +
           " (local.get $env_ptr) (local.get $" +
-          var.to_string() +
+          env_var.to_string() +
           "))\n"
       }
 

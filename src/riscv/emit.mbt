@@ -17,7 +17,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
       continue
     }
     let body = emit_fun(fundef, input.fundefs)
-    functions.push({ name: fundef.name.inner(), export: false, body })
+    functions.push({ name: fundef.name.inner(), asm_export: false, body })
   }
 
   // 主函数
@@ -43,7 +43,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   main.push(Ld(Fp, { base: Sp, offset: main_framesize - 16 }))
   main.push(Addi(Sp, Sp, main_framesize))
   main.push(Ret)
-  functions.push({ name: "minimbt_main", export: true, body: main })
+  functions.push({ name: "minimbt_main", asm_export: true, body: main })
   functions
 }
 
@@ -146,17 +146,17 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
     IfEq(_, _, e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      @math.maximum(size1, size2)
+      @cmp.maximum(size1, size2)
     }
     IfLe(_, _, e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      @math.maximum(size1, size2)
+      @cmp.maximum(size1, size2)
     }
     Let((_name, _), e1, e2) => {
       let size1 = calculate_framesize_expr(e1)
       let size2 = calculate_framesize_expr(e2)
-      @math.maximum(size1, size2) + 8
+      @cmp.maximum(size1, size2) + 8
     }
     Var(_) => 0
     MakeClosure((_name, _ty), _, e) => {
@@ -172,15 +172,15 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
       // println("MakeClosure: " + _name.to_string())
       // println("MakeClosure expr_space: " + expr_space.to_string())
       // 取malloc所需空间和表达式空间的较大值，加上闭包变量的存储空间
-      @math.maximum(malloc_space, expr_space) + var_space
+      @cmp.maximum(malloc_space, expr_space) + var_space
     }
     CallClosure(_, args) =>
       // RISC-V调用约定要求参数区域至少48字节
       // println("CallClosure args: " + ((args.length() + 1) * 8).to_string())
-      @math.maximum(48, (args.length() + 1) * 8) // +1 为闭包对象本身预留空间
+      @cmp.maximum(48, (args.length() + 1) * 8) // +1 为闭包对象本身预留空间
     CallDirect(_, args) =>
       // println("CallDirect args: " + (args.length() * 8).to_string())
-      @math.maximum(48, args.length() * 8) // 同样遵循48字节最小值
+      @cmp.maximum(48, args.length() * 8) // 同样遵循48字节最小值
     MakeTuple(elems) => elems.length() * 8 // 每个元素8字节
     LetTuple(names_tys, _, e) =>
       names_tys.length() * 8 + calculate_framesize_expr(e)
@@ -194,7 +194,7 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
 ///|
 pub(all) struct AssemblyFunction {
   name : String
-  export : Bool
+  asm_export : Bool
   body : Array[RvAsm]
 }
 
@@ -204,12 +204,12 @@ pub fn AssemblyFunction::output(
   logger : &Logger,
 ) -> Unit {
   let name = self.name
-  if self.export {
+  if self.asm_export {
     logger.write_string(".global \{name}\n")
   }
   logger.write_string("\{name}:\n")
-  for asm in self.body {
-    Show::output(asm, logger)
+  for rv_asm in self.body {
+    Show::output(rv_asm, logger)
     logger.write_string("\n")
   }
 }
@@ -363,8 +363,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Sd(T0, { base: reg_ret, offset: 0 }))
 
       // 4. 存储捕获的变量
-      for i, var in closure.actual_free_vars {
-        match env.vars.get(var.to_string()) {
+      for i, env_var in closure.actual_free_vars {
+        match env.vars.get(env_var.to_string()) {
           Some((offset, _)) => {
             instrs.push(Ld(T0, { base: Fp, offset }))
             instrs.push(Sd(T0, { base: reg_ret, offset: (i + 1) * 8 }))
@@ -372,7 +372,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           None =>
             println(
               "Warning: Free variable not found in environment: " +
-              var.to_string(),
+              env_var.to_string(),
             )
         }
       }

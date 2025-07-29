@@ -7,7 +7,10 @@ pub(all) struct Context {
 
 ///|
 pub fn lex(context : Context) -> Unit {
-  let { offset, str, array } = context
+  let { str, offset, array } = context
+  // println("lex: " + str)
+  // println("offset: " + offset.to_string())
+  // println("array: " + array.to_string())
   if offset >= str.length() {
     return
   }
@@ -92,13 +95,13 @@ pub fn lex(context : Context) -> Unit {
     ' ' | '\n' | '\t' | '\r' | '\\' => context.offset += 1
     ch =>
       if ch >= '0' && ch <= '9' {
-        let number = "\{str[offset]}"
+        let number = str.get_char(offset).unwrap()
         context.offset += 1
-        lex_number_rest(context, number)
+        lex_number_rest(context, number.to_string())
       } else {
-        let ident = "\{str[offset]}"
+        let ch = str.get_char(offset).unwrap()
         context.offset += 1
-        lex_other_rest(context, ident)
+        lex_other_rest(context, ch.to_string())
       }
   }
   lex(context)
@@ -112,7 +115,7 @@ fn lex_number_rest(context : Context, number : String) -> Unit {
     array.push(NUMBER(number_.unwrap()))
     return
   }
-  let ch = str[offset]
+  let ch = str.get_char(offset).unwrap()
   if ch >= '0' && ch <= '9' {
     context.offset += 1
     lex_number_rest(context, number + ch.to_string())
@@ -123,12 +126,12 @@ fn lex_number_rest(context : Context, number : String) -> Unit {
 
 ///|
 fn lex_other_rest(context : Context, ident : String) -> Unit {
-  let { offset, str, array } = context
+  let { str, offset, array } = context
   if offset >= str.length() {
     array.push(matchIdentifier(ident))
     return
   }
-  let ch = str[offset]
+  let ch = str.get_char(offset).unwrap()
   if (ch >= 'a' && ch <= 'z') ||
     (ch >= 'A' && ch <= 'Z') ||
     (ch >= '0' && ch <= '9') ||
@@ -204,6 +207,7 @@ test {
                #|    let hello = "world"
                #|    println(hello)
                #| }
+  println(source)
   lex(
     {
       str: source,
