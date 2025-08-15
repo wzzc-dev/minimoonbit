@@ -5,6 +5,10 @@
       "alias": "types"
     },
     "moonbitlang/minimbt/knf",
-    "moonbitlang/minimbt/util"
+    "moonbitlang/minimbt/parser",
+    "moonbitlang/minimbt/util",
+    "moonbitlang/x/fs",
+    
+    "moonbitlang/minimbt/typing"
   ]
 }

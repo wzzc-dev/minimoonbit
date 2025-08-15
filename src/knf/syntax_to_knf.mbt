@@ -329,13 +329,19 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
             // println(f.name)
             // println(f.name.to_string())
             if not(f.name.is_empty()) &&
-              @typing.extenv.contains(f.name.unwrap()) {
+              @util.extenv.contains(f.name.unwrap()) {
               // @util.logger("@types: " + @typing.extenv.to_string())
               // @util.logger("let_app: ExternalFunctionApplication(f, args_names) f = " + f.name.to_string())
-              ExternalFunctionApplication(
-                "minimbt_" + f.name.unwrap(),
-                args_names,
-              )
+              if @typing.extenv.contains(f.name.unwrap()) {
+                // @util.logger("let_app: ExternalFunctionApplication(f, args_names) f = " + f.name.to_string())
+                ExternalFunctionApplication(
+                  "minimbt_" + f.name.unwrap(),
+                  args_names,
+                )
+              } else {
+                // @util.logger("let_app: FunctionApplication(f, args_names) f = " + f.to_string())
+                Apply(f, args_names)
+              }
             } else {
               // println("app")
               // @util.logger("let_app: Apply(f, args_names) f = " + f.name.to_string())
@@ -571,7 +577,7 @@ test {
 ///|
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/clamp.mbt",
+    "contest-2025-data/test_cases/mbt/ack.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   // println(parse)

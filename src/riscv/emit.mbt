@@ -370,7 +370,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 3. 存储函数指针
       instrs.push(La(T0, closure.name.inner()))
       instrs.push(Sd(T0, { base: reg_ret, offset: 0 }))
-
+      // @util.logger("closure: closure.actual_free_vars " + closure.actual_free_vars.to_string())
+      // @util.logger("closure: env.vars " + env.vars.to_string())
       // 4. 存储捕获的变量
       for i, env_var in closure.actual_free_vars {
         match env.vars.get(env_var.to_string()) {
@@ -379,8 +380,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             instrs.push(Sd(T0, { base: reg_ret, offset: (i + 1) * 8 }))
           }
           None =>
-            println(
+            @util.logger(
               "Warning: Free variable not found in environment: " +
+              "name: " + name.to_string() + " env: " +
               env_var.to_string(),
             )
         }

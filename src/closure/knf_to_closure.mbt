@@ -313,3 +313,31 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
   }
 }
+test {
+  let _test2 = (try? @fs.read_file_to_string(
+    "contest-2025-data/test_cases/mbt/ack.mbt",
+  )).unwrap() //cls-reg-bug.mbt
+  let parse = @parser.parse_from_string(_test2)
+  // println(parse)
+  try {
+    let typed = @typing.typing(parse)
+    // println("typed: " + typed.to_string())
+    let env = @knf.KnfEnv::new(@immut/hashmap.new())
+    let pre = @knf.KnfEnv::syntax_preprocess(env, typed)
+    // println("pre: " + pre.to_string())
+    let knf = @knf.KnfEnv::to_knf(env, pre)
+    // println(knf)
+    let closure = knf_program_to_closure(knf,Map::from_iter(@immut/hashmap.new().iter()),)
+    println(closure)
+  } catch {
+    @typing.TyErr(s) => {
+      println("typing error")
+      println(s)
+    }
+    @knf.KnfErr(s) => {
+      println("knf error")
+      println(s)
+    }
+    _ => println("unknown error")
+  }
+}
