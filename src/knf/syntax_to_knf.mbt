@@ -588,7 +588,7 @@ test {
     let pre = KnfEnv::syntax_preprocess(env, typed)
     println("pre: " + pre.to_string())
     let knf = KnfEnv::to_knf(env, pre)
-    println(knf)
+    println("knf: " + knf.to_string())
   } catch {
     @typing.TyErr(s) => {
       println("typing error")
