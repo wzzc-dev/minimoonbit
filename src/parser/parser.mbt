@@ -7,7 +7,7 @@ fn program(
   Parser(topLevel).many().map(fn(decls) {
     // println("decls: " + decls.to_string())
     // Combine all top-level declarations into a single syntax tree
-    decls.rev_fold(init=@types.Syntax::Unit, fn(decl, acc) {
+    decls.rev_fold(init=@types.Syntax::Unit, fn(acc, decl) {
       // println("decl: " + decl.to_string())
       // println("acc: " + acc.to_string())
       // println("")

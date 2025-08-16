@@ -318,17 +318,17 @@ test {
     "contest-2025-data/test_cases/mbt/ack.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
-  // println(parse)
+  println("parse: " + parse.to_string())
   try {
     let typed = @typing.typing(parse)
-    // println("typed: " + typed.to_string())
+    println("typed: " + typed.to_string())
     let env = @knf.KnfEnv::new(@immut/hashmap.new())
     let pre = @knf.KnfEnv::syntax_preprocess(env, typed)
-    // println("pre: " + pre.to_string())
+    println("pre: " + pre.to_string())
     let knf = @knf.KnfEnv::to_knf(env, pre)
-    // println(knf)
+    println("knf: " + knf.to_string())
     let closure = knf_program_to_closure(knf,Map::from_iter(@immut/hashmap.new().iter()),)
-    println(closure)
+    println("closure: " + closure.to_string())
   } catch {
     @typing.TyErr(s) => {
       println("typing error")
