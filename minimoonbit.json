@@ -1,4 +1,3 @@
-interface MiniMoonbitJson {
-  /** 输出的代码是汇编 (asm) 还是 LLVM IR (llvm) */
-  emit: 'asm' | 'llvm'
+{
+  "emit": "asm"
 }
