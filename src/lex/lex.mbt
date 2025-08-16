@@ -211,6 +211,8 @@ fn matchIdentifier(ident : String) -> Token {
     "struct" => STRUCT
     "enum" => ENUM
     "mut" => MUT
+    "while" => WHILE
+    "return" => RETURN
     _ => IDENTIFIER(ident)
   }
 }

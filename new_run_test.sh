@@ -4,7 +4,7 @@
 OUT_PREFIX="out"
 
 # 找到所有 .mbt 结尾的文件并循环处理
-for MBT_FILE in contest-2025-data/test_cases/mbt/cls*.mbt; do
+for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
   # 提取文件的基础名称（不带路径和扩展名），用于匹配 .ans 文件
   BASE_NAME=$(basename "$MBT_FILE" .mbt)
   ANS_FILE="contest-2025-data/test_cases/ans/$BASE_NAME.ans"

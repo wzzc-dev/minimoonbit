@@ -647,14 +647,15 @@ fn assignStmt(
   .parser_and(expr)
   .parser_and(semicolon)
   .map(fn(input) {
+    // @util.logger("assignStmt input: " + input.to_string())
     match input {
       (((get_expr, _), expr), _) =>
         match get_expr {
           Get(arr, idx) =>
             @types.Syntax::Put(arr, idx, expr)
           _ => {
-            println("Invalid assign statement: left side must be an array access")
-            panic()
+            @types.Syntax::Let(("_", Var({ val: None })), get_expr, expr)
+            // @util.die("Invalid assign statement: left side must be an array access or identifier, but got " + get_expr.to_string())
           }
         }
     }
@@ -667,13 +668,15 @@ fn assignStmt(
 fn whileStmt(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // println("whileStmt: " + tokens.to_string())
+  // @util.logger("whileStmt")
+  // @util.logger("whileStmt tokens: " + tokens.to_string())
   ptoken_while
   .parser_and(expr)
   .parser_and(lcurlybracket)
   .parser_and(Parser(stmt).many())
   .parser_and(rcurlybracket)
   .map(fn(input) {
+    // @util.logger("whileStmt input: " + tokens.to_string())
     match input {
       ((((_, expr), _), stmts), _) =>
         @types.Syntax::While(expr, stmts)
@@ -749,7 +752,6 @@ fn leftValue(
 fn expr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // @util.logger("expr token: " + tokens.to_string())
   Parser(orLevelExpr).parse(tokens)
 }
 
@@ -767,6 +769,7 @@ fn orLevelExpr(
     .many()
   )
   .map(fn(input) {
+    // @util.logger("orLevelExpr input: " + input.to_string())
     match input {
       (first_expr, operations) => {
         // Left-associative folding: (a || b) || c
@@ -940,7 +943,7 @@ fn mulDivLevelExpr(
 fn ifLevelExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // println("ifLevelExpr: " + tokens.to_string())
+  // @util.logger("ifLevelExpr: " + tokens[0].to_string())
   Parser(getOrApplyLevelExpr).or(ifExpr).parse(tokens)
 }
 
@@ -950,12 +953,13 @@ fn ifLevelExpr(
 fn ifExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // println("ifExpr: " + tokens.to_string())
+  // @util.logger("ifExpr tokens: " + tokens.to_string())
   ptoken_if
   .parser_and(expr)
   .parser_and(blockExpr)
   .zeroOrOnce(ptoken_else.parser_and(Parser(ifExpr).or(blockExpr)))
   .map(fn(input) {
+    // @util.logger("ifExpr input: " + tokens.to_string())
     match input {
       (((_, expr), block_expr), Some((_, block_expr2))) =>
         @types.Syntax::If(expr, block_expr, block_expr2)
@@ -1662,7 +1666,7 @@ test {
 ///|
 test {
   let tokens = []
-  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/cls-bug2.mbt")
+  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/caltz.mbt")
   // println(_test2)
   @lex.lex({ str: _test2, offset: 0, array: tokens })
   // println("tokens: " + tokens.to_string())
