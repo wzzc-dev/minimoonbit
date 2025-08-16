@@ -110,7 +110,13 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
     }
     Typecheck => {
       let typechecked = try? @typing.typing(self.ast.unwrap())
-      self.typechecked = Some(typechecked.unwrap())
+      match typechecked {
+        Ok(_) => self.typechecked = Some(typechecked.unwrap())
+        Err(e) => {
+          @util.die(e.to_json().to_string())
+        }
+      }
+      
     }
     Knf => {
       let pre = @knf.KnfEnv::syntax_preprocess(

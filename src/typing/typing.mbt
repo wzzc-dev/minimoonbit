@@ -264,6 +264,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         }
         _ => {
           let t = infer(ctx, value)
+          // @util.logger("let: " + name.to_string() + " t: " + t.to_string() + " value: " + value.to_string())
           // println("T: before")
           // println("TY: " + ty.repr().to_string());
           // println("after")
@@ -275,11 +276,11 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
               "The value and expression types in Let are different" +
               " in name: " +
               name.to_string() +
-              "\nvalue: " +
+              "\n\tvalue: " +
               value.to_string() +
-              "\nt: " +
+              "\n\tt: " +
               t.to_string() +
-              "\nty: " +
+              "\n\tty: " +
               ty.to_string(),
             )
           }
@@ -572,7 +573,7 @@ test "typing" {
 ///|
 test {
   // let x = Array::make(10, 0);
-  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/clamp.mbt")
+  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/cls-bug2.mbt")
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string())
   try {
@@ -581,7 +582,7 @@ test {
   } catch {
     TyErr(s) => {
       println("typing error")
-      println(s)
+      @util.die(s.to_json().to_string())
     }
   }
 }

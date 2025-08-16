@@ -515,7 +515,7 @@ fn letTupleStmt(
   .parser_and(expr)
   .parser_and(semicolon)
   .map(fn(input) {
-    @util.logger("letTupleStmt: " + input.to_string())
+    // @util.logger("letTupleStmt: " + input.to_string())
     match input {
       (
         (
@@ -1321,7 +1321,7 @@ fn blockExpr(
             @types.Syntax::LetRec(fn_def, _) => 
               @types.Syntax::LetRec(fn_def, acc)
             _ => 
-              @types.Syntax::Let(("_", @types.Type::Unit), stmt, acc)
+              @types.Syntax::Let(("_", @types.Type::Var({ val: None })), stmt, acc)
           }
         })
       }
@@ -1340,7 +1340,7 @@ fn blockExpr(
                 @types.Syntax::LetRec(fn_def, _) => 
                   @types.Syntax::LetRec(fn_def, acc)
                 _ => 
-                  @types.Syntax::Let(("_", @types.Type::Unit), stmt, acc)
+                  @types.Syntax::Let(("_", @types.Type::Var({ val: None }) ), stmt, acc)
               }
             })
           }
@@ -1801,12 +1801,12 @@ test {
 ///|
 test {
   let tokens = []
-  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/ack.mbt")
+  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/cls-bug2.mbt")
   // println(_test2)
   @lex.lex({ str: _test2, offset: 0, array: tokens })
-  // println(tokens)
+  println("tokens: " + tokens.to_string())
   let (prog, _) = parser.parse(tokens[:]).unwrap()
-  println(prog.to_string())
+  println("prog: " + prog.to_string())
 }
 
 ///|

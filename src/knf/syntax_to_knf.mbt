@@ -577,16 +577,16 @@ test {
 ///|
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/ack.mbt",
+    "contest-2025-data/test_cases/mbt/cls-bug2.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
-  // println(parse)
+  println("parse: " + parse.to_string())
   try {
     let typed = @typing.typing(parse)
-    // println("typed: " + typed.to_string())
+    println("typed: " + typed.to_string())
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = KnfEnv::syntax_preprocess(env, typed)
-    // println("pre: " + pre.to_string())
+    println("pre: " + pre.to_string())
     let knf = KnfEnv::to_knf(env, pre)
     println(knf)
   } catch {
