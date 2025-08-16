@@ -49,7 +49,7 @@ fn topLetDecl(
   .parser_and(expr)
   .parser_and(semicolon)
   .map(fn(input) {
-    @util.logger("topLetDecl input: " + input.to_string())
+    // @util.logger("topLetDecl input: " + input.to_string())
     match input {
       (((((_, @lex.Token::IDENTIFIER(id)), type_annotation), _), expr), _) => {
         let type_ = match type_annotation {
