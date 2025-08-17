@@ -325,6 +325,20 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.append(compile_expr(e2, env))
       instrs.push(Label(label_end.inner()))
     }
+    IfLt(x, y, e1, e2) => {
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, x) }))
+      instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, y) }))
+      // println("A0: " + A0.to_string() + " A1: " + A1.to_string())
+      // 小于比较分支
+      let label_else = gen_label("else")
+      let label_end = gen_label("end")
+      instrs.push(Bge(T0, T1, label_else))
+      instrs.append(compile_expr(e1, env))
+      instrs.push(J(label_end))
+      instrs.push(Label(label_else.inner()))
+      instrs.append(compile_expr(e2, env))
+      instrs.push(Label(label_end.inner()))
+    }
     While(cond, body) => {
       // @util.logger("While loop: cond:" + cond.to_string() + ", \n body: " + body.to_string())
       // Generate labels for loop control

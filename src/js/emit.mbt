@@ -92,6 +92,17 @@ fn emit_expr(expr : @closure.Expr) -> String {
       "\n} else {\n  " +
       emit_expr(e4) +
       "\n}"
+    IfLt(e1, e2, e3, e4) =>
+      "if (" +
+      e1.to_string() +
+      " < " +
+      e2.to_string() +
+      ") {\n  " +
+      emit_expr(e3) +
+      "\n} else {\n  " +
+      emit_expr(e4) +
+      "\n}"
+    
     Let((name, _), e1, e2) => // 先生成绑定，然后继续处理剩余表达式
       "(() => {\n  " +
       "const \{name} = " +

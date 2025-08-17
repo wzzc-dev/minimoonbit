@@ -186,6 +186,65 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
               }
           }
         }
+        LT(lhs, rhs) => {
+          let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
+          let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
+          // println("LE: " + (l_name, l_ty, lknf).to_string())
+          // println("LE: " + (r_name, r_ty, rknf).to_string())
+          match lhs {
+            Var(_) =>
+              match rhs {
+                Var(_) =>
+                  IfLt(
+                    l_name,
+                    r_name,
+                    KnfEnv::to_knf(self, syn2),
+                    KnfEnv::to_knf(self, syn3),
+                  )
+                _ =>
+                  // println("LE: rhs is  a variable" + r_name.to_string())
+                  Let(
+                    (r_name, r_ty),
+                    rknf,
+                    IfLt(
+                      l_name,
+                      r_name,
+                      KnfEnv::to_knf(self, syn2),
+                      KnfEnv::to_knf(self, syn3),
+                    ),
+                  )
+              }
+            _ =>
+              match rhs {
+                Var(_) =>
+                  Let(
+                    (l_name, l_ty),
+                    lknf,
+                    IfLt(
+                      l_name,
+                      r_name,
+                      KnfEnv::to_knf(self, syn2),
+                      KnfEnv::to_knf(self, syn3),
+                    ),
+                  )
+                _ =>
+                  Let(
+                    (l_name, l_ty),
+                    lknf,
+                    Let(
+                      (r_name, r_ty),
+                      rknf,
+                      IfLt(
+                        l_name,
+                        r_name,
+                        KnfEnv::to_knf(self, syn2),
+                        KnfEnv::to_knf(self, syn3),
+                      ),
+                    ),
+                  )
+              }
+          }
+        }
         Not(b) => KnfEnv::to_knf(self, If(b, syn3, syn2))
         Bool(b) =>
           if b {
@@ -283,6 +342,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       KnfEnv::to_knf(self, If(Eq(syn1, syn2), Bool(true), Bool(false)))
     LE(syn1, syn2) =>
       KnfEnv::to_knf(self, If(LE(syn1, syn2), Bool(true), Bool(false)))
+    LT(syn1, syn2) =>
+      KnfEnv::to_knf(self, If(LT(syn1, syn2), Bool(true), Bool(false)))
     GT(syn1, syn2) =>
       KnfEnv::to_knf(self, If(LE(syn1, syn2), Bool(false), Bool(true)))
     Let((name, ty), syn, rest) => {
@@ -570,6 +631,9 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           }
       }
     }
+    And(e1, e2) => {
+      KnfEnv::to_knf(self, If(e1, e2, Bool(false)))
+    }
     _ => raise KnfErr("not supported syntax " + s.to_string())
   }
 }
@@ -622,7 +686,7 @@ test {
 ///|
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/caltz.mbt",
+    "contest-2025-data/test_cases/mbt/clamp.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string())

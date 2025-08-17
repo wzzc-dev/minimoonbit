@@ -68,6 +68,8 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       IfEq(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
     IfLe(a, b, ka, kb) =>
       IfLe(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
+    IfLt(a, b, ka, kb) =>
+      IfLt(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
     Let((x, ty), e, cont) => {
       let is_func = match ty {
         Fun(_) => true
@@ -280,6 +282,10 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
       .union(fv(ka))
       .union(fv(kb))
+    IfLt(a, b, ka, kb) =>
+      @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
+      .union(fv(ka))
+      .union(fv(kb))
     Let((x, _), e, cont) => {
       let r = fv(cont)
       r.remove(new_fv(x, Unit))
@@ -322,7 +328,7 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/caltz.mbt",
+    "contest-2025-data/test_cases/mbt/clamp.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string())

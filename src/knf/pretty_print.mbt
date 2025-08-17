@@ -60,6 +60,20 @@ fn PrettyKnf::print_one_level(
       logger.outdent()
       logger.write_string("\n}")
     }
+    IfLt(e1, e2, e3, e4) => {
+      logger.write_string("if (\{e1} < \{e2}) then {")
+      logger.indent()
+      logger.write_string("\n")
+      self.print_one_level(logger, e3)
+      logger.outdent()
+      logger.write_string("\n")
+      logger.write_string("} else {")
+      logger.indent()
+      logger.write_string("\n")
+      self.print_one_level(logger, e4)
+      logger.outdent()
+      logger.write_string("\n}")
+    }
     Let((name, ty), e1, e2) => {
       logger.write_string("let \{name}: \{ty} = ")
       match e1 {

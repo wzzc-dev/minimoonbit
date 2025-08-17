@@ -27,6 +27,7 @@ pub(all) enum Expr {
   FMod(Name, Name)
   IfEq(Name, Name, Expr, Expr)
   IfLe(Name, Name, Expr, Expr)
+  IfLt(Name, Name, Expr, Expr)
   Let((Name, LowType), Expr, Expr)
   Var(Name)
   MakeClosure((Name, LowType), Closure, Expr)

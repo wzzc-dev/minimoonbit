@@ -44,6 +44,8 @@ pub fn Expr::to_json(self : Expr) -> Json {
     Expr::While(cond, body) =>
       ["While", cond.to_json(), body.to_json()]
     Expr::Assign(n1, n2) => ["Assign", n1.to_json(), n2.to_json()]
+    IfLt(n1, n2, e1, e2) =>
+      ["IfLt", n1.to_json(), n2.to_json(), e1.to_json(), e2.to_json()]
   }
 }
 

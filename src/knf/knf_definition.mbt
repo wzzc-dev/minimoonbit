@@ -24,6 +24,7 @@ pub(all) enum Knf {
   FMod(Name, Name)
   IfEq(Name, Name, Knf, Knf)
   IfLe(Name, Name, Knf, Knf)
+  IfLt(Name, Name, Knf, Knf)
   Let((Name, Type), Knf, Knf)
   Var(Name)
   LetRec(FuncDef, Knf)

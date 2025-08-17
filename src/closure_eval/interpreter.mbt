@@ -212,6 +212,25 @@ pub fn ClosureInterpreter::eval(
         _ => fail("type mismatch, ifle expects Int or Double")
       }
     }
+    IfLt(x, y, e1, e2) => {
+      let x = find(env, x)
+      let y = find(env, y)
+      match (x, y) {
+        (Int(x), Int(y)) =>
+          if x <= y {
+            self.eval(env, e1)
+          } else {
+            self.eval(env, e2)
+          }
+        (Double(x), Double(y)) =>
+          if x <= y {
+            self.eval(env, e1)
+          } else {
+            self.eval(env, e2)
+          }
+        _ => fail("type mismatch, iflt expects Int or Double")
+      }
+    }
     Let((x, _), e1, e2) => {
       let v = self.eval(env, e1)
       let new_env = env.add(x, v)

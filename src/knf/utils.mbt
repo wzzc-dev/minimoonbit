@@ -33,6 +33,14 @@ pub fn knf_max_counter(knf : Knf) -> Int {
           @cmp.maximum(knf_max_counter(e1), knf_max_counter(e2)),
         ),
       )
+    IfLt(x, y, e1, e2) =>
+      @cmp.maximum(
+        x.slot,
+        @cmp.maximum( 
+          y.slot,
+          @cmp.maximum(knf_max_counter(e1), knf_max_counter(e2)),
+        ),
+      )
     Let((n, _), e1, e2) =>
       @cmp.maximum(
         n.slot,
