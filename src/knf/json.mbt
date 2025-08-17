@@ -40,6 +40,9 @@ pub fn Knf::to_json(self : Knf) -> Json {
     ExternalArray(n) => ["ExternalArray", n.to_json()]
     ExternalFunctionApplication(s, ns) =>
       ["ExternalFunctionApplication", s.to_json(), ns.to_json()]
+    While(cond, body) =>
+      ["While", cond.to_json(), body.to_json()]
+    Assign(n1, n2) => ["Assign", n1.to_json(), n2.to_json()]
   }
 }
 

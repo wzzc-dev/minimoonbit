@@ -27,6 +27,7 @@ pub(all) enum Syntax {
   LetRec(Fundef, Syntax) // fn f() {} ; _
   LetTuple(Array[(String, Type)], Syntax, Syntax) // let (_ , _) : (_, _)= _; _
   Put(Syntax, Syntax, Syntax) // _[_] = _
+  Assign(Syntax, Syntax) // _ = _
   Struct(String, Array[(String, Syntax)]) // struct { _: _, _: _ }
   Enum(String, Array[String]) // enum { A, B, C }
   While(Syntax, Array[Syntax]) // while x { ... }

@@ -66,5 +66,8 @@ pub fn knf_max_counter(knf : Knf) -> Int {
     ExternalFunctionApplication(_, xs) =>
       xs.map(fn(x) { x.slot }).fold(init=0, fn(a, b) { @cmp.maximum(a, b) })
     ExternalArray(_) => 0
+    While(cond, body) =>
+      @cmp.maximum(knf_max_counter(cond), knf_max_counter(body))
+    Assign(x, y) => @cmp.maximum(x.slot, y.slot)
   }
 }

@@ -37,6 +37,8 @@ pub(all) enum Expr {
   ArrayGet(Name, Name)
   ArrayPut(Name, Name, Name)
   ExternalArray(Label)
+  While(Expr, Expr)
+  Assign(Name, Name)
 } derive(Show)
 
 ///|

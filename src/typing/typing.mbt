@@ -10,12 +10,15 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
     return
   }
   match (t1, t2) {
-    (Int, Int) | (Bool, Bool) | (Double, Double) | (Unit, Unit) => ()
+    (Int, Int)
+    | (Bool, Bool)
+    | (Double, Double)
+    | (Unit, Unit)
+    | (Int, Bool)
+    | (Bool, Int) => ()
     (Var(t), ty) | (ty, Var(t)) =>
       match t.val {
-        None => {
-          t.val = Some(ty)
-        }
+        None => t.val = Some(ty)
         _ => {
           println("unify: t.val: " + t.val.to_string())
           ()
@@ -121,12 +124,12 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     Int64(_) => Int
     Double(_) => Double
     // eg.
-    Var(x) =>{
+    Var(x) =>
       // println("infer var: " + x)
       match ctx.inner().get(x) {
-        Some(t) => {
+        Some(t) =>
           // println("infer: " + x + " is " + t.to_string())
-          t.repr()}
+          t.repr()
         None =>
           match extenv.get(x) {
             Some(t) => t.repr()
@@ -137,7 +140,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
               t
             }
           }
-      }}
+      }
     Tuple(tys) => {
       let result = []
       for ty in tys {
@@ -240,7 +243,14 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         }
         _ => raise TyErr("The operands of Prim should have same type")
       }
-    And(l, r) | Or(l, r) | Eq(l, r) | LE(l, r) |  LT(l, r) | GT(l, r) | NE(l, r) | GE(l, r) =>
+    And(l, r)
+    | Or(l, r)
+    | Eq(l, r)
+    | LE(l, r)
+    | LT(l, r)
+    | GT(l, r)
+    | NE(l, r)
+    | GE(l, r) =>
       match (infer(ctx, l), infer(ctx, r)) {
         (Int, Int) | (Double, Double) => Bool
         (Var(t), Int) | (Int, Var(t)) => {
@@ -252,7 +262,10 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           Bool
         }
         (Bool, Bool) => Bool
-        _ => raise TyErr("The operands of " + e.to_string() + " should have same type")
+        _ =>
+          raise TyErr(
+            "The operands of " + e.to_string() + " should have same type",
+          )
       }
     Let((name, ty), value, s1) =>
       match ty {
@@ -391,8 +404,21 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     }
     Struct(_, _) => Unit
     Enum(_, _) => Unit
-    While(_, _) => Unit
+    While(cond, body) => {
+      let cond_ty = infer(ctx, cond)
+      unify(cond_ty, Bool)
+      for stmt in body {
+        ignore(infer(ctx, stmt))
+      }
+      Unit
+    }
     Return(_) => Unit
+    Assign(name, value) => {
+      let name_ty = infer(ctx, name)
+      let value_ty = infer(ctx, value)
+      unify(name_ty, value_ty)
+      Unit
+    }
     // _ => @util.die("infer: unknown syntax: " + e.to_string())
 
   }
@@ -465,14 +491,16 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
     Put(name, t, value) =>
       Put(deref_term(name), deref_term(t), deref_term(value))
     While(e1, e2) => While(deref_term(e1), e2.map(e => deref_term(e)))
-    Return(e) => match e {
-      None => Unit
-      Some(e) => deref_term(e)
-    }
+    Return(e) =>
+      match e {
+        None => Unit
+        Some(e) => deref_term(e)
+      }
     ArrayExpr(es) => ArrayExpr(es.map(e => deref_term(e)))
     Struct(name, es) => Struct(name, es.map(e => (e.0, deref_term(e.1))))
     Enum(name, e) => Enum(name, e)
     Int64(i) => Int64(i)
+    Assign(name, value) => Assign(deref_term(name), deref_term(value))
     // _ => @util.die("deref_term: unknown syntax: " + syntax.to_string())
   }
 }
@@ -573,7 +601,9 @@ test "typing" {
 ///|
 test {
   // let x = Array::make(10, 0);
-  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/cls-bug2.mbt")
+  let _test2 = @fs.read_file_to_string(
+    "contest-2025-data/test_cases/mbt/cls-bug2.mbt",
+  )
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string())
   try {
@@ -587,6 +617,7 @@ test {
   }
 }
 
+///|
 test {
   let list = @fs.read_dir("contest-2025-data/test_cases/mbt")
   println(list)
@@ -600,7 +631,9 @@ test {
     //   println("matmul-flat mbt file")
     //   continue
     // }
-    let _test2 = (try? @fs.read_file_to_string("contest-2025-data/test_cases/mbt/" + file)).unwrap()
+    let _test2 = (try? @fs.read_file_to_string(
+      "contest-2025-data/test_cases/mbt/" + file,
+    )).unwrap()
     let parse = @parser.parse_from_string(_test2)
     try {
       let typed = typing(parse)

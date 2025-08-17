@@ -653,6 +653,7 @@ fn assignStmt(
         match get_expr {
           Get(arr, idx) =>
             @types.Syntax::Put(arr, idx, expr)
+          Var(x) => @types.Syntax::Assign(Var(x), expr)
           _ => {
             @types.Syntax::Let(("_", Var({ val: None })), get_expr, expr)
             // @util.die("Invalid assign statement: left side must be an array access or identifier, but got " + get_expr.to_string())
@@ -723,6 +724,7 @@ fn exprStmt(
 fn leftValue(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("leftValue: " + tokens.to_string())
   // Base case: IDENTIFIER
   Parser(identifierExpr)
   .parser_and(

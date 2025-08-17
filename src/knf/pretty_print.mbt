@@ -136,6 +136,16 @@ fn PrettyKnf::print_one_level(
       }
       logger.write_string("])")
     }
+    While(cond, body) => {
+      logger.write_string("while (\{cond}) {")
+      logger.indent()
+      logger.write_string("\n")
+      self.print_one_level(logger, body)
+      logger.outdent()
+      logger.write_string("\n}")
+      logger.write_string("\n")
+    }
+    Assign(x, y) => logger.write_string("\{x} = \{y}")
   }
 }
 

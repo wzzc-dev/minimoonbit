@@ -164,6 +164,13 @@ fn emit_expr(expr : @closure.Expr) -> String {
     ArrayPut(e1, e2, e3) =>
       e1.to_string() + "[" + e2.to_string() + "] = " + e3.to_string()
     ExternalArray(e) => e.to_string()
+    While(cond, body) =>
+      "while (" +
+      cond.to_string() +
+      ") {\n  " +
+      emit_expr(body) +
+      "\n}"
+    Assign(x, y) => x.to_string() + " = " + y.to_string()
     Unit => "undefined"
   }
 }

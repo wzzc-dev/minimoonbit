@@ -311,5 +311,23 @@ pub fn KnfInterpreter::eval(
       }
       f(argv)
     }
+    While(cond, body) => {
+      while true {
+        match cond {
+          Int(0) => break Unit
+          Int(_) => {
+            self.eval(env, body) |> ignore
+          }
+          _ => fail("type mismatch, while condition expects Int")
+        }
+      } else {
+        Unit
+      }
+    }
+    Assign(x, y) => {
+      let y = find(env, y)
+      let new_env = env.add(x, y)
+      self.eval(new_env, Unit)
+    }
   }
 }

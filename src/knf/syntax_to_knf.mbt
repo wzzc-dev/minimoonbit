@@ -276,7 +276,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
               }
           }
         }
-        _ => raise KnfErr("the type of prim is unknown")
+        _ => raise KnfErr("the type of prim is unknown, s: " + s.to_string() + ", \n\t kind: " + kind.to_string())
       }
     }
     Eq(syn1, syn2) =>
@@ -527,6 +527,49 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           }
       }
     }
+    While(e1, e2) => {
+       // Process the array of syntax elements into a single KNF expression
+      let body_knf = match e2 {
+        [] => Unit
+        [single] => KnfEnv::to_knf(self, single)
+        _ => {
+          // Convert array of syntax elements to a sequence of Let expressions
+          let mut current = Unit
+          for stmt in e2 {
+            current = match current {
+              Unit => KnfEnv::to_knf(self, stmt)
+              _ => {
+                let temp = self.new_temp()
+                Let((temp, Unit), current, KnfEnv::to_knf(self, stmt))
+              }
+            }
+          }
+          current
+        }
+      }
+      While(KnfEnv::to_knf(self, e1), body_knf)
+    }
+    Assign(e1, e2) => {
+      let (name1, e1_ty, knf1) = KnfEnv::get_knf(self, e1)
+      let (name2, e2_ty, knf2) = KnfEnv::get_knf(self, e2)
+      match e1 {
+        Var(_) =>
+          match e2 {
+            Var(_) => Assign(name1, name2)
+            _ => Let((name2, e2_ty), knf2, Assign(name1, name2))
+          }
+        _ =>
+          match e2 {
+            Var(_) => Let((name1, e1_ty), knf1, Assign(name1, name2))
+            _ =>
+              Let(
+                (name1, e1_ty),
+                knf1,
+                Let((name2, e2_ty), knf2, Assign(name1, name2)),
+              )
+          }
+      }
+    }
     _ => raise KnfErr("not supported syntax " + s.to_string())
   }
 }
@@ -579,7 +622,7 @@ test {
 ///|
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/cls-bug2.mbt",
+    "contest-2025-data/test_cases/mbt/caltz.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string())

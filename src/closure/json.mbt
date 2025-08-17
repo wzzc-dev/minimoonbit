@@ -41,6 +41,9 @@ pub fn Expr::to_json(self : Expr) -> Json {
     Expr::ArrayPut(n1, n2, n3) =>
       ["ArrayPut", n1.to_json(), n2.to_json(), n3.to_json()]
     Expr::ExternalArray(l) => ["ExternalArray", l.inner().to_json()]
+    Expr::While(cond, body) =>
+      ["While", cond.to_json(), body.to_json()]
+    Expr::Assign(n1, n2) => ["Assign", n1.to_json(), n2.to_json()]
   }
 }
 

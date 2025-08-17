@@ -251,6 +251,7 @@ fn Env::varOffset(env : Env, name : @typing.Name) -> Int {
 
 ///|
 fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
+  // @util.logger("compile_expr: " + expr.to_string())
   let mut env = env
   // let instrs = [Comment(expr.to_string())]
   let instrs = []
@@ -282,9 +283,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, y) }))
       instrs.push(Rem(reg_ret, T0, T1))
     }
-    FMod(_x, _y) => {
-      @util.die("FMod not supported")
-    }
+    FMod(_x, _y) => @util.die("FMod not supported")
     FNeg(x) => {
       instrs.push(Fld(Ft0, { base: Fp, offset: Env::varOffset(env, x) }))
       instrs.push(FnegD(freg_ret, Ft0))
@@ -325,6 +324,34 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Label(label_else.inner()))
       instrs.append(compile_expr(e2, env))
       instrs.push(Label(label_end.inner()))
+    }
+    While(cond, body) => {
+      // @util.logger("While loop: cond:" + cond.to_string() + ", \n body: " + body.to_string())
+      // Generate labels for loop control
+      let label_start = gen_label("while_start")
+      let label_end = gen_label("while_end")
+
+      // Start of loop
+      instrs.push(Label(label_start.inner()))
+
+      // Compile condition expression
+      instrs.append(compile_expr(cond, env))
+
+      // Check if condition is false (assuming condition result is in reg_ret)
+      // If reg_ret is 0 (false), jump to end
+      instrs.push(Beq(reg_ret, Zero, label_end))
+
+      // Compile loop body
+      instrs.append(compile_expr(body, env))
+
+      // Jump back to start of loop
+      instrs.push(J(label_start))
+
+      // End of loop label
+      instrs.push(Label(label_end.inner()))
+
+      // While loops return Unit, so set reg_ret to 0
+      instrs.push(Li(reg_ret, "0"))
     }
     Let((name, ty), e1, e2) => {
       // 计算 e1
@@ -382,7 +409,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           None =>
             @util.logger(
               "Warning: Free variable not found in environment: " +
-              "name: " + name.to_string() + " env: " +
+              "name: " +
+              name.to_string() +
+              " env: " +
               env_var.to_string(),
             )
         }
@@ -644,6 +673,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       }
     }
     ExternalArray(label) => instrs.push(La(reg_ret, label.inner()))
+    Assign(x, y) => {
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, y) }))
+      instrs.push(Sd(T0, { base: Fp, offset: Env::varOffset(env, x) }))
+    }
   }
   instrs
 }

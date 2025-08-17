@@ -173,6 +173,10 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     Get(name, name1) => ArrayGet(name, name1)
     ExternalArray(name) => ExternalArray(name.name.to_string())
     ExternalFunctionApplication(name, arr_name) => CallDirect(name, arr_name)
+    While(cond, body) => {
+      While(knf_to_closure(env, cond), knf_to_closure(env, body))
+    }
+    Assign(x, y) => Assign(x, y)
   }
 }
 
@@ -311,6 +315,9 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
     ExternalArray(a) => @hashset.of([new_fv(a, Ptr)])
     ExternalFunctionApplication(_, arr_name) =>
       @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
+    While(_, body) =>
+      fv(body)
+    Assign(x, y) => @hashset.of([new_fv(x, Unit), new_fv(y, Unit)])
   }
 }
 test {
@@ -326,9 +333,9 @@ test {
     let pre = @knf.KnfEnv::syntax_preprocess(env, typed)
     println("pre: " + pre.to_string())
     let knf = @knf.KnfEnv::to_knf(env, pre)
-    println("knf: " + knf.to_string())
+    println("knf: " + knf.to_string() + "\n")
     let closure = knf_program_to_closure(knf,Map::from_iter(@immut/hashmap.new().iter()),)
-    println("closure: " + closure.to_string())
+    println("closure: " + closure.to_string() + "\n")
   } catch {
     @typing.TyErr(s) => {
       println("typing error")
