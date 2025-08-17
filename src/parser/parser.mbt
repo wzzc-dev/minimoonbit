@@ -1148,11 +1148,12 @@ fn arrayExpr(
   )
   .parser_and(rbracket)
   .map(fn(input) {
+    // @util.logger("array_expr: " + input.to_string())
     match input {
       (((_, first), arr), _) => {
         // println("array_expr: " + arr.to_string())
         if arr.is_empty() {
-          return first
+          return @types.Syntax::ArrayExpr([first])
         }
         let expr = arr.map(fn(input) {
           match input {

@@ -1,10 +1,10 @@
 ///|
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   // for fundef in input.fundefs {
-  //   if extenv.contains(fundef.name._) {
+  //   if extenv.contains(fundef.name.inner()) {
   //     continue
   //   }
-  //   if fundef.name._ == "loop2" {
+  //   if fundef.name.inner() == "loop2" {
   //   println("fundef: " + fundef.to_string())
   //   }
   // }
@@ -641,7 +641,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         Double => instrs.push(Slli(T1, T1, 3)) // 浮点数: 8字节
         Int => instrs.push(Slli(T1, T1, 2)) // 整数: 4字节
         DirectFn(_, _) | ClosureFn(_, _) | Ptr => instrs.push(Slli(T1, T1, 3)) // 指针类型: 8字节
-        _ => instrs.push(Slli(T1, T1, 3)) // 默认: 4字节
+        _ => instrs.push(Slli(T1, T1, 2)) // 默认: 4字节
       }
 
       // 3. 计算最终地址
@@ -655,7 +655,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         DirectFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Ld
         ClosureFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 闭包函数指针也用 Ld
         Ptr => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 指针类型用 Ld
-        _ => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Lw
+        _ => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Ld
       }
     }
     ArrayPut(array, index, value) => {
@@ -664,7 +664,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
 
       // 2. 加载并计算索引偏移
       instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
-      instrs.push(Slli(T1, T1, 3))
+      instrs.push(Slli(T1, T1, 2))
 
       // 3. 安全地计算目标地址
       instrs.push(Add(T0, T0, T1))

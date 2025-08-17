@@ -634,6 +634,56 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     And(e1, e2) => {
       KnfEnv::to_knf(self, If(e1, e2, Bool(false)))
     }
+    ArrayExpr(exprs) => {
+      let len = exprs.length()
+      let names = []
+      let knfs = []
+      let types = []
+      
+      for i = 0; i < len; i = i + 1 {
+        let (name, ty, knf) = KnfEnv::get_knf(self, exprs[i])
+        names.push(name)
+        types.push(ty)
+        knfs.push((name, ty, knf))
+      }
+      
+      // Determine array element type from the first element
+      let elem_ty = if len > 0 { 
+        types[0] 
+      } else { 
+        Unit 
+      }
+      
+      // Build the let bindings for all expressions
+      fn build_lets(i : Int, knfs : Array[(Name, Type, Knf)], body : Knf) -> Knf {
+        if i < 0 {
+          body
+        } else {
+          let (name, ty, knf) = knfs[i]
+          match exprs[i] {
+            Var(_) => build_lets(i - 1, knfs, body)
+            _ => Let((name, ty), knf, build_lets(i - 1, knfs, body))
+          }
+        }
+      }
+      
+      // Create the external function call
+      let array_creation = match elem_ty {
+        Int =>
+          ExternalFunctionApplication("minimbt_create_array", names)
+        Double =>
+          ExternalFunctionApplication("minimbt_create_float_array", names)
+        _ =>
+          ExternalFunctionApplication("minimbt_create_ptr_array", names)
+      }
+      
+      // Wrap in let bindings if needed
+      if len > 0 {
+        build_lets(len - 1, knfs, array_creation)
+      } else {
+        array_creation
+      }
+    }
     _ => raise KnfErr("not supported syntax " + s.to_string())
   }
 }

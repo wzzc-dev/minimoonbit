@@ -153,11 +153,17 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         Bool => Bool
         _ => raise TyErr("The operand of Not is not a bool value")
       }
-    Array(n, syn) =>
+    Array(n, syn) => {
+      // @util.logger("infer: Array: " + syn.to_string() + " \n")
       match infer(ctx, n) {
         Int => Array(infer(ctx, syn))
-        _ => raise TyErr("The operand of Array is not a int value")
+        _ => raise TyErr("The operand of Array is not a int value\n" + 
+          "n = " + n.to_string() + "\n" +
+          "syn = " + syn.to_string() + "\n"
+        )
       }
+    }
+      
     Neg(syn, ..) as neg =>
       match infer(ctx, syn) {
         Int => {
@@ -192,7 +198,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         Int =>
           match infer(ctx, arr) {
             Array(t) => t
-            _ => raise TyErr("The operand of Get should have Type Array")
+            _ => raise TyErr("The operand of Get should have Type Array, but got: " + arr.to_string())
           }
         _ => raise TyErr("The index of Get should have Type Int")
       }
@@ -267,7 +273,8 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
             "The operands of " + e.to_string() + " should have same type",
           )
       }
-    Let((name, ty), value, s1) =>
+    Let((name, ty), value, s1) => {
+      // @util.logger("Let: " + name + " " + ty.to_string() + " " + value.to_string())
       match ty {
         Var({ val: None }) => {
           let t = infer(ctx, value)
@@ -299,6 +306,8 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           }
         }
       }
+    }
+      
     LetRec({ name: (f, t), args: params, body }, rest) => {
       let env_with_f = ctx.inner().add(f, t)
       let params_ty = params.map(t => t.1.repr())
@@ -371,13 +380,14 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
               } else {
                 raise TyErr(
                   "The operand of Put should have same type: " +
-                  "\n" +
+                  "\n e: " + e.to_string() +
+                  "\n (name, n, value): " +
                   (name, n, value).to_string() +
-                  "\n" +
+                  "\n infer(ctx, name): " +
                   infer(ctx, name).to_string() +
-                  "\n" +
+                  "\n infer(ctx, n): " +
                   infer(ctx, n).to_string() +
-                  "\n" +
+                  "\n infer(ctx, value): " +
                   infer(ctx, value).to_string() +
                   "\n t: " +
                   t.to_string(),
@@ -400,7 +410,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       }
     ArrayExpr(es) => {
       let tys = es.map(e => infer(ctx, e))
-      Tuple(tys)
+      Array(tys[0])
     }
     Struct(_, _) => Unit
     Enum(_, _) => Unit
@@ -602,13 +612,13 @@ test "typing" {
 test {
   // let x = Array::make(10, 0);
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/cls-bug2.mbt",
+    "contest-2025-data/test_cases/mbt/counter.mbt",
   )
   let parse = @parser.parse_from_string(_test2)
-  println("parse: " + parse.to_string())
+  println("parse: " + parse.to_string() + "\n")
   try {
     let typed = typing(parse)
-    println(typed)
+    println("typed: " + typed.to_string())
   } catch {
     TyErr(s) => {
       println("typing error")

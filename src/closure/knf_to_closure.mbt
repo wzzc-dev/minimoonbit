@@ -71,6 +71,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     IfLt(a, b, ka, kb) =>
       IfLt(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
     Let((x, ty), e, cont) => {
+      // @util.logger("knf_to_closure:, Let " + x.name.to_string())
       let is_func = match ty {
         Fun(_) => true
         _ => false
@@ -80,6 +81,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         let fv = fv(e).difference(
           @hashset.from_array(env.map(fn(def) { new_fv(def.old_name, Unit) })),
         )
+        // @util.logger("x: " + x.name.to_string() + "fv: " + fv.to_string())
         is_closure = not(fv_to_array(fv).is_empty())
       }
       Let(
@@ -96,6 +98,8 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         free_vars.remove(new_fv(arg.0, Unit))
       }
       free_vars.remove(new_fv(name, Unit))
+      // @util.logger("body: " + body.to_string())
+      // @util.logger("free vars: " + free_vars.to_string())
       let is_closure = not(free_vars.is_empty())
       let make_def = fn(body : Expr) -> FuncDef {
         {
@@ -257,6 +261,7 @@ fn new_fv(name : @types.Name, ty : LowType) -> FreeVarWithType {
 
 ///|
 fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
+  // @util.logger("fv: " + e.to_string())
   match e {
     Unit => @hashset.new()
     Int(_) => @hashset.new()
@@ -288,8 +293,11 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       .union(fv(kb))
     Let((x, _), e, cont) => {
       let r = fv(cont)
+      // @util.logger("Let: fv r=" + r.to_string())
       r.remove(new_fv(x, Unit))
-      fv(e).union(r)
+      let fve = fv(e)
+      fve.remove(new_fv(x, Unit))
+      fve.union(r)
     }
     Var(x) => @hashset.of([new_fv(x, Unit)])
     // Var(_) => @hashset.new()
@@ -323,12 +331,12 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
     While(_, body) =>
       fv(body)
-    Assign(x, y) => @hashset.of([new_fv(x, Unit), new_fv(y, Unit)])
+    Assign(_x, _y) => @hashset.new()
   }
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/clamp.mbt",
+    "contest-2025-data/test_cases/mbt/conv_pool.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string())
