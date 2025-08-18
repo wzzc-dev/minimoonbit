@@ -124,7 +124,10 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     Int64(_) => Int
     Double(_) => Double
     // eg.
-    Var(x) =>
+    Var(x) =>{
+      // if x == "_arr" {
+      //   @util.logger("infer: Var(x) =>" + x + "\n  ctx.inner().get(x): " + ctx.inner().get(x).to_string())
+      // }
       // println("infer var: " + x)
       match ctx.inner().get(x) {
         Some(t) =>
@@ -140,7 +143,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
               t
             }
           }
-      }
+      }}
     Tuple(tys) => {
       let result = []
       for ty in tys {
@@ -618,7 +621,7 @@ test "typing" {
 test {
   // let x = Array::make(10, 0);
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/counter.mbt",
+    "contest-2025-data/test_cases/mbt/conv_pool.mbt",
   )
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string() + "\n")
@@ -628,7 +631,7 @@ test {
   } catch {
     TyErr(s) => {
       println("typing error")
-      @util.die(s.to_json().to_string())
+      @util.logger(s)
     }
   }
 }
