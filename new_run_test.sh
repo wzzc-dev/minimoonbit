@@ -17,7 +17,7 @@ for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
   zig build-exe -target riscv64-linux -femit-bin=test-exe-file "$OUTPUT_FILE" ./riscv_rt/zig-out/lib/libmincaml.a -O Debug -fno-strip -mcpu=baseline_rv64 &&
   
   # 运行模拟器并将输出提取到临时文件（只取 >>> 前内容）
-  ./rvlinux -n test-exe-file | sed '/>>>/q' | tr -d '\n' > output.txt
+  ./rvlinux -n test-exe-file | sed '/>>>/q' > output.txt
 
   # 检查对应的 .ans 文件是否存在
   if [[ -f "$ANS_FILE" ]]; then
