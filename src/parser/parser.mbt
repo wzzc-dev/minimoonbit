@@ -1153,14 +1153,64 @@ fn arrayExpr(
       (((_, first), arr), _) => {
         // println("array_expr: " + arr.to_string())
         if arr.is_empty() {
-          return @types.Syntax::ArrayExpr([first])
+          // For empty array, create Array::make(0, 0)
+          let zero = @types.Syntax::Int(0)
+          return @types.Syntax::Array(zero, zero)
         }
+        
+        // Create array elements
         let expr = arr.map(fn(input) {
           match input {
             (_, expr) => expr
           }
         })
-        @types.Syntax::ArrayExpr([first,..expr])
+        let all_elements = [first, ..expr]
+        let len = all_elements.length()
+        
+        // Create Array::make(len, 0)
+        let len_expr = @types.Syntax::Int(len)
+        let zero = @types.Syntax::Int(0)
+        let array_make = @types.Syntax::Array(len_expr, zero)
+        
+        // Create the nested Let structure for array initialization
+        let array_var = "_"
+        let array_type = @types.Type::Array(@types.Type::Var({ val: None }))
+        
+        // Build the nested structure from inside out
+        // Start with the innermost expression
+        let mut result = @types.Syntax::Unit
+        
+        // Process elements in reverse order to build nested Let expressions
+        for i = len - 1; i >= 0; i = i - 1 {
+          // let elem = all_elements[i]
+          let temp_var = "_" + (i + 1).to_string()
+          
+          // Create index expression: i
+          let index_expr = @types.Syntax::Int(i)
+          
+          // Create Get expression: arr[i]
+          let get_expr = @types.Syntax::Get(@types.Syntax::Var(array_var), index_expr)
+          
+          // Create Let for the element: Let((temp_var, Int), get_expr, Unit)
+          let elem_let = @types.Syntax::Let((temp_var, @types.Type::Int), get_expr, @types.Syntax::Unit)
+          
+          // Create Put expression: Put(arr, i+1, temp_var)
+          let put_index = @types.Syntax::Int(i + 1)
+          let put_expr = @types.Syntax::Put(@types.Syntax::Var(array_var), put_index, @types.Syntax::Var(temp_var))
+          
+          // Create Let for the Put: Let(("_", Unit), elem_let, put_expr)
+          // For the first element (i == len-1), we don't have a previous result to wrap
+          if i == len - 1 {
+            result = @types.Syntax::Let(("_", @types.Type::Unit), elem_let, put_expr)
+          } else {
+            // For subsequent elements, wrap the previous result
+            result = @types.Syntax::Let(("_", @types.Type::Unit), elem_let, 
+                       @types.Syntax::Let(("_", @types.Type::Unit), put_expr, result))
+          }
+        }
+        
+        // Create the outermost Let: Let((array_var, array_type), array_make, result)
+        @types.Syntax::Let((array_var, array_type), array_make, result)
       }
     }
   })

@@ -282,6 +282,12 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           let newctx = ctx.inner().add(name, t)
           infer(newctx, s1)
         }
+        Array(_) => {
+          let t = infer(ctx, value)
+          unify(ty, t)
+          let newctx = ctx.inner().add(name, t)
+          infer(newctx, s1)
+        }
         _ => {
           let t = infer(ctx, value)
           // @util.logger("let: " + name.to_string() + " t: " + t.to_string() + " value: " + value.to_string())
