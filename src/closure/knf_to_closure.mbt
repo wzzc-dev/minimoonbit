@@ -159,6 +159,9 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
             None => false
           }
       }
+      // 检查是否是闭包调用
+      // println("closure: " + closure.to_string())
+      // println("is_capture: " + is_capture.to_string())
       match closure || is_capture {
         true => CallClosure(name, arr_name)
         false => CallDirect(name.to_string(), arr_name)
@@ -352,15 +355,15 @@ test {
     "contest-2025-data/test_cases/mbt/counter.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
-  println("parse: " + parse.to_string())
+  // println("parse: " + parse.to_string())
   try {
     let typed = @typing.typing(parse)
-    println("typed: " + typed.to_string())
+    // println("typed: " + typed.to_string())
     let env = @knf.KnfEnv::new(@immut/hashmap.new())
     let pre = @knf.KnfEnv::syntax_preprocess(env, typed)
-    println("pre: " + pre.to_string())
+    // println("pre: " + pre.to_string())
     let knf = @knf.KnfEnv::to_knf(env, pre)
-    println("knf: " + knf.to_string() + "\n")
+    // println("knf: " + knf.to_string() + "\n")
     let closure = knf_program_to_closure(knf,Map::from_iter(@immut/hashmap.new().iter()),)
     println("closure: " + closure.to_string() + "\n")
   } catch {
