@@ -501,8 +501,12 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                 instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
                 instrs.push(Jalr(T1)) // 调用闭包函数
                 instrs.push(Ld(S11, { base: Fp, offset: closure_save_offset }))
+                // 修复：确保返回值在正确寄存器中
+                instrs.push(Mv(reg_ret, A0))
               } else {
                 instrs.push(Call(Label(func.name.inner())))
+                // 修复：确保返回值在正确寄存器中
+                instrs.push(Mv(reg_ret, A0))
               }
             }
             None =>
@@ -547,10 +551,21 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
                     instrs.push(La(T1, fundef.name.inner()))
                     instrs.push(Sd(T1, { base: T0, offset: 0 }))
 
-                    // 存储自由变量
+                    // // 存储自由变量
+                    // for j, _free_var in fundef.formal_free_vars {
+                    //   instrs.push(Ld(T1, { base: S11, offset: (j + 1) * 8 }))
+                    //   instrs.push(Sd(T1, { base: T0, offset: (j + 1) * 8 }))
+                    // }
+                    // 修复：正确存储自由变量
                     for j, _free_var in fundef.formal_free_vars {
-                      instrs.push(Ld(T1, { base: S11, offset: (j + 1) * 8 }))
-                      instrs.push(Sd(T1, { base: T0, offset: (j + 1) * 8 }))
+                      // 从当前环境加载自由变量
+                      match env.vars.get(_free_var.0.to_string()) {
+                        Some((var_offset, _)) => {
+                          instrs.push(Ld(T1, { base: Fp, offset: var_offset }))
+                          instrs.push(Sd(T1, { base: T0, offset: (j + 1) * 8 }))
+                        }
+                        None => println("Warning: Free variable not found in environment: " + _free_var.0.to_string())
+                      }
                     }
 
                     // 将闭包指针移到参数寄存器
@@ -588,7 +603,11 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         env.fundefs.search_by(fn(fundef) {
           fundef.name.inner() == label.inner()
         }) {
-        Some(_) => instrs.push(Call(Label(label.inner())))
+        Some(_) => {
+          instrs.push(Call(Label(label.inner())))
+          // 修复：确保返回值在正确寄存器中
+          instrs.push(Mv(reg_ret, A0))
+        }
         None =>
           match env.vars.get(label.inner()) {
             Some((offset, _)) => {
@@ -596,8 +615,14 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
               instrs.push(Ld(S11, { base: Fp, offset }))
               instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
               instrs.push(Jalr(T1)) // 调用闭包函数
+              // 修复：确保返回值在正确寄存器中
+              instrs.push(Mv(reg_ret, A0))
             }
-            None => instrs.push(Call(Label(label.inner())))
+            None => {
+              instrs.push(Call(Label(label.inner())))
+              // 修复：确保返回值在正确寄存器中
+              instrs.push(Mv(reg_ret, A0))
+            }
           }
       }
     }
@@ -637,13 +662,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
 
       // 2. 加载索引值并根据类型计算偏移
       instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
-      match get_array_element_type(array, env) {
-        Double => instrs.push(Slli(T1, T1, 3)) // 浮点数: 8字节
-        Int => instrs.push(Slli(T1, T1, 2)) // 整数: 4字节
-        DirectFn(_, _) | ClosureFn(_, _) | Ptr => instrs.push(Slli(T1, T1, 3)) // 指针类型: 8字节
-        _ => instrs.push(Slli(T1, T1, 3)) // 默认: 8字节
-      }
-
+      instrs.push(Slli(T1, T1, 3)) // 8字节
+        
       // 3. 计算最终地址
       instrs.push(Add(T0, T0, T1))
 

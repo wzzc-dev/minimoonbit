@@ -426,9 +426,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     While(cond, body) => {
       let cond_ty = infer(ctx, cond)
       unify(cond_ty, Bool)
-      for stmt in body {
-        ignore(infer(ctx, stmt))
-      }
+      ignore(infer(ctx, body))
       Unit
     }
     Return(_) => Unit
@@ -509,7 +507,7 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
       )
     Put(name, t, value) =>
       Put(deref_term(name), deref_term(t), deref_term(value))
-    While(e1, e2) => While(deref_term(e1), e2.map(e => deref_term(e)))
+    While(e1, e2) => While(deref_term(e1), deref_term(e2))
     Return(e) =>
       match e {
         None => Unit
@@ -621,7 +619,7 @@ test "typing" {
 test {
   // let x = Array::make(10, 0);
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/conv_pool.mbt",
+    "contest-2025-data/test_cases/mbt/counter.mbt",
   )
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string() + "\n")

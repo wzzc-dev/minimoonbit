@@ -590,25 +590,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     }
     While(e1, e2) => {
        // Process the array of syntax elements into a single KNF expression
-      let body_knf = match e2 {
-        [] => Unit
-        [single] => KnfEnv::to_knf(self, single)
-        _ => {
-          // Convert array of syntax elements to a sequence of Let expressions
-          let mut current = Unit
-          for stmt in e2 {
-            current = match current {
-              Unit => KnfEnv::to_knf(self, stmt)
-              _ => {
-                let temp = self.new_temp()
-                Let((temp, Unit), current, KnfEnv::to_knf(self, stmt))
-              }
-            }
-          }
-          current
-        }
-      }
-      While(KnfEnv::to_knf(self, e1), body_knf)
+
+      While(KnfEnv::to_knf(self, e1), KnfEnv::to_knf(self, e2))
     }
     Assign(e1, e2) => {
       let (name1, e1_ty, knf1) = KnfEnv::get_knf(self, e1)

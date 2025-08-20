@@ -679,8 +679,27 @@ fn whileStmt(
   .map(fn(input) {
     // @util.logger("whileStmt input: " + tokens.to_string())
     match input {
-      ((((_, expr), _), stmts), _) =>
-        @types.Syntax::While(expr, stmts)
+      ((((_, expr), _), stmts), _) => {
+        let body = match stmts {
+          [] => @types.Syntax::Unit
+          [single] => single
+          [..init, last] => {
+            init.rev_fold(init=last, fn(acc, stmt) {
+              match stmt {
+                @types.Syntax::Let(binding, value, _) => 
+                  @types.Syntax::Let(binding, value, acc)
+                @types.Syntax::LetTuple(bindings, value, _) => 
+                  @types.Syntax::LetTuple(bindings, value, acc)
+                @types.Syntax::LetRec(fn_def, _) => 
+                  @types.Syntax::LetRec(fn_def, acc)
+                _ => 
+                  @types.Syntax::Let(("_", @types.Type::Var({ val: None }) ), stmt, acc)
+              }
+            })
+          }
+        }  
+        @types.Syntax::While(expr, body)
+      }
     }
   })
   .parse(tokens)
@@ -1703,7 +1722,7 @@ test {
 ///|
 test {
   let tokens = []
-  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/caltz.mbt")
+  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/inprod-loop.mbt")
   // println(_test2)
   @lex.lex({ str: _test2, offset: 0, array: tokens })
   // println("tokens: " + tokens.to_string())

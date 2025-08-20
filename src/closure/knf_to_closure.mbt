@@ -91,9 +91,17 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       )
     }
     LetRec({ name, ty, args, body }, cont) => {
+      // if name.name.unwrap() == "counter" {
+      //   @util.logger("knf_to_closure: LetRec: " + name.to_string() + "\n")
+      // }
       let free_vars = fv(body).difference(
-        @hashset.from_array(env.map(fn(def) { new_fv(def.old_name, Unit) })),
+        @hashset.from_array(env.map(fn(def) { 
+          new_fv(def.old_name, Unit) })),
       )
+      // if name.name.unwrap() == "counter" {
+      //   @util.logger("knf_to_closure: LetRec: " + name.to_string() + "\n" + "free_vars: " + free_vars.to_string())
+      // }
+      
       for arg in args {
         free_vars.remove(new_fv(arg.0, Unit))
       }
@@ -292,11 +300,16 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       .union(fv(ka))
       .union(fv(kb))
     Let((x, _), e, cont) => {
+        // @util.logger("Let:x " + x.to_string())
+        // @util.logger("Let:e " + e.to_string())
+        // @util.logger("Let:cont " + cont.to_string())
+      
       let r = fv(cont)
       // @util.logger("Let: fv r=" + r.to_string())
       r.remove(new_fv(x, Unit))
       let fve = fv(e)
       fve.remove(new_fv(x, Unit))
+      // @util.logger("Let: name == " + x.to_string() + " fv :" + fve.union(r).to_string())
       fve.union(r)
     }
     Var(x) => @hashset.of([new_fv(x, Unit)])
@@ -336,7 +349,7 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/conv_pool.mbt",
+    "contest-2025-data/test_cases/mbt/counter.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string())

@@ -3,6 +3,9 @@
 # 定义输出文件的前缀
 OUT_PREFIX="out"
 
+# 初始化通过测试计数器
+PASSED_COUNT=0
+
 # 找到所有 .mbt 结尾的文件并循环处理
 for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
   # 提取文件的基础名称（不带路径和扩展名），用于匹配 .ans 文件
@@ -24,6 +27,8 @@ for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
     # 比较运行结果和 .ans 文件的内容（忽略行尾差异）
     if cmp -s <(tr -d '\r' < output.txt) <(tr -d '\r' < "$ANS_FILE"); then
       echo "Test $MBT_FILE passed: Output matches $ANS_FILE"
+      # 增加通过测试计数器
+      ((PASSED_COUNT++))
     else
       echo "Test $MBT_FILE failed: Output differs from $ANS_FILE"
       echo "Differences:"
@@ -37,4 +42,5 @@ for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
   rm -f output.txt test-exe-file "$OUTPUT_FILE"
 done
 
-echo "All files processed."
+# 输出通过测试的总数
+echo "All files processed. Total passed tests: $PASSED_COUNT"
