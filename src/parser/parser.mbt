@@ -1176,44 +1176,12 @@ fn arrayExpr(
           return @types.Syntax::Array(@types.Syntax::Int(1), first)
         }
         
-        // Create array elements
         let expr = arr.map(fn(input) {
           match input {
             (_, expr) => expr
           }
         })
-        let all_elements = [first, ..expr]
-        let len = all_elements.length()
-        
-        // Create Array::make(len, default_value) where default_value is based on first expr
-        let len_expr = @types.Syntax::Int(len)
-        let arr_ty = first  
-        let array_make = @types.Syntax::Array(len_expr, arr_ty)
-        
-        // Create the nested Let structure for array initialization
-        let array_var = "_arr"
-        let array_type = @types.Type::Array(@types.Type::Var({ val: None }))
-        
-        // Build the nested structure from inside out
-        // Start with the innermost expression
-        let mut result = @types.Syntax::Var(array_var)
-        
-        // Process elements in reverse order to build nested Let expressions
-        for i = len - 1; i >= 0; i = i - 1 {
-          let elem = all_elements[i]
-          
-          // Create index expression: i
-          let index_expr = @types.Syntax::Int(i)
-          
-          // Create Put expression: Put(arr, i, actual_element)
-          let put_expr = @types.Syntax::Put(@types.Syntax::Var(array_var), index_expr, elem)
-          
-          // Wrap the previous result with this Put operation
-          result = @types.Syntax::Let(("_", @types.Type::Unit), put_expr, result)
-        }
-        
-        // Create the outermost Let: Let((array_var, array_type), array_make, result)
-        @types.Syntax::Let((array_var, array_type), array_make, result)
+        @types.Syntax::ArrayExpr([first, ..expr])
       }
     }
   })

@@ -335,7 +335,13 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
               }
           }
         }
-        _ => raise KnfErr("the type of prim is unknown, s: " + s.to_string() + ", \n\t kind: " + kind.to_string())
+        _ =>
+          raise KnfErr(
+            "the type of prim is unknown, s: " +
+            s.to_string() +
+            ", \n\t kind: " +
+            kind.to_string(),
+          )
       }
     }
     Eq(syn1, syn2) =>
@@ -391,8 +397,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
             // println(f)
             // println(f.name)
             // println(f.name.to_string())
-            if not(f.name.is_empty()) &&
-              @util.extenv.contains(f.name.unwrap()) {
+            if not(f.name.is_empty()) && @util.extenv.contains(f.name.unwrap()) {
               // @util.logger("@types: " + @typing.extenv.to_string())
               // @util.logger("let_app: ExternalFunctionApplication(f, args_names) f = " + f.name.to_string())
               if @typing.extenv.contains(f.name.unwrap()) {
@@ -535,22 +540,27 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       }
     }
     Put(syn1, syn2, syn3) => {
-      // println("Put: ")
-      // println(syn1)
-      // println(syn2)
-      // println(syn3) 
       let (name1, s1_ty, knf1) = KnfEnv::get_knf(self, syn1)
       let (name2, s2_ty, knf2) = KnfEnv::get_knf(self, syn2)
       let (name3, s3_ty, knf3) = KnfEnv::get_knf(self, syn3)
-      Let(
-        (name1, s1_ty),
-        knf1,
-        Let(
-          (name2, s2_ty),
-          knf2,
-          Let((name3, s3_ty), knf3, Put(name1, name2, name3)),
-        ),
-      )
+      match syn1 {
+        Var(_) =>
+          Let(
+            (name2, s2_ty),
+            knf2,
+            Let((name3, s3_ty), knf3, Put(name1, name2, name3)),
+          )
+        _ =>
+          Let(
+            (name1, s1_ty),
+            knf1,
+            Let(
+              (name2, s2_ty),
+              knf2,
+              Let((name3, s3_ty), knf3, Put(name1, name2, name3)),
+            ),
+          )
+      }
     }
     Array(e1, e2) => {
       let (name1, e1_ty, knf1) = KnfEnv::get_knf(self, e1)
@@ -588,11 +598,10 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           }
       }
     }
-    While(e1, e2) => {
-       // Process the array of syntax elements into a single KNF expression
+    While(e1, e2) =>
+      // Process the array of syntax elements into a single KNF expression
 
       While(KnfEnv::to_knf(self, e1), KnfEnv::to_knf(self, e2))
-    }
     Assign(e1, e2) => {
       let (name1, e1_ty, knf1) = KnfEnv::get_knf(self, e1)
       let (name2, e2_ty, knf2) = KnfEnv::get_knf(self, e2)
@@ -614,59 +623,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           }
       }
     }
-    And(e1, e2) => {
-      KnfEnv::to_knf(self, If(e1, e2, Bool(false)))
-    }
-    ArrayExpr(exprs) => {
-      let len = exprs.length()
-      let names = []
-      let knfs = []
-      let types = []
-      
-      for i = 0; i < len; i = i + 1 {
-        let (name, ty, knf) = KnfEnv::get_knf(self, exprs[i])
-        names.push(name)
-        types.push(ty)
-        knfs.push((name, ty, knf))
-      }
-      
-      // Determine array element type from the first element
-      let elem_ty = if len > 0 { 
-        types[0] 
-      } else { 
-        Unit 
-      }
-      
-      // Build the let bindings for all expressions
-      fn build_lets(i : Int, knfs : Array[(Name, Type, Knf)], body : Knf) -> Knf {
-        if i < 0 {
-          body
-        } else {
-          let (name, ty, knf) = knfs[i]
-          match exprs[i] {
-            Var(_) => build_lets(i - 1, knfs, body)
-            _ => Let((name, ty), knf, build_lets(i - 1, knfs, body))
-          }
-        }
-      }
-      
-      // Create the external function call
-      let array_creation = match elem_ty {
-        Int =>
-          ExternalFunctionApplication("minimbt_create_array", names)
-        Double =>
-          ExternalFunctionApplication("minimbt_create_float_array", names)
-        _ =>
-          ExternalFunctionApplication("minimbt_create_ptr_array", names)
-      }
-      
-      // Wrap in let bindings if needed
-      if len > 0 {
-        build_lets(len - 1, knfs, array_creation)
-      } else {
-        array_creation
-      }
-    }
+    And(e1, e2) => KnfEnv::to_knf(self, If(e1, e2, Bool(false)))
     _ => raise KnfErr("not supported syntax " + s.to_string())
   }
 }
@@ -719,16 +676,16 @@ test {
 ///|
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/clamp.mbt",
+    "contest-2025-data/test_cases/mbt/matmul-flat.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string())
   try {
     let typed = @typing.typing(parse)
-    println("typed: " + typed.to_string())
+    // println("typed: " + typed.to_string())
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = KnfEnv::syntax_preprocess(env, typed)
-    println("pre: " + pre.to_string())
+    // println("pre: " + pre.to_string())
     let knf = KnfEnv::to_knf(env, pre)
     println("knf: " + knf.to_string())
   } catch {

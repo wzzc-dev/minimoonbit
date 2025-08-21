@@ -71,43 +71,23 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     IfLt(a, b, ka, kb) =>
       IfLt(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
     Let((x, ty), e, cont) => {
-      // @util.logger("knf_to_closure:, Let " + x.name.to_string())
-      let is_func = match ty {
-        Fun(_) => true
-        _ => false
-      }
-      let mut is_closure = false
-      if is_func {
-        let fv = fv(e).difference(
-          @hashset.from_array(env.map(fn(def) { new_fv(def.old_name, Unit) })),
-        )
-        // @util.logger("x: " + x.name.to_string() + "fv: " + fv.to_string())
-        is_closure = not(fv_to_array(fv).is_empty())
-      }
       Let(
-        (x, ty_to_low_type(ty, is_closure)),
+        (x, ty_to_low_type(ty, false)),
         knf_to_closure(env, e),
         knf_to_closure(env, cont),
       )
     }
     LetRec({ name, ty, args, body }, cont) => {
-      // if name.name.unwrap() == "counter" {
-      //   @util.logger("knf_to_closure: LetRec: " + name.to_string() + "\n")
-      // }
       let free_vars = fv(body).difference(
         @hashset.from_array(env.map(fn(def) { 
           new_fv(def.old_name, Unit) })),
       )
-      // if name.name.unwrap() == "counter" {
-      //   @util.logger("knf_to_closure: LetRec: " + name.to_string() + "\n" + "free_vars: " + free_vars.to_string())
-      // }
       
       for arg in args {
         free_vars.remove(new_fv(arg.0, Unit))
       }
       free_vars.remove(new_fv(name, Unit))
-      // @util.logger("body: " + body.to_string())
-      // @util.logger("free vars: " + free_vars.to_string())
+
       let is_closure = not(free_vars.is_empty())
       let make_def = fn(body : Expr) -> FuncDef {
         {
@@ -355,15 +335,15 @@ test {
     "contest-2025-data/test_cases/mbt/counter.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
-  // println("parse: " + parse.to_string())
+  println("parse: " + parse.to_string() + "\n")
   try {
     let typed = @typing.typing(parse)
-    // println("typed: " + typed.to_string())
+    println("typed: " + typed.to_string() + "\n")
     let env = @knf.KnfEnv::new(@immut/hashmap.new())
     let pre = @knf.KnfEnv::syntax_preprocess(env, typed)
-    // println("pre: " + pre.to_string())
+    println("pre: " + pre.to_string() + "\n")
     let knf = @knf.KnfEnv::to_knf(env, pre)
-    // println("knf: " + knf.to_string() + "\n")
+    println("knf: " + knf.to_string() + "\n")
     let closure = knf_program_to_closure(knf,Map::from_iter(@immut/hashmap.new().iter()),)
     println("closure: " + closure.to_string() + "\n")
   } catch {

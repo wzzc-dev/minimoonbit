@@ -560,6 +560,8 @@ pub fn get_type(
 ) -> @types.Type raise TyErr {
   let mut sort_map : LocalCtx = @immut/sorted_map.new()
   m.each((k, v) => sort_map = sort_map.inner().add(k, v))
+  // @util.logger("get_type: " + e.to_string())
+  // @util.logger("m: " + m.to_string())
   infer(sort_map, e)
 }
 

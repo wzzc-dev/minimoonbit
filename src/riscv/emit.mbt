@@ -223,10 +223,10 @@ pub struct Env {
   fundefs : Array[@closure.FuncDef] // 函数定义
 }
 
-///|
-fn find(self : Env, key : String) -> (Int, @closure.LowType) {
-  self.vars.get(key).unwrap()
-}
+// ///|
+// fn find(self : Env, key : String) -> (Int, @closure.LowType) {
+//   self.vars.get(key).unwrap()
+// }
 
 ///|
 fn find_type(self : Env, key : String) -> @closure.LowType {
@@ -400,7 +400,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     MakeClosure((name, ty), closure, e) => {
 
       // 1. 计算需要的内存大小 (函数指针 + 自由变量)
-      let size = 8 + closure.actual_free_vars.length() * 8
+      let size = @cmp.maximum(16, 8 + closure.actual_free_vars.length() * 8)
 
       // 2. 调用 malloc 分配内存
       instrs.push(Li(A0, size.to_string()))
@@ -442,9 +442,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     CallClosure(f, args) => {
       for i, arg in args {
-        let arg_type = env.find(arg.to_string()).1
         match env.vars.get(arg.to_string()) {
-          Some((offset, _)) =>
+          Some((offset, arg_type)) =>
             if i < reg_arg_list.length() {
               match arg_type {
                 Double =>
@@ -474,35 +473,28 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             println("Warning: Arg not found in environment: " + arg.to_string())
         }
       }
-      match env.vars.get(f.to_string()) {
+      let closure_save_offset = match env.vars.get(f.to_string()) {
         Some((offset, _)) => {
-          // 在调用闭包函数之前保存s11寄存器的值到栈上的安全位置
-          let saved_s11_offset = env.current_offset
           instrs.push(Ld(S11, { base: Fp, offset }))
-          instrs.push(Sd(S11, { base: Fp, offset: saved_s11_offset }))
-          // 加载函数指针并调用
-          instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
-          instrs.push(Jalr(T1)) // 调用闭包函数
-
-          // 从安全位置恢复s11寄存器的值
-          instrs.push(Ld(S11, { base: Fp, offset: saved_s11_offset }))
+          env.current_offset
         }
-        None =>
-          match
-            env.fundefs.search_by(fn(fundef) {
+        None => {
+          let offset = env.fundefs.search_by(fn(fundef) {
               fundef.name.inner() == f.to_string()
-            }) {
-            Some(offset) => {
-              let closure_save_offset = offset
-              instrs.push(Sd(S11, { base: Fp, offset: closure_save_offset }))
-              instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
-              instrs.push(Jalr(T1)) // 调用闭包函数
-              instrs.push(Ld(S11, { base: Fp, offset: closure_save_offset }))
+            })
+          match offset {
+            Some(offset) => offset
+            None => {
+              @util.die("Warning: CallClosure: " + f.to_string() + " not found")
             }
-            None =>
-              println("Warning: CallClosure: " + f.to_string() + " not found")
           }
+        }
+        
       }
+      instrs.push(Sd(S11, { base: Fp, offset: closure_save_offset }))
+      instrs.push(Ld(T1, { base: S11, offset: 0 })) 
+      instrs.push(Jalr(T1))
+      instrs.push(Ld(S11, { base: Fp, offset: closure_save_offset }))
     }
     CallDirect(label, args) => {
       for i, arg in args {
@@ -554,24 +546,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
           }
         }
       }
-      match
-        env.fundefs.search_by(fn(fundef) {
-          fundef.name.inner() == label.inner()
-        }) {
-        Some(_) => instrs.push(Call(Label(label.inner())))
-        None =>
-          match env.vars.get(label.inner()) {
-            Some((offset, _)) => {
-              // 3. 加载函数指针并调用
-              instrs.push(Ld(S11, { base: Fp, offset }))
-              // instrs.push(Ld(T1, { base: S11, offset: 0 })) // 加载函数指针
-              // instrs.push(Jalr(T1)) // 调用闭包函数
-              instrs.push(Mv(A0, S11))
-              instrs.push(Jalr(S11))
-            }
-            None => instrs.push(Call(Label(label.inner())))
-          }
-      }
+      instrs.push(Call(Label(label.inner())))
     }
     MakeTuple(elems) => {
       // 1. 分配元组空间
