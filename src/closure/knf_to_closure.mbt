@@ -254,7 +254,6 @@ fn new_fv(name : @types.Name, ty : LowType) -> FreeVarWithType {
 
 ///|
 fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
-  // @util.logger("fv: " + e.to_string())
   match e {
     Unit => @hashset.new()
     Int(_) => @hashset.new()
@@ -285,20 +284,13 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
       .union(fv(ka))
       .union(fv(kb))
     Let((x, _), e, cont) => {
-        // @util.logger("Let:x " + x.to_string())
-        // @util.logger("Let:e " + e.to_string())
-        // @util.logger("Let:cont " + cont.to_string())
-      
       let r = fv(cont)
-      // @util.logger("Let: fv r=" + r.to_string())
       r.remove(new_fv(x, Unit))
       let fve = fv(e)
       fve.remove(new_fv(x, Unit))
-      // @util.logger("Let: name == " + x.to_string() + " fv :" + fve.union(r).to_string())
       fve.union(r)
     }
     Var(x) => @hashset.of([new_fv(x, Unit)])
-    // Var(_) => @hashset.new()
     LetRec({ name, ty: _, args, body }, cont) => {
       let x = fv(body)
       for i in args {
@@ -334,7 +326,7 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/counter.mbt",
+    "contest-2025-data/test_cases/mbt/cls-bug.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string() + "\n")
