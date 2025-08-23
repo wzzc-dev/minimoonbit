@@ -33,7 +33,7 @@ fn KnfEnv::get_knf(
   syn : @types.Syntax,
 ) -> (Name, Type, Knf) raise KnfErr {
   let ty = KnfEnv::get_type(self.externals, syn) catch {
-    KnfErr(s) => raise KnfErr(s)
+    KnfErr(s) => raise KnfErr("KNF get_knf error: " + s)
   }
   match syn {
     Var(name) => {
@@ -53,7 +53,7 @@ fn KnfEnv::get_type(
   syn : @types.Syntax,
 ) -> @types.Type raise KnfErr {
   @typing.get_type(env, syn) catch {
-    @typing.TyErr(s) => raise KnfErr("Typing error: " + s)
+    @typing.TyErr(s) => raise KnfErr("KNF get_type TyErr error: " + s)
   }
 }
 

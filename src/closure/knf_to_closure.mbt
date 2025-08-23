@@ -78,7 +78,8 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       )
     }
     LetRec({ name, ty, args, body }, cont) => {
-      let free_vars = fv(body).difference(
+      let free_vars = fv(body)
+      .difference(
         @hashset.from_array(env.map(fn(def) { 
           new_fv(def.old_name, Unit) })),
       )
@@ -159,6 +160,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
         }
         None => Var(n) // 如果在环境中找不到，直接返回变量引用
       }
+    // Var(n) => Var(n)
     Tuple(arr_name) => MakeTuple(arr_name)
     LetTuple(arr_name_ty, name, cont) => {
       let arr_name = arr_name_ty.map( 
