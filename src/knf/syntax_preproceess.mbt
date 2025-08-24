@@ -22,7 +22,7 @@ pub fn KnfEnv::syntax_preprocess(
 
           // Build the nested structure from inside out
           // Start with the innermost expression
-          let mut result = @types.Syntax::Var(str)
+          let mut result = KnfEnv::syntax_preprocess(self, s2)
 
           // Process elements in reverse order to build nested Let expressions
           for i = len - 1; i >= 0; i = i - 1 {
@@ -39,13 +39,9 @@ pub fn KnfEnv::syntax_preprocess(
             )
 
             // Wrap the previous result with this Put operation
-            result = Let(
-              ("_", Unit),
-              put_expr,
-              result,
-            )
+            result = Let(("_", Unit), put_expr, result)
           }
-          Let((str, ty), Let((str, ty), array_make, result), KnfEnv::syntax_preprocess(self, s2))
+          Let((str, ty), array_make, result)
         }
         _ =>
           Let(

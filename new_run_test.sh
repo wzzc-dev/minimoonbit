@@ -24,8 +24,8 @@ for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
 
   # 检查对应的 .ans 文件是否存在
   if [[ -f "$ANS_FILE" ]]; then
-    # 比较运行结果和 .ans 文件的内容（忽略行尾差异）
-    if cmp -s <(tr -d '\r' < output.txt) <(tr -d '\r' < "$ANS_FILE"); then
+    # 比较运行结果和 .ans 文件的内容（忽略行尾差异和 ans 文件末尾换行符）
+    if cmp -s <(tr -d '\r' < output.txt) <(tr -d '\r' < "$ANS_FILE" | sed '$ { /^$/ d; }' | perl -pe 'chomp if eof'); then
       echo "Test $MBT_FILE passed: Output matches $ANS_FILE"
       # 增加通过测试计数器
       ((PASSED_COUNT++))
