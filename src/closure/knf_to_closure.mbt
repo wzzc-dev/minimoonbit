@@ -326,13 +326,13 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/cls-bug.mbt",
+    "contest-2025-data/test_cases/mbt/conv_pool.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
-  println("parse: " + parse.to_string() + "\n")
+  // println("parse: " + parse.to_string() + "\n")
   try {
     let typed = @typing.typing(parse)
-    println("typed: " + typed.to_string() + "\n")
+    // println("typed: " + typed.to_string() + "\n")
     let env = @knf.KnfEnv::new(@immut/hashmap.new())
     let pre = @knf.KnfEnv::syntax_preprocess(env, typed)
     println("pre: " + pre.to_string() + "\n")

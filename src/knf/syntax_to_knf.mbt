@@ -352,6 +352,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       KnfEnv::to_knf(self, If(LT(syn1, syn2), Bool(true), Bool(false)))
     GT(syn1, syn2) =>
       KnfEnv::to_knf(self, If(LE(syn1, syn2), Bool(false), Bool(true)))
+    GE(syn1, syn2) =>
+      KnfEnv::to_knf(self, If(LT(syn1, syn2), Bool(false), Bool(true)))
     Let((name, ty), syn, rest) => {
       let knf = KnfEnv::to_knf(self, syn)
       let new_env = {

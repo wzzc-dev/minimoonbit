@@ -124,7 +124,12 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
         self.typechecked.unwrap(),
       )
       let knf = try? self.knf_env.to_knf(pre)
-      self.knf = Some(knf.unwrap())
+      match knf {
+        Ok(_) => self.knf = Some(knf.unwrap())
+        Err(e) => {
+          @util.die(e.to_json().to_string())
+        }
+      }
     }
     KnfOpt => {
       let knf = self.knf.unwrap()
