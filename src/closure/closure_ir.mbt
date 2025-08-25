@@ -1,5 +1,5 @@
 ///|
-pub(all) struct Label(String) derive(Show)
+pub(all) struct Label(String) derive(Show, ToJson)
 
 ///|
 pub typealias @types.Name
@@ -40,13 +40,13 @@ pub(all) enum Expr {
   ExternalArray(Label)
   While(Expr, Expr)
   Assign(Name, Name)
-} derive(Show)
+} derive(Show, ToJson(style="flat"))
 
 ///|
 pub(all) struct Closure {
   name : Label
   actual_free_vars : Array[Name]
-} derive(Show)
+} derive(Show, ToJson)
 
 ///|
 pub(all) struct FuncDef {
@@ -59,10 +59,10 @@ pub(all) struct FuncDef {
   args : Array[(Name, LowType)]
   formal_free_vars : Array[(Name, LowType)]
   body : Expr
-} derive(Show)
+} derive(Show, ToJson)
 
 ///|
 pub(all) struct Program {
   fundefs : Array[FuncDef]
   body : Expr
-} derive(Show)
+} derive(Show, ToJson)

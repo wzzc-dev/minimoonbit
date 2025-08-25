@@ -1,7 +1,7 @@
 ///|
 pub fn Expr::to_json(self : Expr) -> Json {
   match self {
-    Expr::Unit => ["Unit"]
+    Expr::Unit => "Unit"
     Expr::Int(i) => ["Int", Json::number(i.to_double())]
     Expr::Int64(i) => ["Int64", Json::number(i.to_double())]
     Expr::Double(d) => ["Double", Json::number(d)]
@@ -52,7 +52,7 @@ pub fn Expr::to_json(self : Expr) -> Json {
 ///|
 pub fn Expr::from_json(json : Json) -> Expr raise {
   match json {
-    ["Unit"] => Expr::Unit
+    "Unit" => Expr::Unit
     ["Int", Number(i, ..)] => Expr::Int(i.to_int())
     ["Int64", Number(i, ..)] => Expr::Int64(i.to_int64())
     ["Double", Number(d, ..)] => Expr::Double(d)
@@ -140,11 +140,11 @@ pub fn Expr::from_json(json : Json) -> Expr raise {
 ///|
 pub fn LowType::to_json(self : LowType) -> Json {
   match self {
-    LowType::Unit => ["Unit"]
-    LowType::Bool => ["Bool"]
-    LowType::Int => ["Int"]
-    LowType::Ptr => ["Ptr"]
-    LowType::Double => ["Double"]
+    LowType::Unit => "Unit"
+    LowType::Bool => "Bool"
+    LowType::Int => "Int"
+    LowType::Ptr => "Ptr"
+    LowType::Double => "Double"
     LowType::Tuple(ts) => ["Tuple", ts.to_json()]
     LowType::Array(t) => ["Array", t.to_json()]
     LowType::DirectFn(ts, t) => ["DirectFunction", ts.to_json(), t.to_json()]
@@ -168,14 +168,14 @@ pub fn LowType::from_json(json : Json) -> LowType raise {
       LowType::Tuple(ts_res)
     }
     ["Array", t] => LowType::Array(LowType::from_json(t))
-    ["DirectFunction", Array(ts), t] => {
+    ["DirectFn", Array(ts), t] => {
       let ts_res = []
       for t in ts {
         ts_res.push(LowType::from_json(t))
       }
       LowType::DirectFn(ts_res, LowType::from_json(t))
     }
-    ["ClosureFunction", Array(ts), t] => {
+    ["ClosureFn", Array(ts), t] => {
       let ts_res = []
       for t in ts {
         ts_res.push(LowType::from_json(t))
@@ -221,7 +221,7 @@ pub fn FuncDef::to_json(self : FuncDef) -> Json {
         let (n, t) = nt
         res.push(Json::array([n.to_json(), t.to_json()]))
       }
-      Json::array(res)
+      res
     },
     "formal_free_vars": {
       let res = []

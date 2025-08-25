@@ -164,7 +164,7 @@ pub fn Syntax::to_json(self : Syntax) -> Json {
         value.to_json(),
         body.to_json(),
       ]
-    Array(size, init) => ["Array", size.to_json(), init.to_json()]
+    Array(size, init) => ["ArrayMake", size.to_json(), init.to_json()]
     ArrayExpr(es) => ["ArrayExpr", es.map(Syntax::to_json) |> Json::array]
     Get(arr, idx) => ["Get", arr.to_json(), idx.to_json()]
     Put(arr, idx, value) =>

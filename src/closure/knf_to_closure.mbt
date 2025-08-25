@@ -329,17 +329,19 @@ test {
     "contest-2025-data/test_cases/mbt/conv_pool.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
-  // println("parse: " + parse.to_string() + "\n")
+  println("parse: " + parse.to_string() + "\n")
   try {
     let typed = @typing.typing(parse)
-    // println("typed: " + typed.to_string() + "\n")
+    println("typed: " + typed.to_string() + "\n")
     let env = @knf.KnfEnv::new(@immut/hashmap.new())
     let pre = @knf.KnfEnv::syntax_preprocess(env, typed)
-    println("pre: " + pre.to_string() + "\n")
+    println("pre: " + pre.to_json().stringify() + "\n")
     let knf = @knf.KnfEnv::to_knf(env, pre)
-    println("knf: " + knf.to_string() + "\n")
-    let closure = knf_program_to_closure(knf,Map::from_iter(@immut/hashmap.new().iter()),)
-    println("closure: " + closure.to_string() + "\n")
+    println("knf: " + knf.to_json().stringify() + "\n")
+    let closure = knf_program_to_closure(knf,Map::from_iter(@immut/hashmap.new().iter()))
+    // println("closure: " + closure.to_string() + "\n")
+    println("closure: ")
+    println(closure.to_json().stringify())
   } catch {
     @typing.TyErr(s) => {
       println("typing error")

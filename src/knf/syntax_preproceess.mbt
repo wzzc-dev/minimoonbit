@@ -86,75 +86,30 @@ fn KnfEnv::process_multidimensional_array(
   elems : Array[@types.Syntax],
   s2 : @types.Syntax,
 ) -> @types.Syntax {
-  // @util.logger("Processing multidimensional array...")
   let len = elems.length()
-
-  // For multidimensional arrays, we need to:
-  // 1. Create the outer array with appropriate size
-  // 2. Process each inner array element recursively
-  // 3. Assign each processed inner array to the outer array
-
-  // Get the first sub-array to determine inner array structure
-  let first_subarray_expr = match elems[0] {
-    ArrayExpr(sub_elems) => {
-      let sub_len = sub_elems.length()
-      let sub_ty = sub_elems[0] // Type of elements in sub-array
-      @types.Syntax::Array(@types.Syntax::Int(sub_len), sub_ty)
-    }
-    _ => @util.die("Expected ArrayExpr for multidimensional array element")
-  }
-
-  // Create the outer array: Array::make(len, default_inner_array)
-  let len_expr = @types.Syntax::Int(len)
-  let outer_array_make = @types.Syntax::Array(len_expr, first_subarray_expr)
-
-  // Start with the final expression
+  
   let mut result = KnfEnv::syntax_preprocess(self, s2)
 
-  // Process each sub-array in reverse order
   for i = len - 1; i >= 0; i = i - 1 {
-    let sub_array = elems[i]
+    let sub_elem = elems[i]
 
-    // Generate a unique temporary variable name for this sub-array
-    let temp_var_name = str + "_sub_" + i.to_string()
-
-    // Process the sub-array - it could be 1D or further nested
-    let processed_sub_array = match sub_array {
-      ArrayExpr(sub_elems) => {
-        // Determine the type of the sub-array
-        let sub_array_ty = match ty {
-          Array(inner_ty) => inner_ty
-          _ => @util.die("Expected Array type for multidimensional array")
-        }
-
-        // Check if sub-array is also multidimensional
-        let is_sub_multidimensional = match sub_elems[0] {
-          ArrayExpr(_) => true
-          _ => false
-        }
-        if is_sub_multidimensional {
-          // Recursively handle nested multidimensional arrays
-          KnfEnv::process_multidimensional_array(
-            self,
-            temp_var_name,
-            sub_array_ty,
-            sub_elems,
-            @types.Syntax::Var(temp_var_name),
-          )
-        } else {
-          // Handle 1D sub-array
-          KnfEnv::process_1d_array(
-            self,
-            temp_var_name,
-            sub_array_ty,
-            sub_elems,
-            @types.Syntax::Var(temp_var_name),
-          )
-        }
-      }
-      _ => @util.die("Expected ArrayExpr for multidimensional array element")
+    let (sub_array_ty,temp_var_name) = match ty {
+      Array(inner_ty) => (inner_ty, @types.Syntax::Var(str + "_sub_" + i.to_string()))
+      _ => (ty,sub_elem)
     }
 
+    let processed_sub_array = match sub_elem {
+      ArrayExpr(sub_elems) => {
+        KnfEnv::process_multidimensional_array(
+          self,
+          str + "_sub_" + i.to_string(),
+          sub_array_ty,
+          sub_elems,
+          temp_var_name,
+        )
+      }
+      _ => sub_elem
+    }
     // Create index expression: i
     let index_expr = @types.Syntax::Int(i)
 
@@ -162,9 +117,8 @@ fn KnfEnv::process_multidimensional_array(
     let put_expr = @types.Syntax::Put(
       @types.Syntax::Var(str),
       index_expr,
-      @types.Syntax::Var(temp_var_name),
+      processed_sub_array,
     )
-
     // Wrap the result with the sub-array processing and Put operation
     result = match processed_sub_array {
       Let((temp_name, temp_ty), temp_init, _) =>
@@ -173,5 +127,19 @@ fn KnfEnv::process_multidimensional_array(
       _ => Let(("_", Unit), put_expr, result)
     }
   }
+
+  let first_subarray_expr = match elems[0] {
+    ArrayExpr(sub_elems) => {
+      let sub_len = sub_elems.length()
+      @types.Syntax::Array(@types.Syntax::Int(sub_len), sub_elems[0])
+    }
+    _ => {
+      elems[0]
+    }
+  }
+
+  let len_expr = @types.Syntax::Int(len)
+  let outer_array_make = @types.Syntax::Array(len_expr, first_subarray_expr)
+
   Let((str, ty), outer_array_make, result)
 }

@@ -9,7 +9,7 @@ pub(all) enum LowType {
   Tuple(Array[LowType])
   Array(LowType)
   Ptr
-} derive(Show, Eq)
+} derive(Show, Eq, ToJson(style="flat"))
 
 ///|
 pub fn LowType::is_ptr_like(self : LowType) -> Bool {
@@ -36,9 +36,4 @@ pub fn LowType::size_of(self : LowType, size_of_ptr : Int) -> Int {
     Double => 8
     _ => if self.is_ptr_like() { size_of_ptr } else { 4 }
   }
-}
-
-///|
-pub impl ToJson for LowType with to_json(self : LowType) -> Json {
-  self.to_string().to_json()
 }

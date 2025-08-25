@@ -1,7 +1,7 @@
 ///|
 pub fn Knf::to_json(self : Knf) -> Json {
   match self {
-    Unit => ["Unit"]
+    Unit => "Unit"
     Int(i) => ["Int", Json::number(i.to_double())]
     Int64(i) => ["Int64", Json::number(i.to_double())]
     Double(d) => ["Double", Json::number(d)]
@@ -25,6 +25,7 @@ pub fn Knf::to_json(self : Knf) -> Json {
       ["IfLt", n1.to_json(), n2.to_json(), k1.to_json(), k2.to_json()]
     Let((n, t), k1, k2) =>
       ["Let", [n.to_json(), t.to_json()], k1.to_json(), k2.to_json()]
+      
     Var(n) => ["Var", n.to_json()]
     LetRec(f, k) => ["LetRec", f.to_json(), k.to_json()]
     Apply(n, ns) => ["Apply", n.to_json(), ns.to_json()]

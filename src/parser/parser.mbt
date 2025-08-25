@@ -209,6 +209,7 @@ fn param(
 fn fnBody(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("fnBody: " + tokens.to_string())
   lcurlybracket
   .parser_and(Parser(stmt).many())
   .zeroOrOnce(expr)
@@ -1173,7 +1174,7 @@ fn arrayExpr(
         // println("array_expr: " + arr.to_string())
         if arr.is_empty() {
           // For single element array, create Array::make(1, element)
-          return @types.Syntax::Array(@types.Syntax::Int(1), first)
+          return @types.Syntax::ArrayExpr([first])
         }
         
         let expr = arr.map(fn(input) {
@@ -1690,10 +1691,10 @@ test {
 ///|
 test {
   let tokens = []
-  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/inprod-loop.mbt")
+  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/conv_pool.mbt")
   // println(_test2)
   @lex.lex({ str: _test2, offset: 0, array: tokens })
-  // println("tokens: " + tokens.to_string())
+  println("tokens: " + tokens.to_string())
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println("prog: " + prog.to_string())
 }

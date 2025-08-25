@@ -32,13 +32,13 @@ pub(all) enum Syntax {
   Enum(String, Array[String]) // enum { A, B, C }
   While(Syntax, Syntax) // while x { ... }
   Return(Syntax?) // return _;
-} derive(Show)
+} derive(Show, ToJson(style="flat"))
 
 ///|
 pub(all) enum Kind {
   Int
   Double
-} derive(Show, Eq)
+} derive(Show, Eq, ToJson(style="flat" ))
 
 ///|
 pub(all) enum Op {
@@ -47,14 +47,14 @@ pub(all) enum Op {
   Mul
   Div
   Mod
-} derive(Show, Eq)
+} derive(Show, Eq, ToJson(style="flat" ))
 
 ///|
 pub(all) struct Fundef {
   name : (String, Type)
   args : Array[(String, Type)]
   body : Syntax
-} derive(Show)
+} derive(Show, ToJson)
 
 ///|
 pub(all) enum Type {
