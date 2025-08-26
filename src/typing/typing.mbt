@@ -418,7 +418,13 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           )
       }
     ArrayExpr(es) => {
+      let ty = infer(ctx, es[0])
       let tys = es.map(e => infer(ctx, e))
+
+      for t in tys {
+        @util.logger("unify: " + t.to_string() + " with " + ty.to_string())
+        unify(t, ty)
+      }
       Array(tys[0])
     }
     Struct(_, _) => Unit
