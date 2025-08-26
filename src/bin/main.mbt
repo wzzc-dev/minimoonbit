@@ -113,7 +113,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
       match typechecked {
         Ok(_) => self.typechecked = Some(typechecked.unwrap())
         Err(e) => {
-          @util.die(e.to_json().to_string())
+          @util.die("type check error: " + e.to_json().to_string())
         }
       }
       
@@ -316,9 +316,9 @@ fn main {
       ("--llvmir", "", @ArgParser.Set(llvmir), "Generate llvmir"),
     ],
     fn(s) {
-      if not(file.is_empty()) {
-        @util.die("multiple files are given")
-      }
+      // if not(file.is_empty()) {
+      //   @util.die("multiple files are given")
+      // }
       file = Some(s)
     },
     "",

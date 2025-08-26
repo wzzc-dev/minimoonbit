@@ -75,10 +75,18 @@ fn KnfEnv::process_1d_array(
     // Wrap the previous result with this Put operation
     result = Let(("_", Unit), put_expr, result)
   }
-  Let((str, ty), array_make, result)
+  fn get_array_ty(ty : @types.Type) -> @types.Type {
+    match ty {
+      Array(ty) => get_array_ty(ty)
+      _ => ty
+    }
+  }
+  let ty = get_array_ty(ty)
+  
+  Let((str, Array(ty)), array_make, result)
 }
 
-///| Process multidimensional array
+///| Process multidimensional array by flattening to 1D array
 fn KnfEnv::process_multidimensional_array(
   self : KnfEnv,
   str : String,
@@ -86,60 +94,34 @@ fn KnfEnv::process_multidimensional_array(
   elems : Array[@types.Syntax],
   s2 : @types.Syntax,
 ) -> @types.Syntax {
-  let len = elems.length()
-  
-  let mut result = KnfEnv::syntax_preprocess(self, s2)
+  // Flatten the multidimensional array to 1D
+  let (flattened_elements, _dims) = KnfEnv::flatten_multidimensional_array(elems)
+  // Process as a 1D array
+  KnfEnv::process_1d_array(self, str, ty, flattened_elements, s2)
+}
 
-  for i = len - 1; i >= 0; i = i - 1 {
-    let sub_elem = elems[i]
-
-    let (sub_array_ty,temp_var_name) = match ty {
-      Array(inner_ty) => (inner_ty, @types.Syntax::Var(str + "_sub_" + i.to_string()))
-      _ => (ty,sub_elem)
-    }
-
-    let processed_sub_array = match sub_elem {
+///| Flatten multidimensional array to 1D array
+fn KnfEnv::flatten_multidimensional_array(
+  elems : Array[@types.Syntax]
+) -> (Array[@types.Syntax], Array[Int]) {
+  let result : Array[@types.Syntax] = []
+  let dims : Array[Int] = []
+  dims.push(elems.length())
+  for elem in elems {
+    match elem {
       ArrayExpr(sub_elems) => {
-        KnfEnv::process_multidimensional_array(
-          self,
-          str + "_sub_" + i.to_string(),
-          sub_array_ty,
-          sub_elems,
-          temp_var_name,
-        )
+        // Recursively flatten sub-arrays
+        let (flattened_sub, sub_dims) = KnfEnv::flatten_multidimensional_array(sub_elems)
+        for sub_elem in flattened_sub {
+          result.push(sub_elem)
+        }
+        dims.append(sub_dims)
       }
-      _ => sub_elem
-    }
-    // Create index expression: i
-    let index_expr = @types.Syntax::Int(i)
-
-    // Create Put expression: Put(outer_array, i, temp_var)
-    let put_expr = @types.Syntax::Put(
-      @types.Syntax::Var(str),
-      index_expr,
-      processed_sub_array,
-    )
-    // Wrap the result with the sub-array processing and Put operation
-    result = match processed_sub_array {
-      Let((temp_name, temp_ty), temp_init, _) =>
-        // Replace the placeholder with Put operation
-        Let((temp_name, temp_ty), temp_init, Let(("_", Unit), put_expr, result))
-      _ => Let(("_", Unit), put_expr, result)
+      _ => {
+        // Add non-array elements directly
+        result.push(elem)
+      }
     }
   }
-
-  let first_subarray_expr = match elems[0] {
-    ArrayExpr(sub_elems) => {
-      let sub_len = sub_elems.length()
-      @types.Syntax::Array(@types.Syntax::Int(sub_len), sub_elems[0])
-    }
-    _ => {
-      elems[0]
-    }
-  }
-
-  let len_expr = @types.Syntax::Int(len)
-  let outer_array_make = @types.Syntax::Array(len_expr, first_subarray_expr)
-
-  Let((str, ty), outer_array_make, result)
+  (result, dims)
 }

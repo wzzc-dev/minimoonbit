@@ -326,7 +326,7 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/conv_pool.mbt",
+    "contest-2025-data/test_cases/mbt/conv_pool2.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string() + "\n")
