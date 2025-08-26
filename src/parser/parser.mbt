@@ -1092,6 +1092,7 @@ fn valueExpr(
   .or(floatingPointExpr)
   .or(intExpr)
   .or(notExpr)
+  .or(notExpr2)
   .or(arrayMakeExpr)
   .parse(tokens)
 }
@@ -1362,6 +1363,18 @@ fn notExpr(
   .map(fn(input) {
     match input {
       ((_, expr), _) => @types.Syntax::Not(expr)
+    }
+  })
+  .parse(tokens)
+}
+fn notExpr2(
+  tokens : ArrayView[@lex.Token],
+) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  ptoken_not
+  .parser_and(expr)
+  .map(fn(input) {
+    match input {
+      (_, expr) => @types.Syntax::Not(expr)
     }
   })
   .parse(tokens)

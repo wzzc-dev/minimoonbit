@@ -435,7 +435,15 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       ignore(infer(ctx, body))
       Unit
     }
-    Return(_) => Unit
+    Return(r) => {
+      match r {
+        Some(e) => {
+          let e_ty = infer(ctx, e)
+          e_ty
+        }
+        None => Unit
+      }
+    }
     Assign(name, value) => {
       let name_ty = infer(ctx, name)
       let value_ty = infer(ctx, value)
@@ -627,9 +635,10 @@ test "typing" {
 test {
   // let x = Array::make(10, 0);
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/counter.mbt",
+    "contest-2025-data/test_cases/mbt/mbts",
   )
   let parse = @parser.parse_from_string(_test2)
+  
   println("parse: " + parse.to_string() + "\n")
   try {
     let typed = typing(parse)
