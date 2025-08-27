@@ -427,7 +427,8 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       }
       Array(tys[0])
     }
-    Struct(_, _) => Unit
+    Struct(_, _, _) => Unit
+    StructConstruct(_, _) => Unit
     Enum(_, _) => Unit
     While(cond, body) => {
       let cond_ty = infer(ctx, cond)
@@ -528,7 +529,8 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
         Some(e) => deref_term(e)
       }
     ArrayExpr(es) => ArrayExpr(es.map(e => deref_term(e)))
-    Struct(name, es) => Struct(name, es.map(e => (e.0, deref_term(e.1))))
+    Struct(name, generic, es) => Struct(name, generic, es)
+    StructConstruct(name, arr) => StructConstruct(name, arr) 
     Enum(name, e) => Enum(name, e)
     Int64(i) => Int64(i)
     Assign(name, value) => Assign(deref_term(name), deref_term(value))

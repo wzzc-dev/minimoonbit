@@ -170,7 +170,8 @@ pub fn Syntax::to_json(self : Syntax) -> Json {
     Put(arr, idx, value) =>
       ["Put", arr.to_json(), idx.to_json(), value.to_json()]
     Enum(name, variant) => ["Enum", name, variant]
-    Struct(name, fields) => ["Struct", name, fields.map(x => ([x.0 |> Json::string, x.1.to_json()] : Json)) |> Json::array]
+    Struct(name, generic, fields) => ["Struct", name, generic,fields.map(x => ([x.0 |> Json::string, x.1.to_json()] : Json)) |> Json::array]
+    StructConstruct(name, fields) => ["StructConstruct", name, fields.map(x => ([x.0 |> Json::string, x.1.to_json()] : Json)) |> Json::array]
     While(e, stmts) => ["While", e.to_json(), stmts.to_json()]
     Return(e) => ["Return", e.map(Syntax::to_json)]
     Assign(name, value) => ["Assign", name.to_json(), value.to_json()]

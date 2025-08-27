@@ -160,12 +160,12 @@ let ptoken_return : Parser[@lex.Token] = ptoken(fn(token) {
   }
 })
 
-// let ptoken_struct : Parser[@lex.Token] = ptoken(fn(token) {
-//   match token {
-//     @lex.Token::STRUCT => true
-//     _ => false
-//   }
-// })
+let ptoken_struct : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
+    @lex.Token::STRUCT => true
+    _ => false
+  }
+})
 // let ptoken_lbracket : Parser[@lex.Token] = ptoken(fn(token) {
 //   match token {
 //     @lex.Token::LBRACKET => true
