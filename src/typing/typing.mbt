@@ -429,6 +429,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     }
     Struct(_, _, _) => Unit
     StructConstruct(_, _) => Unit
+    FieldAccess(e, _) => infer(ctx, e)
     Enum(_, _) => Unit
     While(cond, body) => {
       let cond_ty = infer(ctx, cond)
@@ -482,6 +483,7 @@ fn deref_type(t : @types.Type) -> @types.Type {
 ///|
 fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
   match syntax {
+    FieldAccess(e, name) => FieldAccess(deref_term(e), name)
     Unit => Unit
     Bool(b) => Bool(b)
     Int(i) => Int(i)

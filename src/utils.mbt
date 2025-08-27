@@ -175,6 +175,7 @@ pub fn Syntax::to_json(self : Syntax) -> Json {
     While(e, stmts) => ["While", e.to_json(), stmts.to_json()]
     Return(e) => ["Return", e.map(Syntax::to_json)]
     Assign(name, value) => ["Assign", name.to_json(), value.to_json()]
+    FieldAccess(e, name) => ["FieldAccess", e.to_json(), name.to_json()]
   }
 }
 

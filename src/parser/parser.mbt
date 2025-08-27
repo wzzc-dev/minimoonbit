@@ -781,7 +781,7 @@ fn leftValue(
         indices.fold(init=base_expr, fn(acc, index_tuple) {
           match index_tuple {
             ((_, index_expr), _) => @types.Syntax::Get(acc, index_expr)
-          }
+      }
         })
       }
     }
