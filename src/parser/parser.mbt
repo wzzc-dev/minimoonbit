@@ -764,30 +764,55 @@ fn exprStmt(
 fn leftValue(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // @util.logger("leftValue: " + tokens.to_string())
-  // Base case: IDENTIFIER
-  Parser(identifierExpr)
+  // 首先解析一个标识符，作为初始表达式（@types.Syntax::Var）
+  identifier
+  .map(fn(input) {
+    match input {
+      @lex.Token::IDENTIFIER(id) => @types.Syntax::Var(id)
+      _ => @util.die("leftValue: expected identifier")
+    }
+  })
+  // 然后解析任意个后缀：. IDENTIFIER  或  [ expr ]
   .parser_and(
-    // Handle zero or more indexing operations: '[' expr ']'
-    lbracket
-  .parser_and(expr)
-  .parser_and(rbracket)
+    dot
+    .parser_and(identifier)
+    .map(fn(input) {
+      match input {
+        (_, @lex.Token::IDENTIFIER(field)) => ("dot", @types.Syntax::Var(field))
+        _ => @util.die("leftValue: invalid field access")
+      }
+    })
+    .or(
+      lbracket
+      .parser_and(expr)
+      .parser_and(rbracket)
+      .map(fn(input) {
+        match input {
+          ((_, idx_expr), _) => ("bracket", idx_expr)
+        }
+      })
+    )
     .many()
   )
   .map(fn(input) {
     match input {
-      (base_expr, indices) => {
-        // Fold over all the indices to build nested Get expressions
-        indices.fold(init=base_expr, fn(acc, index_tuple) {
-          match index_tuple {
-            ((_, index_expr), _) => @types.Syntax::Get(acc, index_expr)
-      }
+      // first_expr 是 @types.Syntax（初始 Var），list 是后缀列表
+      (first_expr, list) => {
+        // 左折叠：把所有后缀依次作用到初始表达式上，生成嵌套的 Get/Var 结构
+        list.fold(init=first_expr, fn(acc, item) {
+          match item {
+            ("dot", field_expr) => FieldAccess(acc, field_expr)
+            ("bracket", idx_expr) => Get(acc, idx_expr)
+            _ => @util.die("leftValue: unknown suffix")
+          }
         })
       }
     }
   })
   .parse(tokens)
 }
+
+
 ///|
 /// expr: // not associative
 /// 	or_level_expr;
@@ -1016,6 +1041,7 @@ fn getOrApplyLevelExpr(
   .parser_and(
     lbracket
     .or(lparen)
+    .or(dot)
     .zeroOrOnce(Parser(expr).parser_and(ptoken_comma.parser_and(expr).many()))
     .parser_and(rbracket.or(rparen))
     .many(),
@@ -1052,14 +1078,14 @@ fn getOrApplyLevelExpr(
                   if list.is_empty() {
                     Get(e, expr1)
                   } else {
-                    println(
+                    @util.die(
                       "getExpr LBRACKET is not empty - token :" +
                       tokens.to_string(),
                     )
-                    panic()
+                    
                   }
                 LPAREN => App(e, [expr1, ..tails])
-                _ => panic()
+                _ => @util.die("getExpr")
               }
             }
           }

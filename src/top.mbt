@@ -30,7 +30,7 @@ pub(all) enum Syntax {
   Assign(Syntax, Syntax) // _ = _
   Struct(String, String, Array[(String, Type)]) // struct _ [_] { _: _, _: _ } _
   StructConstruct(String, Array[(String, Syntax)]) // _::{ _: _, _: _ }
-  FieldAccess(Syntax, String) // _.field
+  FieldAccess(Syntax, Syntax) // _.field
   Enum(String, Array[String]) // enum { A, B, C }
   While(Syntax, Syntax) // while x { ... }
   Return(Syntax?) // return _;
