@@ -422,7 +422,6 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       let tys = es.map(e => infer(ctx, e))
 
       for t in tys {
-        @util.logger("unify: " + t.to_string() + " with " + ty.to_string())
         unify(t, ty)
       }
       Array(tys[0])
