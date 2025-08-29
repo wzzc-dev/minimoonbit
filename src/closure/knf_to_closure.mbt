@@ -209,6 +209,7 @@ fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
     Ptr => Ptr
     Enum(_name, _) | Struct(_name, _) =>
       @util.die("ty_to_low_type: Enum or Struct" + ty.to_string())
+    UserDefineType(name) => @util.die("user define type: " + name)
   }
 }
 

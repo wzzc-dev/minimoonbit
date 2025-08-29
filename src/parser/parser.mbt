@@ -127,7 +127,7 @@ fn topFnDecl(
   .parser_and(parseType)
   .parser_and(fnBody)
   .map(fn(input) {
-    // println("top_fn_decl input : " + input.to_string())
+    println("top_fn_decl input : " + input.to_string())
     match input {
       (
         (
@@ -179,9 +179,11 @@ fn topFnDecl(
 fn paramList(
   tokens : ArrayView[@lex.Token],
 ) -> (Array[(String, @types.Type)], ArrayView[@lex.Token])? {
+  // @util.logger("paramList: " + tokens.to_string())
   Parser(param)
   .parser_and(ptoken_comma.parser_and(param).many())
   .map(fn(input) {
+    // @util.logger("paramList input: " + input.to_string())
     match input {
       (param, param_list) => {
         // println("param_list")
@@ -203,9 +205,11 @@ fn paramList(
 fn param(
   tokens : ArrayView[@lex.Token],
 ) -> ((String, @types.Type), ArrayView[@lex.Token])? {
+  // @util.logger("param: " + tokens.to_string())
   identifier
   .parser_and(typeAnnotation)
   .map(fn(input) {
+    // @util.logger("param input: " + input.to_string())
     match input {
       (@lex.Token::IDENTIFIER(i), t) => (i, t)
       _ => @util.die("Invalid param")
@@ -215,7 +219,6 @@ fn param(
 }
 
 // fn_body: '{' stmt* expr? '}';
-
 ///|
 fn fnBody(
   tokens : ArrayView[@lex.Token],
@@ -293,9 +296,9 @@ fn fnBody(
   })
   .parse(tokens)
 }
+
 // struct_decl:
 //	'struct' UPPER_IDENTIFIER ('[' UPPER_IDENTIFIER ']')? '{' struct_field_list? '}';
-
 ///|
 fn structDecl(
   tokens : ArrayView[@lex.Token],
@@ -307,6 +310,7 @@ fn structDecl(
   .zeroOrOnce(structFieldList)
   .parser_and(rcurlybracket)
   .map(fn(input) {
+    // @util.logger("structDecl: input: " + input.to_string())
     match input {
       (((((_, IDENTIFIER(struct_name)), None), _), None), _) =>
         @types.Syntax::Struct(struct_name, "", [])
@@ -764,6 +768,7 @@ fn exprStmt(
 fn leftValue(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("leftValue :" + tokens.to_string())
   // 首先解析一个标识符，作为初始表达式（@types.Syntax::Var）
   identifier
   .map(fn(input) {
@@ -773,12 +778,12 @@ fn leftValue(
     }
   })
   // 然后解析任意个后缀：. IDENTIFIER  或  [ expr ]
-  .parser_and(
+  .zeroOrOnce(
     dot
     .parser_and(identifier)
     .map(fn(input) {
       match input {
-        (_, @lex.Token::IDENTIFIER(field)) => ("dot", @types.Syntax::Var(field))
+        (_, @lex.Token::IDENTIFIER(field)) => (@lex.Token::DOT, @types.Syntax::Var(field))
         _ => @util.die("leftValue: invalid field access")
       }
     })
@@ -788,7 +793,7 @@ fn leftValue(
       .parser_and(rbracket)
       .map(fn(input) {
         match input {
-          ((_, idx_expr), _) => ("bracket", idx_expr)
+          ((_, idx_expr), _) => (@lex.Token::LBRACKET, idx_expr)
         }
       })
     )
@@ -796,14 +801,19 @@ fn leftValue(
   )
   .map(fn(input) {
     match input {
-      // first_expr 是 @types.Syntax（初始 Var），list 是后缀列表
-      (first_expr, list) => {
-        // 左折叠：把所有后缀依次作用到初始表达式上，生成嵌套的 Get/Var 结构
-        list.fold(init=first_expr, fn(acc, item) {
-          match item {
-            ("dot", field_expr) => FieldAccess(acc, field_expr)
-            ("bracket", idx_expr) => Get(acc, idx_expr)
-            _ => @util.die("leftValue: unknown suffix")
+      (id, None) => {
+        (id)
+      }
+      (base_expr, Some(indices)) => {
+        // Fold over the indices to build nested Get expressions
+        indices.fold(init=base_expr, fn(acc, idx_expr) {
+          match idx_expr.0 {
+            @lex.Token::DOT =>
+              @types.Syntax::FieldAccess(acc, idx_expr.1)
+            @lex.Token::LBRACKET =>
+              @types.Syntax::Get(acc, idx_expr.1)
+            _ =>
+              @util.die("leftValue: invalid index expression")
           }
         })
       }
@@ -1031,6 +1041,14 @@ fn ifExpr(
 // 	// f(x, y)
 // 	| get_or_apply_level_expr '(' (expr (',' expr)*)? ')' # apply_expr;
 
+
+// get_or_apply_level_expr:
+// 	value_expr (
+// 		'[' expr ']'
+// 		| '(' (expr (',' expr)*)? ')'
+// 		| '.' IDENTIFIER
+// 	)*;
+
 ///|
 fn getOrApplyLevelExpr(
   tokens : ArrayView[@lex.Token],
@@ -1043,9 +1061,8 @@ fn getOrApplyLevelExpr(
     .or(lparen)
     .or(dot)
     .zeroOrOnce(Parser(expr).parser_and(ptoken_comma.parser_and(expr).many()))
-    .parser_and(rbracket.or(rparen))
+    .parser_and(rbracket.or(rparen).or(identifier))
     .many(),
-    // )
   )
   .map(fn(input) {
     match input {
@@ -1055,6 +1072,9 @@ fn getOrApplyLevelExpr(
         }
         let result = list.fold(init=expr, fn(acc, item) {
           match (acc, item) {
+            (e, ((_, None), IDENTIFIER(id))) => {
+              FieldAccess(e, Var(id))
+            }
             (e, ((l, None), _)) =>
               match l {
                 LBRACKET => {
@@ -1467,20 +1487,25 @@ fn identifierExpr(
   .parse(tokens)
 }
 
+// struct_construct_expr:
+// 	UPPER_IDENTIFIER '::' '{' struct_field_expr_list? '}'; // Point::{ x: 1, y: 2 }
 ///|
 fn structConstructExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("structConstructExpr: " + tokens.to_string())
   identifier
   .parser_and(ptoken_colon)
   .parser_and(ptoken_colon)
   .parser_and(lcurlybracket)
-  .parser_and(structFieldExprList)
+  .zeroOrOnce(structFieldExprList)
   .parser_and(rcurlybracket)
   .map(fn(input) {
     match input {
-      (((((IDENTIFIER(name), _), _), _), struct_field_exprs), _) =>
+      (((((IDENTIFIER(name), _), _), _), Some(struct_field_exprs)), _) =>
         @types.Syntax::StructConstruct(name, struct_field_exprs)
+      (((((IDENTIFIER(name), _), _), _), None), _) =>
+        @types.Syntax::StructConstruct(name, [])
       _ =>
         @util.die(
           "structConstructExpr: not handled, input: " + input.to_string(),
@@ -1570,7 +1595,37 @@ fn parseType(
   .or(arrayType)
   .or(functionType)
   .or(tupleType)
+  .or(genericType)
+  .or(userDefineType)
   .parse(tokens)
+}
+
+
+// generic_type: UPPER_IDENTIFIER '[' type ']'; // [T]
+fn genericType(
+  tokens : ArrayView[@lex.Token],
+) -> (@types.Type, ArrayView[@lex.Token])? {
+  userIdentifier.map(
+    fn(input){
+      match input {
+        @lex.Token::USER_IDENTIFIER(name) => @types.Type::UserDefineType(name)
+        _ => @util.die("error user")
+      }
+    }
+  ).parse(tokens)
+}
+// user_defined_type: UPPER_IDENTIFIER;
+fn userDefineType(
+  tokens : ArrayView[@lex.Token],
+) -> (@types.Type, ArrayView[@lex.Token])? {
+  identifier.map(
+    fn(input){
+      match input {
+        @lex.Token::IDENTIFIER(name) => @types.Type::UserDefineType(name)
+        _ => @util.die("error user")
+      }
+    }
+  ).parse(tokens)
 }
 // array_type: 'Array' '[' type ']';
 
@@ -1685,22 +1740,6 @@ fn[I, O] map(self : Parser[I], f : (I) -> O) -> Parser[O] {
   }
 }
 
-///|
-// fn and[V1, V2](self : Parser[V1], parser2 : Parser[V2]) -> Parser[(V1, V2)] {
-//   fn(input) {
-//     self
-//     .parse(input)
-//     .bind(
-//       fn {
-//         (value, rest) =>
-//           parser2
-//           .parse(rest)
-//           .map(fn { (value2, rest2) => ((value, value2), rest2) })
-//       },
-//     )
-//   }
-// }
-
 fn[V1, V2] parser_and(
   self : Parser[V1],
   parser2 : Parser[V2],
@@ -1804,7 +1843,7 @@ test {
   )
   // println(_test2)
   @lex.lex({ str: _test2, offset: 0, array: tokens })
-  println("tokens: " + tokens.to_string())
+  // println("tokens: " + tokens.to_string())
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println("prog: " + prog.to_string())
 }

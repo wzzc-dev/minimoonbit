@@ -69,6 +69,7 @@ pub(all) enum Type {
   Array(Type) // Array[_]
   Struct(String, Array[(String, Type)]) // struct { _: _, _: _ }
   Enum(String, Array[String]) // enum { A, B, C }
+  UserDefineType(String)
   Var(Ref[Type?])
   Ptr
 } derive(Show)
@@ -112,6 +113,7 @@ pub fn Type::size_of(self : Type, size_of_ptr : Int) -> Int {
     Int => 4
     Double => 8
     Struct(_, fs) => fs.fold(init=0, (sum, elem) => sum + elem.1.size_of(size_of_ptr))
+    UserDefineType(_) => 8
     Enum(_, _) => 4
     Tuple(_) | Fun(_, _) | Array(_) | Ptr => size_of_ptr
     Var(t) =>
@@ -156,7 +158,7 @@ pub impl Eq for Type with op_equal(self, other) -> Bool {
 ///|
 pub fn Type::repr(self : Type) -> Type {
   match self {
-    Bool | Int | Unit | Double | Ptr => self
+    Bool | Int | Unit | Double | Ptr | UserDefineType(_) => self
     Var(t) as tvar =>
       match t.val {
         Some(ty) => {

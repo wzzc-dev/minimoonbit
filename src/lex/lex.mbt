@@ -234,6 +234,7 @@ pub(all) enum Token {
   NUMBER(Int)
   BIG_NUMBER(Int64)
   IDENTIFIER(String)
+  USER_IDENTIFIER(String)
   CMP_OPERATOR(String)
   AND
   OR
