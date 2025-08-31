@@ -127,7 +127,7 @@ fn topFnDecl(
   .parser_and(parseType)
   .parser_and(fnBody)
   .map(fn(input) {
-    println("top_fn_decl input : " + input.to_string())
+    // println("top_fn_decl input : " + input.to_string())
     match input {
       (
         (
@@ -219,6 +219,7 @@ fn param(
 }
 
 // fn_body: '{' stmt* expr? '}';
+
 ///|
 fn fnBody(
   tokens : ArrayView[@lex.Token],
@@ -299,6 +300,7 @@ fn fnBody(
 
 // struct_decl:
 //	'struct' UPPER_IDENTIFIER ('[' UPPER_IDENTIFIER ']')? '{' struct_field_list? '}';
+
 ///|
 fn structDecl(
   tokens : ArrayView[@lex.Token],
@@ -511,6 +513,7 @@ fn stmt(
   .or(whileStmt)
   .or(returnStmt)
   .or(exprStmt)
+  // .log()
   .parse(tokens)
 }
 
@@ -752,6 +755,7 @@ fn exprStmt(
   Parser(expr)
   .parser_and(semicolon)
   .map(fn(input) {
+    // @util.logger("expr stmt input: " + input.to_string())
     match input {
       (expr, _) => expr
     }
@@ -783,7 +787,8 @@ fn leftValue(
     .parser_and(identifier)
     .map(fn(input) {
       match input {
-        (_, @lex.Token::IDENTIFIER(field)) => (@lex.Token::DOT, @types.Syntax::Var(field))
+        (_, @lex.Token::IDENTIFIER(field)) =>
+          (@lex.Token::DOT, @types.Syntax::Var(field))
         _ => @util.die("leftValue: invalid field access")
       }
     })
@@ -795,33 +800,26 @@ fn leftValue(
         match input {
           ((_, idx_expr), _) => (@lex.Token::LBRACKET, idx_expr)
         }
-      })
+      }),
     )
-    .many()
+    .many(),
   )
   .map(fn(input) {
     match input {
-      (id, None) => {
-        (id)
-      }
-      (base_expr, Some(indices)) => {
+      (id, None) => id
+      (base_expr, Some(indices)) =>
         // Fold over the indices to build nested Get expressions
         indices.fold(init=base_expr, fn(acc, idx_expr) {
           match idx_expr.0 {
-            @lex.Token::DOT =>
-              @types.Syntax::FieldAccess(acc, idx_expr.1)
-            @lex.Token::LBRACKET =>
-              @types.Syntax::Get(acc, idx_expr.1)
-            _ =>
-              @util.die("leftValue: invalid index expression")
+            @lex.Token::DOT => @types.Syntax::FieldAccess(acc, idx_expr.1)
+            @lex.Token::LBRACKET => @types.Syntax::Get(acc, idx_expr.1)
+            _ => @util.die("leftValue: invalid index expression")
           }
         })
-      }
     }
   })
   .parse(tokens)
 }
-
 
 ///|
 /// expr: // not associative
@@ -829,6 +827,7 @@ fn leftValue(
 fn expr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("expr:" + tokens.to_string())
   Parser(orLevelExpr).parse(tokens)
 }
 
@@ -842,11 +841,11 @@ fn orLevelExpr(
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // @util.logger("orLevelExpr token: " + tokens.to_string())
   Parser(andLevelExpr)
-  .parser_and(ptoken_or.parser_and(andLevelExpr).many())
+  .zeroOrOnce(ptoken_or.parser_and(andLevelExpr).many())
   .map(fn(input) {
     // @util.logger("orLevelExpr input: " + input.to_string())
     match input {
-      (first_expr, operations) =>
+      (first_expr, Some(operations)) =>
         // Left-associative folding: (a || b) || c
         operations.fold(init=first_expr, fn(left_expr, operation) {
           match operation {
@@ -858,6 +857,7 @@ fn orLevelExpr(
             }
           }
         })
+      (first_expr, None) => first_expr
     }
   })
   .parse(tokens)
@@ -871,11 +871,12 @@ fn orLevelExpr(
 fn andLevelExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("andLevelExpr token: " + tokens.to_string())
   Parser(cmpLevelExpr)
-  .parser_and(ptoken_and.parser_and(cmpLevelExpr).many())
+  .zeroOrOnce(ptoken_and.parser_and(cmpLevelExpr).many())
   .map(fn(input) {
     match input {
-      (first_expr, operations) =>
+      (first_expr, Some(operations)) =>
         // Left-associative folding: ((a && b) && c) && d
         operations.fold(init=first_expr, fn(left_expr, operation) {
           match operation {
@@ -887,6 +888,7 @@ fn andLevelExpr(
             }
           }
         })
+      (first_expr, None) => first_expr
     }
   })
   .parse(tokens)
@@ -900,17 +902,10 @@ fn cmpLevelExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   Parser(addSubLevelExpr)
-  .parser_and(
-    ptoken(fn(input) {
-      match input {
-        @lex.Token::CMP_OPERATOR(_) => true
-        _ => false
-      }
-    }).parser_and(addSubLevelExpr),
-  )
+  .zeroOrOnce(ptoken_cmp_operator.parser_and(addSubLevelExpr))
   .map(fn(input) {
     match input {
-      (left_expr, (cmp_op, right_expr)) =>
+      (left_expr, Some((cmp_op, right_expr))) =>
         match cmp_op {
           @lex.Token::CMP_OPERATOR("==") =>
             @types.Syntax::Eq(left_expr, right_expr)
@@ -929,6 +924,7 @@ fn cmpLevelExpr(
             panic()
           }
         }
+      (left, None) => left
     }
   })
   .or(addSubLevelExpr)
@@ -944,11 +940,13 @@ fn cmpLevelExpr(
 fn addSubLevelExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("addSubLevelExpr: " + tokens.to_string())
   Parser(mulDivLevelExpr)
-  .parser_and(ptoken_plus.or(ptoken_minus).parser_and(mulDivLevelExpr).many())
+  .zeroOrOnce(ptoken_plus.or(ptoken_minus).parser_and(mulDivLevelExpr).many())
   .map(fn(input) {
+    // @util.logger("addSubLevelExpr input: " + input.to_string())
     match input {
-      (first_expr, operations) =>
+      (first_expr, Some(operations)) =>
         // Left-associative folding: ((a + b) - c) + d
         operations.fold(init=first_expr, fn(left_expr, operation) {
           match operation {
@@ -962,6 +960,7 @@ fn addSubLevelExpr(
             }
           }
         })
+      (first_expr, None) => first_expr
     }
   })
   .parse(tokens)
@@ -977,13 +976,14 @@ fn addSubLevelExpr(
 fn mulDivLevelExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("mulDivLevelExpr: token " + tokens.to_string())
   Parser(ifLevelExpr)
-  .parser_and(
+  .zeroOrOnce(
     ptoken_star.or(ptoken_slash).or(ptoken_mod).parser_and(ifLevelExpr).many(),
   )
   .map(fn(input) {
     match input {
-      (e, list) => {
+      (e, Some(list)) => {
         if list.is_empty() {
           return e
         }
@@ -997,6 +997,7 @@ fn mulDivLevelExpr(
         })
         result
       }
+      (e, None) => e
     }
   })
   .parse(tokens)
@@ -1008,7 +1009,7 @@ fn mulDivLevelExpr(
 fn ifLevelExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // @util.logger("ifLevelExpr: " + tokens[0].to_string())
+  // @util.logger("ifLevelExpr: " + tokens.to_string())
   Parser(getOrApplyLevelExpr).or(ifExpr).parse(tokens)
 }
 
@@ -1041,7 +1042,6 @@ fn ifExpr(
 // 	// f(x, y)
 // 	| get_or_apply_level_expr '(' (expr (',' expr)*)? ')' # apply_expr;
 
-
 // get_or_apply_level_expr:
 // 	value_expr (
 // 		'[' expr ']'
@@ -1058,13 +1058,18 @@ fn getOrApplyLevelExpr(
   Parser(valueExpr)
   .parser_and(
     lbracket
-    .or(lparen)
-    .or(dot)
-    .zeroOrOnce(Parser(expr).parser_and(ptoken_comma.parser_and(expr).many()))
-    .parser_and(rbracket.or(rparen).or(identifier))
+    .parser_and(Parser(expr))
+    .parser_and(rbracket)
+    .parser_or(
+      lparen
+      .zeroOrOnce(Parser(expr).parser_and(ptoken_comma.parser_and(expr).many()))
+      .parser_and(rparen),
+    )
+    .parser_or(dot.parser_and(identifier))
     .many(),
   )
   .map(fn(input) {
+    // @util.logger("getOrApplyLevelExpr input: " + input.to_string())
     match input {
       (expr, list) => {
         if list.is_empty() {
@@ -1072,42 +1077,21 @@ fn getOrApplyLevelExpr(
         }
         let result = list.fold(init=expr, fn(acc, item) {
           match (acc, item) {
-            (e, ((_, None), IDENTIFIER(id))) => {
-              FieldAccess(e, Var(id))
-            }
-            (e, ((l, None), _)) =>
-              match l {
-                LBRACKET => {
-                  println(
-                    "getExpr LBRACKET not empty - token :" + tokens.to_string(),
-                  )
-                  panic()
-                }
-                LPAREN => App(e, [])
-                _ => {
-                  println("Invalid getExpr need [ or (")
-                  panic()
-                }
-              }
-            (e, ((l, Some((expr1, list))), _)) => {
-              let tails = list.map(e2 => e2.1)
-              // println("applyExpr tails: " + tails.to_string())
-              // println("applyExpr l: " + l.to_string())
-              match l {
-                LBRACKET =>
-                  if list.is_empty() {
-                    Get(e, expr1)
+            (e, (Some((Some(((LBRACKET, expr), RBRACKET)), None)), None)) =>
+              Get(e, expr)
+            (e, (Some((None, Some(((LPAREN, exprs), RPAREN)))), None)) =>
+              match exprs {
+                None => App(e, [])
+                Some((e1, e2s)) =>
+                  if e2s.is_empty() {
+                    return App(e, [e1])
                   } else {
-                    @util.die(
-                      "getExpr LBRACKET is not empty - token :" +
-                      tokens.to_string(),
-                    )
-                    
+                    let e2s = e2s.map(fn(input) { input.1 })
+                    return App(e, e2s)
                   }
-                LPAREN => App(e, [expr1, ..tails])
-                _ => @util.die("getExpr")
               }
-            }
+            (e, (None, Some((DOT, IDENTIFIER(id))))) => FieldAccess(e, Var(id))
+            _ => @util.die("getOrApplyLevelExpr input: " + input.to_string())
           }
         })
         result
@@ -1129,14 +1113,17 @@ fn getOrApplyLevelExpr(
 // 	| floating_point_expr
 // 	| int_expr
 // 	| not_expr
-// 	| array_make_expr;
+// 	| array_make_expr
+//  | struct_construct_expr;
 
 ///|
 fn valueExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("valueExpr: " + tokens.to_string())
-  Parser(unitExpr)
+  Parser(arrayMakeExpr)
+  .or(structConstructExpr)
+  .or(unitExpr)
   .or(groupExpr)
   .or(tupleExpr)
   .or(arrayExpr)
@@ -1148,8 +1135,7 @@ fn valueExpr(
   .or(intExpr)
   .or(notExpr)
   .or(notExpr2)
-  .or(arrayMakeExpr)
-  .or(structConstructExpr)
+  // .log()
   .parse(tokens)
 }
 
@@ -1465,6 +1451,7 @@ fn arrayMakeExpr(
   .parser_and(expr)
   .parser_and(rparen)
   .map(fn(input) {
+    // @util.logger("array MakeExpr")
     match input {
       ((((_, expr1), _), expr2), _) => @types.Syntax::Array(expr1, expr2)
     }
@@ -1489,6 +1476,7 @@ fn identifierExpr(
 
 // struct_construct_expr:
 // 	UPPER_IDENTIFIER '::' '{' struct_field_expr_list? '}'; // Point::{ x: 1, y: 2 }
+
 ///|
 fn structConstructExpr(
   tokens : ArrayView[@lex.Token],
@@ -1501,6 +1489,7 @@ fn structConstructExpr(
   .zeroOrOnce(structFieldExprList)
   .parser_and(rcurlybracket)
   .map(fn(input) {
+    // @util.logger("structConstructExpr input: " + input.to_string())
     match input {
       (((((IDENTIFIER(name), _), _), _), Some(struct_field_exprs)), _) =>
         @types.Syntax::StructConstruct(name, struct_field_exprs)
@@ -1522,6 +1511,7 @@ fn structConstructExpr(
 fn structFieldExprList(
   tokens : ArrayView[@lex.Token],
 ) -> (Array[(String, @types.Syntax)], ArrayView[@lex.Token])? {
+  // @util.logger("struct_field_expr_list token: " + tokens.to_string())
   Parser(structFieldExpr)
   .parser_and(ptoken_comma.parser_and(structFieldExpr).many())
   .map(fn(input) {
@@ -1548,6 +1538,7 @@ fn structFieldExprList(
 fn structFieldExpr(
   tokens : ArrayView[@lex.Token],
 ) -> ((String, @types.Syntax), ArrayView[@lex.Token])? {
+  // @util.logger("structFieldExpr: " + tokens[0].to_string())
   identifier
   .parser_and(ptoken_colon)
   .parser_and(expr)
@@ -1600,32 +1591,36 @@ fn parseType(
   .parse(tokens)
 }
 
-
 // generic_type: UPPER_IDENTIFIER '[' type ']'; // [T]
+
+///|
 fn genericType(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Type, ArrayView[@lex.Token])? {
-  userIdentifier.map(
-    fn(input){
-      match input {
-        @lex.Token::USER_IDENTIFIER(name) => @types.Type::UserDefineType(name)
-        _ => @util.die("error user")
-      }
+  userIdentifier
+  .map(fn(input) {
+    match input {
+      @lex.Token::USER_IDENTIFIER(name) => @types.Type::UserDefineType(name)
+      _ => @util.die("error user")
     }
-  ).parse(tokens)
+  })
+  .parse(tokens)
 }
 // user_defined_type: UPPER_IDENTIFIER;
+
+///|
 fn userDefineType(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Type, ArrayView[@lex.Token])? {
-  identifier.map(
-    fn(input){
-      match input {
-        @lex.Token::IDENTIFIER(name) => @types.Type::UserDefineType(name)
-        _ => @util.die("error user")
-      }
+  identifier
+  .map(fn(input) {
+    // @util.logger("userDefineType: " + input.to_string())
+    match input {
+      @lex.Token::IDENTIFIER(name) => @types.Type::UserDefineType(name)
+      _ => @util.die("error user")
     }
-  ).parse(tokens)
+  })
+  .parse(tokens)
 }
 // array_type: 'Array' '[' type ']';
 
@@ -1740,6 +1735,7 @@ fn[I, O] map(self : Parser[I], f : (I) -> O) -> Parser[O] {
   }
 }
 
+///|
 fn[V1, V2] parser_and(
   self : Parser[V1],
   parser2 : Parser[V2],
@@ -1764,6 +1760,26 @@ fn[V] or(self : Parser[V], parser2 : Parser[V]) -> Parser[V] {
 }
 
 ///|
+fn[V1, V2] parser_or(self : Parser[V1], parser2 : Parser[V2]) -> Parser[(V1?, V2?)] {
+  fn(input) {
+    // self
+    // .parse(input)
+    // .bind(value_rest => parser2
+    //   .parse(value_rest.1)
+    //   .map(value2_rest2 => ((Some(value_rest.0), Some(value2_rest2.0)), value2_rest2.1)))
+    match self.parse(input) {
+      Some(_) as result => result.map(v => ((Some(v.0), None), v.1))
+      None => parser2.parse(input).map(v => ((None, Some(v.0)), v.1))
+
+      // match parser2.parse(input) {
+      //   None => ...
+      //   Some(_) as result => result.map(v => ((None, Some(v.0)), v.1))
+      // }
+    }
+  }
+}
+
+///|
 fn[Value] many(self : Parser[Value]) -> Parser[Array[Value]] {
   fn(input) {
     let cumul = []
@@ -1771,6 +1787,7 @@ fn[Value] many(self : Parser[Value]) -> Parser[Array[Value]] {
     loop self.parse(input) {
       None => Some((cumul, rest))
       Some((v, rest_)) => {
+        // println(rest_.to_string())
         cumul.push(v)
         rest = rest_
         continue self.parse(rest_)
@@ -1778,6 +1795,18 @@ fn[Value] many(self : Parser[Value]) -> Parser[Array[Value]] {
     }
   }
 }
+
+// fn[V] log(self : Parser[V]) -> Parser[V] {
+//   fn(input) {
+//     match self.parse(input) {
+//       None => @util.die("end")
+//       Some(_) as result => {
+//         @util.logger(":::" + input.to_string())
+//         result
+//       }
+//     }
+//   }
+// }
 
 ///|
 fn[V1, V2] zeroOrOnce(
@@ -1816,7 +1845,7 @@ pub(all) suberror ParserErr String derive(ToJson(style="flat"))
 pub fn parse_from_string(str : String) -> @types.Syntax {
   // println("parsing: \n" + str)
   let tokens = []
-  @lex.lex({ str, offset: 0, array: tokens })
+  @lex.julex({ str, offset: 0, array: tokens })
   // println(tokens)
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   prog
@@ -1829,7 +1858,7 @@ test {
     #| fn main {
     #|    let x = 1;
     #| }
-  @lex.lex({ str: test1, offset: 0, array: tokens })
+  @lex.julex({ str: test1, offset: 0, array: tokens })
   // println(tokens)
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println(prog)
@@ -1839,10 +1868,10 @@ test {
 test {
   let tokens = []
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/struct1.mbt",
+    "contest-2025-data/test_cases/mbt/counter.mbt",
   )
   // println(_test2)
-  @lex.lex({ str: _test2, offset: 0, array: tokens })
+  @lex.julex({ str: _test2, offset: 0, array: tokens })
   // println("tokens: " + tokens.to_string())
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println("prog: " + prog.to_string())
@@ -1860,7 +1889,7 @@ test {
     let path = "contest-2025-data/test_cases/mbt/" + file
     let content = @fs.read_file_to_string(path)
     // println(content)
-    @lex.lex({ str: content, offset: 0, array: tokens })
+    @lex.julex({ str: content, offset: 0, array: tokens })
     // println(tokens)
     let (prog, _) = parser.parse(tokens[:]).unwrap()
     println(prog)
@@ -1877,4 +1906,18 @@ test {
   let x = ["1", "2", "3", "4"]
   let res = x.fold(init="0", (n, i) => "F(" + n + "," + i + ")")
   println(res)
+}
+
+///|
+test {
+  let tokens = []
+  let _test2 = "Point::{ x: a.x + b.x, y: a.y + b.y }"
+  // println(_test2)
+  @lex.julex({ str: _test2, offset: 0, array: tokens })
+  // println("tokens: " + tokens.to_string())
+  // let (prog, _) = parser.parse(tokens[:]).unwrap()
+  // println("prog: " + prog.to_string())
+
+  let prog = expr(tokens)
+  println("xxx:  " + prog.to_string())
 }

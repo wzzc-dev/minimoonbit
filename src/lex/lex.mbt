@@ -6,7 +6,7 @@ pub(all) struct Context {
 }
 
 ///|
-pub fn lex(context : Context) -> Unit {
+pub fn julex(context : Context) -> Unit {
   let { str, offset, array } = context
   // println("lex: " + str)
   // println("offset: " + offset.to_string())
@@ -141,7 +141,7 @@ pub fn lex(context : Context) -> Unit {
         lex_other_rest(context, ch.to_string())
       }
   }
-  lex(context)
+  julex(context)
 }
 
 ///|
@@ -186,8 +186,6 @@ fn lex_other_rest(context : Context, ident : String) -> Unit {
     ch == '\"' {
     context.offset += 1
     lex_other_rest(context, ident + ch.to_string())
-  } else if (ch == '.'){
-    array.push(DOT)
   } else {
     array.push(matchIdentifier(ident))
   }
@@ -272,7 +270,7 @@ test {
                #|    println(hello)
                #| }
   println(source)
-  lex(
+  julex(
     {
       str: source,
       offset: 0,
@@ -287,7 +285,7 @@ test {
 }
 test {
   let tokens = []
-  lex(
+  julex(
     {
       str: "let x = x",
       offset: 0,
@@ -303,7 +301,7 @@ test {
   let tokens = []
   let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/clamp.mbt")
   println(_test2)
-  lex(
+  julex(
     {
       str: _test2,
       offset: 0,

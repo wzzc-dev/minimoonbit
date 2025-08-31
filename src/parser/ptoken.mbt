@@ -1,4 +1,3 @@
-
 ///|
 let ptoken_array : Parser[@lex.Token] = ptoken(fn(token) {
   match token {
@@ -138,6 +137,7 @@ let identifier : Parser[@lex.Token] = ptoken(fn(token) {
   }
 })
 
+///|
 let userIdentifier : Parser[@lex.Token] = ptoken(fn(token) {
   // @util.logger("identifier token: " + token.to_string())
   match token {
@@ -145,6 +145,7 @@ let userIdentifier : Parser[@lex.Token] = ptoken(fn(token) {
     _ => false
   }
 })
+
 ///|
 let semicolon : Parser[@lex.Token] = ptoken(fn(token) {
   match token {
@@ -153,6 +154,7 @@ let semicolon : Parser[@lex.Token] = ptoken(fn(token) {
   }
 })
 
+///|
 let ptoken_while : Parser[@lex.Token] = ptoken(fn(token) {
   match token {
     @lex.Token::WHILE => true
@@ -160,6 +162,7 @@ let ptoken_while : Parser[@lex.Token] = ptoken(fn(token) {
   }
 })
 
+///|
 let ptoken_return : Parser[@lex.Token] = ptoken(fn(token) {
   match token {
     @lex.Token::RETURN => true
@@ -167,6 +170,7 @@ let ptoken_return : Parser[@lex.Token] = ptoken(fn(token) {
   }
 })
 
+///|
 let ptoken_struct : Parser[@lex.Token] = ptoken(fn(token) {
   match token {
     @lex.Token::STRUCT => true
@@ -202,6 +206,7 @@ let ptoken_minus : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
+///|
 let ptoken_and : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::AND => true
@@ -209,6 +214,7 @@ let ptoken_and : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
+///|
 let ptoken_or : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::OR => true
@@ -216,12 +222,14 @@ let ptoken_or : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
+///|
 let ptoken_mod : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::MOD => true
     _ => false
   }
 })
+
 ///|
 let ptoken_star : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
@@ -246,6 +254,7 @@ let ptoken_else : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
+///|
 let ptoken_slash : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::DIV => true
@@ -253,9 +262,18 @@ let ptoken_slash : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
+///|
 let ptoken_mut : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::MUT => true
+    _ => false
+  }
+})
+
+///|
+let ptoken_cmp_operator : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
+    @lex.Token::CMP_OPERATOR(_) => true
     _ => false
   }
 })
