@@ -9,6 +9,9 @@ zig build
 cd ./libriscv/emulator
 ./build.sh
 
+cd ../..
+cp ./libriscv/emulator/rvlinux ./
+
 # 流程
 
 ```mermaid

@@ -638,7 +638,7 @@ test "typing" {
 test {
   // let x = Array::make(10, 0);
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/mbts",
+    "contest-2025-data/test_cases/mbt/ack.mbt",
   )
   let parse = @parser.parse_from_string(_test2)
   

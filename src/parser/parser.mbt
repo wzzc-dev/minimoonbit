@@ -1082,13 +1082,12 @@ fn getOrApplyLevelExpr(
             (e, (Some((None, Some(((LPAREN, exprs), RPAREN)))), None)) =>
               match exprs {
                 None => App(e, [])
-                Some((e1, e2s)) =>
-                  if e2s.is_empty() {
-                    return App(e, [e1])
-                  } else {
-                    let e2s = e2s.map(fn(input) { input.1 })
-                    return App(e, e2s)
-                  }
+                Some((e1, e2s)) => {
+                  let args = [e1]
+                  let e2s = e2s.map(fn(input) { input.1 })
+                  args.append(e2s)
+                  App(e, args)
+                }
               }
             (e, (None, Some((DOT, IDENTIFIER(id))))) => FieldAccess(e, Var(id))
             _ => @util.die("getOrApplyLevelExpr input: " + input.to_string())
@@ -1101,6 +1100,73 @@ fn getOrApplyLevelExpr(
   .parse(tokens)
 }
 
+// ///|
+// fn getOrApplyLevelExpr(
+//   tokens : ArrayView[@lex.Token],
+// ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+//   // println("getOrApplyLevelExpr: " + tokens.to_string())
+//   // Parser(getExpr).or(applyExpr).or(valueExpr).parse(tokens)
+//   Parser(valueExpr)
+//   .parser_and(
+//     lbracket
+//     .or(lparen)
+//     .or(dot)
+//       .zeroOrOnce(Parser(expr).parser_and(ptoken_comma.parser_and(expr).many()))
+//     .parser_and(rbracket.or(rparen).or(identifier))
+//     .many(),
+//   )
+//   .map(fn(input) {
+//     match input {
+//       (expr, list) => {
+//         if list.is_empty() {
+//           return expr
+//         }
+//         let result = list.fold(init=expr, fn(acc, item) {
+//           match (acc, item) {
+//             (e, ((_, None), IDENTIFIER(id))) => {
+//               FieldAccess(e, Var(id))
+//             }
+//             (e, ((l, None), _)) =>
+//               match l {
+//                 LBRACKET => {
+//                   println(
+//                     "getExpr LBRACKET not empty - token :" + tokens.to_string(),
+//                   )
+//                   panic()
+//                 }
+//                 LPAREN => App(e, [])
+//                 _ => {
+//                   println("Invalid getExpr need [ or (")
+//                   panic()
+//                 }
+//               }
+//             (e, ((l, Some((expr1, list))), _)) => {
+//               let tails = list.map(e2 => e2.1)
+//               // println("applyExpr tails: " + tails.to_string())
+//               // println("applyExpr l: " + l.to_string())
+//               match l {
+//                 LBRACKET =>
+//                   if list.is_empty() {
+//                     Get(e, expr1)
+//                   } else {
+//                     @util.die(
+//                       "getExpr LBRACKET is not empty - token :" +
+//                       tokens.to_string(),
+//                     )
+
+//                   }
+//                 LPAREN => App(e, [expr1, ..tails])
+//                 _ => @util.die("getExpr")
+//               }
+//             }
+//           }
+//         })
+//         result
+//       }
+//     }
+//   })
+//   .parse(tokens)
+// }
 // value_expr:
 // 	unit_expr
 // 	| group_expr
@@ -1760,7 +1826,10 @@ fn[V] or(self : Parser[V], parser2 : Parser[V]) -> Parser[V] {
 }
 
 ///|
-fn[V1, V2] parser_or(self : Parser[V1], parser2 : Parser[V2]) -> Parser[(V1?, V2?)] {
+fn[V1, V2] parser_or(
+  self : Parser[V1],
+  parser2 : Parser[V2],
+) -> Parser[(V1?, V2?)] {
   fn(input) {
     // self
     // .parse(input)
@@ -1768,8 +1837,12 @@ fn[V1, V2] parser_or(self : Parser[V1], parser2 : Parser[V2]) -> Parser[(V1?, V2
     //   .parse(value_rest.1)
     //   .map(value2_rest2 => ((Some(value_rest.0), Some(value2_rest2.0)), value2_rest2.1)))
     match self.parse(input) {
-      Some(_) as result => result.map(v => ((Some(v.0), None), v.1))
-      None => parser2.parse(input).map(v => ((None, Some(v.0)), v.1))
+      Some((v1, rest1)) => Some(((Some(v1), None), rest1))
+      None =>
+        match parser2.parse(input) {
+          None => None
+          Some((v2, rest2)) => Some(((None, Some(v2)), rest2))
+        }
 
       // match parser2.parse(input) {
       //   None => ...
@@ -1868,11 +1941,11 @@ test {
 test {
   let tokens = []
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/counter.mbt",
+    "contest-2025-data/test_cases/mbt/ack.mbt",
   )
   // println(_test2)
   @lex.julex({ str: _test2, offset: 0, array: tokens })
-  // println("tokens: " + tokens.to_string())
+  println("tokens: " + tokens.to_string())
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println("prog: " + prog.to_string())
 }
