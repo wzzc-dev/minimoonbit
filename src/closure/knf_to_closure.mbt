@@ -176,6 +176,8 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       While(knf_to_closure(env, cond), knf_to_closure(env, body))
     }
     Assign(x, y) => Assign(x, y)
+    Struct(_) => @util.die("not support struct")
+    StructConstruct(_) => @util.die("not support struct construct")
   }
 }
 
@@ -209,7 +211,7 @@ fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
     Ptr => Ptr
     Enum(_name, _) | Struct(_name, _) =>
       @util.die("ty_to_low_type: Enum or Struct" + ty.to_string())
-    UserDefineType(name) => @util.die("user define type: " + name)
+    UserDefineType(name, _) => @util.die("user define type: " + name)
   }
 }
 
@@ -323,11 +325,13 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
     While(_, body) =>
       fv(body)
     Assign(_x, _y) => @hashset.new()
+    Struct(_, _) => @hashset.new()
+    StructConstruct(_,_) => @hashset.new()
   }
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/conv_pool.mbt",
+    "contest-2025-data/test_cases/mbt/struct1.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
   // println("parse: " + parse.to_string() + "\n")

@@ -8,7 +8,6 @@ fn program(
   Parser(topLevel)
   .many()
   .map(fn(decls) {
-    // println("decls: " + decls.to_string())
     // Combine all top-level declarations into a single syntax tree
     decls.rev_fold(init=@types.Syntax::Unit, fn(acc, decl) {
       // println("decl: " + decl.to_string())
@@ -16,8 +15,10 @@ fn program(
       // println("")
       match decl {
         @types.Syntax::LetRec(fn_def, _) => @types.Syntax::LetRec(fn_def, acc)
-        @types.Syntax::Let(binding, value, _) =>
-          @types.Syntax::Let(binding, value, acc)
+        @types.Syntax::Let(binding, value, _) => @types.Syntax::Let(binding, value, acc)
+        @types.Syntax::Struct(name, generic, fields, _) =>  @types.Syntax::Struct(name, generic, fields, acc)
+        // @types.Syntax::StructConstruct(name, fields) =>  @types.Syntax::StructConstruct(name, fields)
+        
         _ => acc
       }
     })
@@ -315,9 +316,9 @@ fn structDecl(
     // @util.logger("structDecl: input: " + input.to_string())
     match input {
       (((((_, IDENTIFIER(struct_name)), None), _), None), _) =>
-        @types.Syntax::Struct(struct_name, "", [])
+        @types.Syntax::Struct(struct_name, "", [], @types.Syntax::Unit)
       (((((_, IDENTIFIER(struct_name)), None), _), Some(structFieldList)), _) =>
-        @types.Syntax::Struct(struct_name, "", structFieldList)
+        @types.Syntax::Struct(struct_name, "", structFieldList, @types.Syntax::Unit)
       (
         (
           (
@@ -327,7 +328,7 @@ fn structDecl(
           Some(structFieldList),
         ),
         _,
-      ) => @types.Syntax::Struct(struct_name, generic, structFieldList)
+      ) => @types.Syntax::Struct(struct_name, generic, structFieldList, @types.Syntax::Unit)
       _ => @util.die("Invalid struct decl")
     }
   })
@@ -785,24 +786,12 @@ fn leftValue(
   .zeroOrOnce(
     dot
     .parser_and(identifier)
-    .map(fn(input) {
-      match input {
-        (_, @lex.Token::IDENTIFIER(field)) =>
-          (@lex.Token::DOT, @types.Syntax::Var(field))
-        _ => @util.die("leftValue: invalid field access")
-      }
-    })
-    .or(
+    .parser_or(
       lbracket
       .parser_and(expr)
       .parser_and(rbracket)
-      .map(fn(input) {
-        match input {
-          ((_, idx_expr), _) => (@lex.Token::LBRACKET, idx_expr)
-        }
-      }),
     )
-    .many(),
+    .many()
   )
   .map(fn(input) {
     match input {
@@ -810,9 +799,9 @@ fn leftValue(
       (base_expr, Some(indices)) =>
         // Fold over the indices to build nested Get expressions
         indices.fold(init=base_expr, fn(acc, idx_expr) {
-          match idx_expr.0 {
-            @lex.Token::DOT => @types.Syntax::FieldAccess(acc, idx_expr.1)
-            @lex.Token::LBRACKET => @types.Syntax::Get(acc, idx_expr.1)
+          match idx_expr {
+            (Some((DOT, IDENTIFIER(id))), None) => FieldAccess(acc, id)
+            (None, Some(((LBRACKET, expr), RBRACKET))) => Get(acc, expr)
             _ => @util.die("leftValue: invalid index expression")
           }
         })
@@ -1089,7 +1078,7 @@ fn getOrApplyLevelExpr(
                   App(e, args)
                 }
               }
-            (e, (None, Some((DOT, IDENTIFIER(id))))) => FieldAccess(e, Var(id))
+            (e, (None, Some((DOT, IDENTIFIER(id))))) => FieldAccess(e, id)
             _ => @util.die("getOrApplyLevelExpr input: " + input.to_string())
           }
         })
@@ -1666,7 +1655,7 @@ fn genericType(
   userIdentifier
   .map(fn(input) {
     match input {
-      @lex.Token::USER_IDENTIFIER(name) => @types.Type::UserDefineType(name)
+      @lex.Token::USER_IDENTIFIER(name) => @types.Type::UserDefineType(name, [])
       _ => @util.die("error user")
     }
   })
@@ -1682,7 +1671,7 @@ fn userDefineType(
   .map(fn(input) {
     // @util.logger("userDefineType: " + input.to_string())
     match input {
-      @lex.Token::IDENTIFIER(name) => @types.Type::UserDefineType(name)
+      @lex.Token::IDENTIFIER(name) => @types.Type::UserDefineType(name, [])
       _ => @util.die("error user")
     }
   })
@@ -1941,13 +1930,13 @@ test {
 test {
   let tokens = []
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/ack.mbt",
+    "contest-2025-data/test_cases/mbt/struct1.mbt",
   )
   // println(_test2)
   @lex.julex({ str: _test2, offset: 0, array: tokens })
-  println("tokens: " + tokens.to_string())
+  // println("tokens: " + tokens.to_string())
   let (prog, _) = parser.parse(tokens[:]).unwrap()
-  println("prog: " + prog.to_string())
+  println("prog: " + prog.to_json().stringify())
 }
 
 ///|

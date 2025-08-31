@@ -38,6 +38,8 @@ pub(all) enum Knf {
 
   While(Knf, Knf)   // While(condition, body)
   Assign(Name, Name)
+  StructConstruct(Name, Array[Name])
+  Struct(StructDef, Knf)
 } derive(Show, Eq)
 
 ///|
@@ -46,4 +48,9 @@ pub(all) struct FuncDef {
   ty : Type
   args : Array[(Name, Type)]
   body : Knf
+} derive(Show, Eq)
+
+pub(all) struct StructDef {
+  name : Name
+  fields : Array[(Name, Type)]
 } derive(Show, Eq)

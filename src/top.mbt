@@ -5,6 +5,7 @@ pub(all) enum Syntax {
   Int(Int) // int
   Int64(Int64) // int64
   Double(Double) // double
+  UserDefineType(String, Array[(String, Type)]) // _
   Var(String) // _
   Tuple(Array[Syntax]) // (_, _, _)
   Not(Syntax) // not(_)
@@ -28,9 +29,9 @@ pub(all) enum Syntax {
   LetTuple(Array[(String, Type)], Syntax, Syntax) // let (_ , _) : (_, _)= _; _
   Put(Syntax, Syntax, Syntax) // _[_] = _
   Assign(Syntax, Syntax) // _ = _
-  Struct(String, String, Array[(String, Type)]) // struct _ [_] { _: _, _: _ } _
+  Struct(String, String, Array[(String, Type)], Syntax) // struct _ [_] { _: _, _: _ } _
   StructConstruct(String, Array[(String, Syntax)]) // _::{ _: _, _: _ }
-  FieldAccess(Syntax, Syntax) // _.field
+  FieldAccess(Syntax, String) // _.field
   Enum(String, Array[String]) // enum { A, B, C }
   While(Syntax, Syntax) // while x { ... }
   Return(Syntax?) // return _;
@@ -69,7 +70,7 @@ pub(all) enum Type {
   Array(Type) // Array[_]
   Struct(String, Array[(String, Type)]) // struct { _: _, _: _ }
   Enum(String, Array[String]) // enum { A, B, C }
-  UserDefineType(String)
+  UserDefineType(String, Array[(String, Type)])
   Var(Ref[Type?])
   Ptr
 } derive(Show)

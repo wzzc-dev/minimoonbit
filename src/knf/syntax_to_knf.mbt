@@ -369,7 +369,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       // @util.logger("let_rec: type " + @typing.extenv.to_string())
       let fun_name = (try? @types.Name::from_string(name)).unwrap()
       let mut env_body = self.externals.add(name, ty)
-      let env_fun = self.externals.add(name, ty)
+      
       let fun_args = args.map(t => {
         env_body = env_body.add(t.0, t.1)
         let x = (try? @types.Name::from_string(t.0)).unwrap()
@@ -379,6 +379,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         { counter: self.counter, externals: env_body },
         body,
       )
+
+      let env_fun = self.externals.add(name, ty)
       let rest = KnfEnv::to_knf(
         { counter: self.counter, externals: env_fun },
         rest,
@@ -626,6 +628,24 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       }
     }
     And(e1, e2) => KnfEnv::to_knf(self, If(e1, e2, Bool(false)))
+    Struct(name, _, fields, rest) => { 
+      let struct_name = (try? @types.Name::from_string(name)).unwrap()
+      let mut env_body = self.externals.add(name, UserDefineType(name, fields))
+      let env_fun =  self.externals.add(name, UserDefineType(name, fields))
+
+      let fields = fields.map(t => {
+        env_body = env_body.add(t.0, t.1)
+        let x = (try? @types.Name::from_string(t.0)).unwrap()
+        (x, t.1)
+      })
+
+      let rest = KnfEnv::to_knf(
+        { counter: self.counter, externals: env_fun },
+        rest,
+      )
+      Struct({ name: struct_name, fields: fields}, rest)
+    }
+    StructConstruct(_) => raise KnfErr("struct construct not supported")
     _ => raise KnfErr("not supported syntax " + s.to_string())
   }
 }

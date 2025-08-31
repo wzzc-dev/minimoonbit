@@ -40,6 +40,8 @@ pub(all) enum Expr {
   ExternalArray(Label)
   While(Expr, Expr)
   Assign(Name, Name)
+  Struct(Name, Array[(Name, LowType)])
+  StructConstruct(Name, Array[Name])
 } derive(Show, ToJson(style="flat"))
 
 ///|

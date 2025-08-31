@@ -346,6 +346,8 @@ pub fn ClosureInterpreter::eval(
       let new_env = env.add(x, y)
       self.eval(new_env, Unit)
     }
+    Struct(_, _) => @util.die("not support struct")
+    StructConstruct(_, _) => @util.die("not support struct construct")
   }
 }
 

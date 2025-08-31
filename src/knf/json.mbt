@@ -46,6 +46,10 @@ pub fn Knf::to_json(self : Knf) -> Json {
     While(cond, body) =>
       ["While", cond.to_json(), body.to_json()]
     Assign(n1, n2) => ["Assign", n1.to_json(), n2.to_json()]
+    Struct(name, fields) =>
+      ["Struct", name.to_json(), fields.to_json()]
+    StructConstruct(name, fields) =>
+      ["StructConstruct", name.to_json(), fields.to_json()]
   }
 }
 
@@ -56,6 +60,13 @@ pub fn FuncDef::to_json(self : FuncDef) -> Json {
     "ty": self.ty.to_json(),
     "args": self.args.to_json(),
     "body": self.body.to_json(),
+  }
+}
+
+pub fn StructDef::to_json(self : StructDef) -> Json {
+  {
+    "name": self.name.to_json(),
+    "fields": self.fields.to_json(),
   }
 }
 
@@ -149,5 +160,24 @@ pub fn FuncDef::from_json(json : Json) -> FuncDef raise {
       }
     }
     _ => fail("FuncDef::from_json: invalid json: \{json}")
+  }
+}
+
+pub fn StructDef::from_json(json : Json) -> StructDef raise {
+  match json {
+    { "name": n, "fields": Array(fields), .. } => {
+      let rfields = []
+      for it in fields {
+        match it {
+          [n, t] => rfields.push((Name::from_json(n), Type::from_json(t)))
+          _ => fail("StructDef::from_json: invalid json: \{json}")
+        }
+      }
+      {
+        name: Name::from_json(n),
+        fields: rfields,
+      }
+    }
+    _ => fail("StructDef::from_json: invalid json: \{json}")
   }
 }

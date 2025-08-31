@@ -493,6 +493,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, y) }))
       instrs.push(Sd(T0, { base: Fp, offset: Env::varOffset(env, x) }))
     }
+    Struct(_, _) => @util.die("not support struct")
+    StructConstruct(_, _) => @util.die("not support struct construct")
   }
   instrs
 }

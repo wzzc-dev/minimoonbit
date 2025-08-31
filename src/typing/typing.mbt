@@ -3,7 +3,7 @@ pub(all) suberror TyErr String derive(ToJson(style="flat"))
 
 ///|
 fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
-  // println("unify:" + t1.to_string() + " t2: " + t2.to_string())
+  // @util.logger("unify:" + t1.to_string() + " t2: " + t2.to_string())
   let t1 = t1.repr()
   let t2 = t2.repr()
   if physical_equal(t1, t2) {
@@ -37,6 +37,17 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
         unify(ty, tys2[i])
       }
       unify(ty1, ty2)
+    }
+    (UserDefineType(name1, fields1), UserDefineType(name2, fields2)) => {
+      if name1 != name2 {
+        raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
+      }
+      for index, field in fields1 {
+        let (_name, ty) = field
+        let (_name2, ty2) = fields2[index]
+
+        unify(ty, ty2)
+      }
     }
     _ =>
       raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
@@ -107,6 +118,11 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
         }
       }
     }
+    (UserDefineType(name1, _), UserDefineType(name2, _)) => {
+      if name1 != name2 {
+        raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
+      }
+    }
     _ => ()
   }
 }
@@ -117,12 +133,49 @@ struct LocalCtx(@immut/sorted_map.T[String, @types.Type])
 ///|
 pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
   // println("infer: " + e.to_string())
+  // println("extenv: " + ctx.inner().to_string())
   match e {
     Unit => Unit
     Bool(_) => Bool
     Int(_) => Int
     Int64(_) => Int
     Double(_) => Double
+    UserDefineType(name, fields) => UserDefineType(name, fields)
+    Struct(name, _, fields, rest) => {
+      let ty = @types.Type::UserDefineType(name, fields)
+      let newctx = ctx.inner().add(name, ty)
+      infer(newctx, rest)
+
+    }
+    StructConstruct(name, fields) => {
+      let types = fields.map(fn(field) {
+        let (name, syn) = field
+        let ty = infer(ctx, syn)
+        (name, ty)
+      })
+      UserDefineType(name, types)
+    }
+    FieldAccess(e, name) => {
+      let t = infer(ctx, e)
+      match t {
+        UserDefineType(struct_name, _) => {
+          let struct_ty = ctx.inner().get(struct_name)
+          match struct_ty {
+            Some(UserDefineType(_, fields)) => {
+              for field in fields {
+                let (name2, ty) = field
+                if name2 == name {
+                  return ty
+                }
+              }
+            }
+            _ => raise TyErr("struct not found " + struct_name)
+          }
+          raise TyErr("field not found " + name + " in " + t.to_string())
+        }
+        _ => raise TyErr("type unify error: " + t.to_string())
+      }
+    }
     // eg.
     Var(x) =>{
       // if x == "_arr" {
@@ -271,6 +324,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           Bool
         }
         (Bool, Bool) => Bool
+        
         _ =>
           raise TyErr(
             "The operands of " + e.to_string() + " should have same type",
@@ -286,6 +340,12 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           infer(newctx, s1)
         }
         Array(_) => {
+          let t = infer(ctx, value)
+          unify(ty, t)
+          let newctx = ctx.inner().add(name, t)
+          infer(newctx, s1)
+        }
+        UserDefineType(name, _fields) => {
           let t = infer(ctx, value)
           unify(ty, t)
           let newctx = ctx.inner().add(name, t)
@@ -322,7 +382,15 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       let params_ty = params.map(t => t.1.repr())
       let mut env_with_params = env_with_f
       for p in params {
-        env_with_params = env_with_params.add(p.0, p.1)
+        match p {
+          // (p_name, UserDefineType(ty_name, fields)) => {
+          //   let t = UserDefineType(ty_name, fields)
+          //   env_with_params = env_with_params.add(ty_name, t)
+          // }
+          _ => env_with_params = env_with_params.add(p.0, p.1)
+        }
+
+        
       }
       let body_ty = infer(env_with_params, body)
       unify(t, Fun(params_ty, body_ty))
@@ -426,9 +494,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       }
       Array(tys[0])
     }
-    Struct(_, _, _) => Unit
-    StructConstruct(_, _) => Unit
-    FieldAccess(e, _) => infer(ctx, e)
+    
     Enum(_, _) => Unit
     While(cond, body) => {
       let cond_ty = infer(ctx, cond)
@@ -530,11 +596,12 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
         Some(e) => deref_term(e)
       }
     ArrayExpr(es) => ArrayExpr(es.map(e => deref_term(e)))
-    Struct(name, generic, es) => Struct(name, generic, es)
+    Struct(name, generic, es, rest) => Struct(name, generic, es, rest)
     StructConstruct(name, arr) => StructConstruct(name, arr) 
     Enum(name, e) => Enum(name, e)
     Int64(i) => Int64(i)
     Assign(name, value) => Assign(deref_term(name), deref_term(value))
+    UserDefineType(name, fields) => UserDefineType(name, fields)
     // _ => @util.die("deref_term: unknown syntax: " + syntax.to_string())
   }
 }
@@ -638,14 +705,14 @@ test "typing" {
 test {
   // let x = Array::make(10, 0);
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/ack.mbt",
+    "contest-2025-data/test_cases/mbt/struct1.mbt",
   )
   let parse = @parser.parse_from_string(_test2)
   
-  println("parse: " + parse.to_string() + "\n")
+  println("parse: " + parse.to_json().stringify() + "\n")
   try {
     let typed = typing(parse)
-    println("typed: " + typed.to_string())
+    println("typed: " + typed.to_json().stringify() + "\n")
   } catch {
     TyErr(s) => {
       println("typing error")
@@ -671,6 +738,7 @@ test {
     let _test2 = (try? @fs.read_file_to_string(
       "contest-2025-data/test_cases/mbt/" + file,
     )).unwrap()
+    
     let parse = @parser.parse_from_string(_test2)
     try {
       let typed = typing(parse)

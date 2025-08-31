@@ -183,6 +183,8 @@ fn emit_expr(expr : @closure.Expr) -> String {
       "\n}"
     Assign(x, y) => x.to_string() + " = " + y.to_string()
     Unit => "undefined"
+    Struct(_, _) => @util.die("not support struct")
+    StructConstruct(_, _) => @util.die("not support struct construct")
   }
 }
 
