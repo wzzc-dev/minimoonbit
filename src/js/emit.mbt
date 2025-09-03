@@ -185,6 +185,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
     Unit => "undefined"
     Struct(_, _) => @util.die("not support struct")
     StructConstruct(_, _) => @util.die("not support struct construct")
+    TupleGet(tuple, index) => tuple.to_string() + "[" + index.to_string() + "]"
   }
 }
 

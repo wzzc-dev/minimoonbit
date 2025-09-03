@@ -434,6 +434,17 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       }
       instrs.append(compile_expr(e, env))
     }
+    TupleGet(tuple, index) => {
+      instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, tuple) }))
+      // 2. 加载索引值并根据类型计算偏移
+      instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
+      instrs.push(Slli(T1, T1, 3)) // 8字节
+
+      // 3. 计算最终地址
+      instrs.push(Add(T0, T0, T1))
+
+      instrs.push(Mv(reg_ret, T0))
+    }
     ArrayGet(array, index) => {
       // 1. 加载数组基地址
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, array) }))

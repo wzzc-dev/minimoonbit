@@ -3,12 +3,15 @@ pub fn KnfEnv::syntax_preprocess(
   self : KnfEnv,
   s : @types.Syntax,
 ) -> @types.Syntax {
-  // println("Syntax preprocessing...");
+  // println("Syntax preprocessing...: " + s.to_string());
   match s {
     LetRec(fundef, rest) =>
       match fundef.name.0 {
         "main" => KnfEnv::syntax_preprocess(self, fundef.body)
-        _ => LetRec(fundef, KnfEnv::syntax_preprocess(self, rest))
+        _ => {
+          let body = KnfEnv::syntax_preprocess(self, fundef.body)
+          LetRec({ name: fundef.name, args: fundef.args, body: body }, KnfEnv::syntax_preprocess(self, rest))
+        }
       }
     Let((str, ty), s1, s2) =>
       match s1 {
@@ -39,6 +42,18 @@ pub fn KnfEnv::syntax_preprocess(
         KnfEnv::syntax_preprocess(self, s1),
         KnfEnv::syntax_preprocess(self, s2),
       )
+    StructConstruct(_, fields) => {
+      let result = fields.map(fn(field) {
+        match field {
+          (_, value) => value
+        }
+      })
+      Tuple(result)
+    }
+    Struct(name, _, fields, rest) => {
+      let env_fun = self.externals.add(name, UserDefineType(name, {val: fields}))
+      KnfEnv::syntax_preprocess({ counter: self.counter, externals: env_fun }, rest)
+    }
     _ => s
   }
 }

@@ -178,6 +178,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     Assign(x, y) => Assign(x, y)
     Struct(_) => @util.die("not support struct")
     StructConstruct(_) => @util.die("not support struct construct")
+    FieldAccess(x, y) => @util.die("not support field access")
   }
 }
 
@@ -327,6 +328,7 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
     Assign(_x, _y) => @hashset.new()
     Struct(_, _) => @hashset.new()
     StructConstruct(_,_) => @hashset.new()
+    FieldAccess(_,_) => @hashset.new()
   }
 }
 test {

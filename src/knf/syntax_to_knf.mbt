@@ -32,6 +32,8 @@ fn KnfEnv::get_knf(
   self : KnfEnv,
   syn : @types.Syntax,
 ) -> (Name, Type, Knf) raise KnfErr {
+  // println("externals: " + self.externals.to_string())
+  // println("syn: " + syn.to_string())
   let ty = KnfEnv::get_type(self.externals, syn) catch {
     KnfErr(s) => raise KnfErr("KNF get_knf error: " + s)
   }
@@ -626,11 +628,14 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       }
     }
     And(e1, e2) => KnfEnv::to_knf(self, If(e1, e2, Bool(false)))
-    Struct(name, _, fields, rest) => {
-      let env_fun = self.externals.add(name, UserDefineType(name, fields))
-      KnfEnv::to_knf({ counter: self.counter, externals: env_fun }, rest)
+    // Struct(name, _, fields, rest) => {
+    //   let env_fun = self.externals.add(name, UserDefineType(name, fields))
+    //   KnfEnv::to_knf({ counter: self.counter, externals: env_fun }, rest)
+    // }
+    FieldAccess(e, name) => {
+      let (name, e_ty, knf) = KnfEnv::get_knf(self, e)
+      Let((name, e_ty), knf, FieldAccess(name, name))
     }
-    StructConstruct(_) => @util.die("struct construct not supported")
     _ => raise KnfErr("not supported syntax " + s.to_string())
   }
 }
@@ -689,14 +694,12 @@ test {
   println("parse: " + parse.to_string())
   try {
     let typed = @typing.typing(parse)
-    // println("typed: " + typed.to_string())
+    // println("typed: " + typed.to_json().stringify())
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = KnfEnv::syntax_preprocess(env, typed)
     // println("pre: " + pre.to_string())
     let knf = KnfEnv::to_knf(env, pre)
-    println(knf)
-    println(env.externals)
-    println(env.counter)
+    // println(knf)
   } catch {
     @typing.TyErr(s) => {
       println("typing error")

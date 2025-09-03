@@ -70,7 +70,7 @@ pub(all) enum Type {
   Array(Type) // Array[_]
   Struct(String, Array[(String, Type)]) // struct { _: _, _: _ }
   Enum(String, Array[String]) // enum { A, B, C }
-  UserDefineType(String, Array[(String, Type)])
+  UserDefineType(String, Ref[Array[(String, Type)]])
   Var(Ref[Type?])
   Ptr
 } derive(Show)

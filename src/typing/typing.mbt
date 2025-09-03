@@ -39,14 +39,18 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
       unify(ty1, ty2)
     }
     (UserDefineType(name1, fields1), UserDefineType(name2, fields2)) => {
-      if name1 != name2 {
+      // @util.logger("user define type unify: " + name1 + " " + name2)
+      // @util.logger("fields1: " + fields1.to_string())
+      // @util.logger("fields2: " + fields2.to_string())
+      if name1 == name2 {
+        if fields1.val.length() == 0 {
+          fields1.val = fields2.val
+        }
+        if fields2.val.length() == 0 {
+          fields2.val = fields1.val
+        }
+      } else {
         raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
-      }
-      for index, field in fields1 {
-        let (_name, ty) = field
-        let (_name2, ty2) = fields2[index]
-
-        unify(ty, ty2)
       }
     }
     _ =>
@@ -140,9 +144,9 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     Int(_) => Int
     Int64(_) => Int
     Double(_) => Double
-    UserDefineType(name, fields) => UserDefineType(name, fields)
+    UserDefineType(name, fields) => UserDefineType(name, {val: fields})
     Struct(name, _, fields, rest) => {
-      let ty = @types.Type::UserDefineType(name, fields)
+      let ty = @types.Type::UserDefineType(name, {val: fields})
       let newctx = ctx.inner().add(name, ty)
       infer(newctx, rest)
 
@@ -153,23 +157,31 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         let ty = infer(ctx, syn)
         (name, ty)
       })
-      UserDefineType(name, types)
+      UserDefineType(name, {val: types})
     }
     FieldAccess(e, name) => {
       let t = infer(ctx, e)
       match t {
-        UserDefineType(struct_name, _) => {
+        UserDefineType(struct_name, fields) => {
+          for field in fields.val {
+            let (name2, ty) = field
+            if name2 == name {
+              return ty
+            }
+          }
           let struct_ty = ctx.inner().get(struct_name)
           match struct_ty {
             Some(UserDefineType(_, fields)) => {
-              for field in fields {
+              for field in fields.val {
                 let (name2, ty) = field
                 if name2 == name {
                   return ty
                 }
               }
             }
-            _ => raise TyErr("struct not found " + struct_name)
+            _ => raise TyErr("struct not found " + struct_name + " in " + t.to_string() + 
+                "\n struct_ty: " + struct_ty.to_string() +
+                "\n name: " + name)
           }
           raise TyErr("field not found " + name + " in " + t.to_string())
         }
@@ -645,7 +657,7 @@ pub fn get_type(
   let mut sort_map : LocalCtx = @immut/sorted_map.new()
   m.each((k, v) => sort_map = sort_map.inner().add(k, v))
   // @util.logger("get_type: " + e.to_string())
-  // @util.logger("m: " + m.to_string())
+  // @util.logger("sort_map: " + sort_map.inner().to_string())
   infer(sort_map, e)
 }
 

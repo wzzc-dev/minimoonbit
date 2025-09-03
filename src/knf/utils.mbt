@@ -81,5 +81,6 @@ pub fn knf_max_counter(knf : Knf) -> Int {
        @util.die("not struct")
     StructConstruct(_, fields) =>
       fields.map(fn(x) { x.slot }).fold(init=0, fn(a, b) { @cmp.maximum(a, b) })
+    FieldAccess(x, y) => @cmp.maximum(x.slot, y.slot)
   }
 }

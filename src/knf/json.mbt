@@ -50,6 +50,7 @@ pub fn Knf::to_json(self : Knf) -> Json {
       ["Struct", name.to_json(), fields.to_json()]
     StructConstruct(name, fields) =>
       ["StructConstruct", name.to_json(), fields.to_json()]
+    FieldAccess(n1, n2) => ["FieldAccess", n1.to_json(), n2.to_json()]
   }
 }
 

@@ -172,6 +172,7 @@ fn PrettyKnf::print_one_level(
       }
       logger.write_string("])")
     }
+    FieldAccess(e, name) => logger.write_string("FieldAccess(\{e}, \{name})")
   }
 }
 

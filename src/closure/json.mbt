@@ -50,6 +50,8 @@ pub fn Expr::to_json(self : Expr) -> Json {
       ["Struct", name.to_json(), fields.to_json()]
     StructConstruct(name, fields) =>
       ["StructConstruct", name.to_json(), fields.to_json()]
+    Expr::TupleGet(tuple, index) =>
+      ["TupleGet", tuple.to_json(), index.to_json()]
   }
 }
 

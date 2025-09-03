@@ -1655,7 +1655,7 @@ fn genericType(
   userIdentifier
   .map(fn(input) {
     match input {
-      @lex.Token::USER_IDENTIFIER(name) => @types.Type::UserDefineType(name, [])
+      @lex.Token::USER_IDENTIFIER(name) => @types.Type::UserDefineType(name, {val: []})
       _ => @util.die("error user")
     }
   })
@@ -1671,7 +1671,7 @@ fn userDefineType(
   .map(fn(input) {
     // @util.logger("userDefineType: " + input.to_string())
     match input {
-      @lex.Token::IDENTIFIER(name) => @types.Type::UserDefineType(name, [])
+      @lex.Token::IDENTIFIER(name) => @types.Type::UserDefineType(name, { val: []})
       _ => @util.die("error user")
     }
   })

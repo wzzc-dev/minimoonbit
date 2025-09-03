@@ -14,7 +14,7 @@ pub fn to_json(self : Type) -> Json {
     Ptr => "Ptr"
     Enum(name, variants) => ["Enum", name, variants]
     Struct(name, fields) => ["Struct", name, fields]
-    UserDefineType(name, fields) => ["UserDefineType", name, fields]
+    UserDefineType(name, fields) => ["UserDefineType", name, fields.to_string()]
   }
 }
 

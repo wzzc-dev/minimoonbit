@@ -348,6 +348,14 @@ pub fn ClosureInterpreter::eval(
     }
     Struct(_, _) => @util.die("not support struct")
     StructConstruct(_, _) => @util.die("not support struct construct")
+    TupleGet(tuple, index) => {
+      let tuple = find(env, tuple)
+      let index = find(env, index)
+      match (tuple, index) {
+        (Tuple(arr), Int(idx)) => arr[idx]
+        _ => fail("type mismatch, tupleget expects Tuple and Int")
+      }
+    }
   }
 }
 
