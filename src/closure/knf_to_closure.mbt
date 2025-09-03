@@ -1,5 +1,5 @@
 ///|
-pub typealias @immut/hashmap.T[Name, LowType] as LocalEnv
+pub typealias @immut/hashmap.HashMap[Name, LowType] as LocalEnv
 
 ///|
 pub fn knf_program_to_closure(
@@ -176,15 +176,13 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       While(knf_to_closure(env, cond), knf_to_closure(env, body))
     }
     Assign(x, y) => Assign(x, y)
-    Struct(_) => @util.die("not support struct")
-    StructConstruct(_) => @util.die("not support struct construct")
-    FieldAccess(x, y) => @util.die("not support field access")
+    FieldAccess(x, y) => TupleGet(x, y)
   }
 }
 
 ///|
 fn fv_to_array(
-  fv : @hashset.T[FreeVarWithType],
+  fv : @hashset.HashSet[FreeVarWithType],
 ) -> Array[(@types.Name, LowType)] {
   let res = []
   fv.each(fn(fv) { res.push((fv.name, fv.ty)) })
@@ -208,11 +206,25 @@ fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
     Tuple(arr_ty) =>
       Tuple(arr_ty.map((ty) => ty_to_low_type(ty, is_closure)))
     Array(ty) => Array(ty_to_low_type(ty, is_closure))
-    Var(ty) => @util.die("ty_to_low_type: Var" + ty.to_string())
+    Var(ty) => match ty.val {
+      Some(UserDefineType(_, fields)) => {
+        let fields_ty = fields.val.map((field) => ty_to_low_type(field.1, is_closure))
+        Tuple(fields_ty)
+      }
+      Some(ty) => {
+        // println("ty: " + ty.to_string())
+        // println("ty_to_low_type(ty, is_closure): " + ty_to_low_type(ty, is_closure).to_string())
+        ty_to_low_type(ty, is_closure)
+      }
+      _ => @util.die("ty_to_low_type: Var" + ty.to_string())
+    }
     Ptr => Ptr
     Enum(_name, _) | Struct(_name, _) =>
       @util.die("ty_to_low_type: Enum or Struct" + ty.to_string())
-    UserDefineType(name, _) => @util.die("user define type: " + name)
+    UserDefineType(_, fields) => {
+      let fields_ty = fields.val.map((field) => ty_to_low_type(field.1, is_closure))
+      Tuple(fields_ty)
+    }
   }
 }
 
@@ -244,7 +256,7 @@ pub impl Compare for FreeVarWithType with compare(self, other) {
 }
 
 ///|
-impl Eq for FreeVarWithType with op_equal(
+impl Eq for FreeVarWithType with equal(
   self : FreeVarWithType,
   other : FreeVarWithType,
 ) {
@@ -257,7 +269,7 @@ fn new_fv(name : @types.Name, ty : LowType) -> FreeVarWithType {
 }
 
 ///|
-fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
+fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
   match e {
     Unit => @hashset.new()
     Int(_) => @hashset.new()
@@ -326,25 +338,23 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
     While(_, body) =>
       fv(body)
     Assign(_x, _y) => @hashset.new()
-    Struct(_, _) => @hashset.new()
-    StructConstruct(_,_) => @hashset.new()
     FieldAccess(_,_) => @hashset.new()
   }
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/struct1.mbt",
+    "contest-2025-data/test_cases/mbt/struct2.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
-  // println("parse: " + parse.to_string() + "\n")
+  println("parse: " + parse.to_string() + "\n")
   try {
     let typed = @typing.typing(parse)
-    // println("typed: " + typed.to_string() + "\n")
+    println("typed: " + typed.to_string() + "\n")
     let env = @knf.KnfEnv::new(@immut/hashmap.new())
     let pre = @knf.KnfEnv::syntax_preprocess(env, typed)
-    // println("pre: " + pre.to_json().stringify() + "\n")
+    println("pre: " + pre.to_json().stringify() + "\n")
     let knf = @knf.KnfEnv::to_knf(env, pre)
-    // println("knf: " + knf.to_json().stringify() + "\n")
+    println("knf: " + knf.to_json().stringify() + "\n")
     let closure = knf_program_to_closure(knf,Map::from_iter(@immut/hashmap.new().iter()))
     // println("closure: " + closure.to_string() + "\n")
     println("closure: ")

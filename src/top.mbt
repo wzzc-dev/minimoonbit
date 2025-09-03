@@ -41,7 +41,7 @@ pub(all) enum Syntax {
 pub(all) enum Kind {
   Int
   Double
-} derive(Show, Eq, ToJson(style="flat" ))
+} derive(Show, Eq, ToJson(style="flat"))
 
 ///|
 pub(all) enum Op {
@@ -50,7 +50,7 @@ pub(all) enum Op {
   Mul
   Div
   Mod
-} derive(Show, Eq, ToJson(style="flat" ))
+} derive(Show, Eq, ToJson(style="flat"))
 
 ///|
 pub(all) struct Fundef {
@@ -77,19 +77,23 @@ pub(all) enum Type {
 
 ///|
 pub impl ToJson for Type with to_json(self : Type) -> Json {
-  self.to_string().to_json()
-}
-
-///|
-pub fn Type::is_ptr_like(self : Type) -> Bool {
   match self {
-    Fun(_) | Tuple(_) | Array(_) | Ptr => true
-    Var(t) =>
-      match t.val {
-        Some(t) => t.is_ptr_like()
-        None => false
-      }
-    _ => false
+    Unit
+    | Bool
+    | Int
+    | Double
+    | Fun(_)
+    | Tuple(_)
+    | Array(_)
+    | Ptr
+    | Enum(_)
+    | Struct(_)
+    | Var(_) => self.to_json()
+    UserDefineType(name, val) => {
+      ["UserDefineType", name, val.val.map(fn(f) {
+        [f.0, f.1.to_string()]
+      })]
+    }
   }
 }
 
@@ -113,7 +117,8 @@ pub fn Type::size_of(self : Type, size_of_ptr : Int) -> Int {
     Bool => 4
     Int => 4
     Double => 8
-    Struct(_, fs) => fs.fold(init=0, (sum, elem) => sum + elem.1.size_of(size_of_ptr))
+    Struct(_, fs) =>
+      fs.fold(init=0, (sum, elem) => sum + elem.1.size_of(size_of_ptr))
     UserDefineType(_) => 8
     Enum(_, _) => 4
     Tuple(_) | Fun(_, _) | Array(_) | Ptr => size_of_ptr
@@ -141,7 +146,7 @@ pub fn Type::size_of(self : Type, size_of_ptr : Int) -> Int {
 //   }
 // }
 
-pub impl Eq for Type with op_equal(self, other) -> Bool {
+pub impl Eq for Type with equal(self, other) -> Bool {
   match (self, other) {
     (Unit, Unit) => true
     (Bool, Bool) => true

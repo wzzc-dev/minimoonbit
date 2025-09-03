@@ -46,10 +46,6 @@ pub fn Expr::to_json(self : Expr) -> Json {
     Expr::Assign(n1, n2) => ["Assign", n1.to_json(), n2.to_json()]
     IfLt(n1, n2, e1, e2) =>
       ["IfLt", n1.to_json(), n2.to_json(), e1.to_json(), e2.to_json()]
-    Struct(name, fields) =>
-      ["Struct", name.to_json(), fields.to_json()]
-    StructConstruct(name, fields) =>
-      ["StructConstruct", name.to_json(), fields.to_json()]
     Expr::TupleGet(tuple, index) =>
       ["TupleGet", tuple.to_json(), index.to_json()]
   }

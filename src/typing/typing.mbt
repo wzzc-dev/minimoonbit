@@ -18,7 +18,10 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
     | (Bool, Int) => ()
     (Var(t), ty) | (ty, Var(t)) =>
       match t.val {
-        None => t.val = Some(ty)
+        None => {
+          check_occur(t1, ty)
+          t.val = Some(ty)
+        }
         _ => {
           println("unify: t.val: " + t.val.to_string())
           ()
@@ -132,7 +135,7 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
 }
 
 ///|
-struct LocalCtx(@immut/sorted_map.T[String, @types.Type])
+struct LocalCtx(@immut/sorted_map.SortedMap[String, @types.Type])
 
 ///|
 pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
@@ -651,7 +654,7 @@ pub fn typing(e : @types.Syntax) -> @types.Syntax raise TyErr {
 
 ///|
 pub fn get_type(
-  m : @immut/hashmap.T[String, @types.Type],
+  m : @immut/hashmap.HashMap[String, @types.Type],
   e : @types.Syntax,
 ) -> @types.Type raise TyErr {
   let mut sort_map : LocalCtx = @immut/sorted_map.new()

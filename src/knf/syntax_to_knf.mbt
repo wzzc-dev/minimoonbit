@@ -1,14 +1,14 @@
 ///|
-pub typealias @immut/hashmap.T[String, Type] as LocalEnv
+pub typealias @immut/hashmap.HashMap[String, Type] as LocalEnv
 
 ///|
 struct KnfEnv {
   mut counter : Int
-  externals : @immut/hashmap.T[String, Type]
+  externals : @immut/hashmap.HashMap[String, Type]
 }
 
 ///|
-pub fn KnfEnv::new(externals : @immut/hashmap.T[String, Type]) -> KnfEnv {
+pub fn KnfEnv::new(externals : @immut/hashmap.HashMap[String, Type]) -> KnfEnv {
   { counter: 1, externals }
 }
 
@@ -632,9 +632,21 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     //   let env_fun = self.externals.add(name, UserDefineType(name, fields))
     //   KnfEnv::to_knf({ counter: self.counter, externals: env_fun }, rest)
     // }
-    FieldAccess(e, name) => {
+    FieldAccess(e, field) => {
       let (name, e_ty, knf) = KnfEnv::get_knf(self, e)
-      Let((name, e_ty), knf, FieldAccess(name, name))
+      // @util.logger("(name, e_ty, knf)"  + (name, e_ty, knf).to_string())
+      let index = match e_ty {
+        UserDefineType(_, fields) => {
+          let index = fields.val.search_by(fn(f) {
+            f.0 == field
+          })
+          index.unwrap()
+        }
+        _ => @util.die("not support field access")
+      }
+      // let index_name = (try? @types.Name::from_string(name.name.unwrap() + "_" + field + "_index")).unwrap()
+      // let let_index = Let((index_name, Int), index, FieldAccess(name, index_name))
+      Let((name, e_ty), knf, FieldAccess(name, index))
     }
     _ => raise KnfErr("not supported syntax " + s.to_string())
   }
@@ -699,7 +711,7 @@ test {
     let pre = KnfEnv::syntax_preprocess(env, typed)
     // println("pre: " + pre.to_string())
     let knf = KnfEnv::to_knf(env, pre)
-    // println(knf)
+    println(knf)
   } catch {
     @typing.TyErr(s) => {
       println("typing error")

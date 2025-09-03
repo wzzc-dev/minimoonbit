@@ -160,18 +160,6 @@ fn PrettyKnf::print_one_level(
       logger.write_string("\n")
     }
     Assign(x, y) => logger.write_string("\{x} = \{y}")
-    Struct(name, rest) => {
-      logger.write_string("Struct(\{name}, [")
-      self.print_one_level(logger, rest)
-      logger.write_string("])")
-    }
-    StructConstruct(name, fields) => {
-      logger.write_string("StructConstruct(\{name}, [")
-      for field in fields {
-        logger.write_string("\{field}, ")
-      }
-      logger.write_string("])")
-    }
     FieldAccess(e, name) => logger.write_string("FieldAccess(\{e}, \{name})")
   }
 }

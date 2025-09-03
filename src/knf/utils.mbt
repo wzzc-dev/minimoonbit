@@ -77,10 +77,6 @@ pub fn knf_max_counter(knf : Knf) -> Int {
     While(cond, body) =>
       @cmp.maximum(knf_max_counter(cond), knf_max_counter(body))
     Assign(x, y) => @cmp.maximum(x.slot, y.slot)
-    Struct(_, _rest) =>
-       @util.die("not struct")
-    StructConstruct(_, fields) =>
-      fields.map(fn(x) { x.slot }).fold(init=0, fn(a, b) { @cmp.maximum(a, b) })
-    FieldAccess(x, y) => @cmp.maximum(x.slot, y.slot)
+    FieldAccess(x, y) => @cmp.maximum(x.slot, y)
   }
 }

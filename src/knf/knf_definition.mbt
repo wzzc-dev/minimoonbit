@@ -31,7 +31,7 @@ pub(all) enum Knf {
   Apply(Name, Array[Name])
   Tuple(Array[Name])
   LetTuple(Array[(Name, Type)], Name, Knf)
-  FieldAccess(Name, Name)
+  FieldAccess(Name, Int)
   Get(Name, Name)
   Put(Name, Name, Name)
   ExternalArray(Name)
@@ -39,8 +39,6 @@ pub(all) enum Knf {
 
   While(Knf, Knf)   // While(condition, body)
   Assign(Name, Name)
-  StructConstruct(Name, Array[Name])
-  Struct(StructDef, Knf)
 } derive(Show, Eq)
 
 ///|

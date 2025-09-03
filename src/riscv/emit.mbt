@@ -222,7 +222,7 @@ pub fn AssemblyFunction::output(
 
 ///|
 pub struct Env {
-  vars : @immut/hashmap.T[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
+  vars : @immut/hashmap.HashMap[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
   mut current_offset : Int // 当前可用的栈偏移
   fundefs : Array[@closure.FuncDef] // 函数定义
 }
@@ -436,14 +436,15 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     TupleGet(tuple, index) => {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, tuple) }))
-      // 2. 加载索引值并根据类型计算偏移
-      instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
-      instrs.push(Slli(T1, T1, 3)) // 8字节
+      // // 2. 加载索引值并根据类型计算偏移
+      // instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
+      // instrs.push(Slli(T1, T1, 3)) // 8字节
 
-      // 3. 计算最终地址
-      instrs.push(Add(T0, T0, T1))
+      // // 3. 计算最终地址
+      // instrs.push(Add(T0, T0, T1))
+      // instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))
+      instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
 
-      instrs.push(Mv(reg_ret, T0))
     }
     ArrayGet(array, index) => {
       // 1. 加载数组基地址
@@ -504,8 +505,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, y) }))
       instrs.push(Sd(T0, { base: Fp, offset: Env::varOffset(env, x) }))
     }
-    Struct(_, _) => @util.die("not support struct")
-    StructConstruct(_, _) => @util.die("not support struct construct")
   }
   instrs
 }
@@ -661,7 +660,21 @@ fn emit_args(
 fn get_array_element_type(array : @typing.Name, env : Env) -> @closure.LowType {
   match env.find_type(array.to_string()) {
     Array(elem_type) => elem_type
-    _ => Ptr // 默认类型
+    Tuple(elems) => {
+      // 如果是元组，检查第一个元素是否是数组
+      match elems.get(0) {
+        Some((elem_type)) => elem_type
+        _ => Ptr // 默认类型
+      }
+    }
+    _ => {
+      // 尝试从变量名推断类型
+      if array.to_string().contains("array") {
+        Int // 假设是整数数组
+      } else {
+        Ptr // 默认类型
+      }
+    }
   }
 }
 

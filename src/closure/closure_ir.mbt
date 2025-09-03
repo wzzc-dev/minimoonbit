@@ -35,14 +35,12 @@ pub(all) enum Expr {
   CallDirect(Label, Array[Name])
   MakeTuple(Array[Name])
   LetTuple(Array[(Name, LowType)], Name, Expr)
-  TupleGet(Name, Name)
+  TupleGet(Name, Int)
   ArrayGet(Name, Name)
   ArrayPut(Name, Name, Name)
   ExternalArray(Label)
   While(Expr, Expr)
   Assign(Name, Name)
-  Struct(Name, Array[(Name, LowType)])
-  StructConstruct(Name, Array[Name])
 } derive(Show, ToJson(style="flat"))
 
 ///|
