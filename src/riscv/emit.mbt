@@ -409,18 +409,19 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       let size = elems.length() * 8
       instrs.push(Li(A0, size.to_string()))
       instrs.push(Call(Label("minimbt_malloc"))) // 使用堆分配
-      instrs.push(Mv(T0, A0)) // 保存元组地址
+      // instrs.push(Mv(T0, A0)) // 保存元组地址
 
       // 2. 存储元素
       for i, elem in elems {
-        // 加载元素值（使用Ld而不是Lw）
+        // @util.logger("elem: " + elem.to_string())
         instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, elem) }))
         // 存储到元组中
-        instrs.push(Sd(T1, { base: T0, offset: i * 8 }))
+        // instrs.push(Sd(T1, { base: T0, offset: i * 8 }))
+        instrs.push(Sd(T1, { base: A0, offset: i * 8 }))
       }
 
       // 3. 将元组地址放入返回寄存器
-      instrs.push(Mv(reg_ret, T0))
+      // instrs.push(Mv(reg_ret, T0))
     }
     LetTuple(names, tuple, e) => {
       // 元组解构
@@ -436,15 +437,27 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     TupleGet(tuple, index) => {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, tuple) }))
-      // // 2. 加载索引值并根据类型计算偏移
-      // instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
-      // instrs.push(Slli(T1, T1, 3)) // 8字节
-
-      // // 3. 计算最终地址
-      // instrs.push(Add(T0, T0, T1))
-      // instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))
-      instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
-
+      
+      // @util.logger("TupleGet: " + tuple.to_string() + ", " + index.to_string())
+      // @util.logger("TupleGet: " + env.vars.to_string())
+      let elem = env.vars.get(tuple.to_string()).unwrap().1
+      match elem {
+        Tuple(arr) => {
+          let elem_ty = arr[index]
+          match elem_ty {
+            Double => instrs.push(Fld(freg_ret, { base: T0, offset: index * 8 }))
+            Int => instrs.push(Lw(reg_ret, { base: T0, offset: index * 8 }))
+            Array(_) => {
+              instrs.push(Mv(reg_ret, T0))
+              // instrs.push(Comment("TupleGet: " + tuple.to_string() + ", " + index.to_string()))
+            }
+            _ => instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
+          }
+        }
+        _ => {
+          @util.die("TupleGet: " + tuple.to_string() + ", " + index.to_string())
+        }
+      }
     }
     ArrayGet(array, index) => {
       // 1. 加载数组基地址
@@ -453,7 +466,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 2. 加载索引值并根据类型计算偏移
       instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
       instrs.push(Slli(T1, T1, 3)) // 8字节
-
+      instrs.push(Comment("ArrayGet: " + array.to_string() + ", " + index.to_string()))
       // 3. 计算最终地址
       instrs.push(Add(T0, T0, T1))
 
@@ -466,7 +479,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         ClosureFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 闭包函数指针也用 Mv
         Ptr => instrs.push(Mv(reg_ret, T0)) // 指针类型用 Mv
         _ => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Ld
+        // _=>instrs.push(Mv(reg_ret, T0))
       }
+      instrs.push(Comment("ArrayGet: " + array.to_string() + ", " + get_array_element_type(array, env).to_string()))
     }
     ArrayPut(array, index, value) => {
       // 1. 加载数组基地址
@@ -501,6 +516,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       }
     }
     ExternalArray(label) => instrs.push(La(reg_ret, label.inner()))
+    ExternalFunctionApplication(label, xs) => {
+      emit_args(xs, env, instrs)
+      instrs.push(Call(Label(label.inner())))
+    }
     Assign(x, y) => {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, y) }))
       instrs.push(Sd(T0, { base: Fp, offset: Env::varOffset(env, x) }))

@@ -39,6 +39,7 @@ pub(all) enum Expr {
   ArrayGet(Name, Name)
   ArrayPut(Name, Name, Name)
   ExternalArray(Label)
+  ExternalFunctionApplication(Label, Array[Name])
   While(Expr, Expr)
   Assign(Name, Name)
 } derive(Show, ToJson(style="flat"))

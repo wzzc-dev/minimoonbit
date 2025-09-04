@@ -174,7 +174,14 @@ fn emit_expr(expr : @closure.Expr) -> String {
     ArrayGet(e1, e2) => e1.to_string() + "[" + e2.to_string() + "]"
     ArrayPut(e1, e2, e3) =>
       e1.to_string() + "[" + e2.to_string() + "] = " + e3.to_string()
-    ExternalArray(e) => e.to_string()
+    ExternalArray(e) => e.inner().to_string()
+    ExternalFunctionApplication(l, xs) => {
+      let args = []
+      for x in xs {
+        args.push(x.to_string())
+      }
+      l.inner() + "(" + Array::join(args, ", ") + ")"
+    }
     While(cond, body) =>
       "while (" +
       cond.to_string() +

@@ -328,6 +328,16 @@ pub fn ClosureInterpreter::eval(
       Unit
     }
     ExternalArray(_) => fail("ExternalArray is not supported")
+    ExternalFunctionApplication(l, xs) => {
+      let args = []
+      for x in xs {
+        args.push(find(env, x))
+      }
+      match self.extern_fns.get(l.inner()) {
+        Some(f) => f(args)
+        None => fail("ExternalFunctionApplication: function not found")
+      }
+    }
     While(cond, body) => {
       while true {
         match cond {

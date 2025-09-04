@@ -171,7 +171,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     Put(name, name1, name2) => ArrayPut(name, name1, name2)
     Get(name, name1) => ArrayGet(name, name1)
     ExternalArray(name) => ExternalArray(name.name.to_string())
-    ExternalFunctionApplication(name, arr_name) => CallDirect(name, arr_name)
+    ExternalFunctionApplication(name, arr_name) => ExternalFunctionApplication(name, arr_name)
     While(cond, body) => {
       While(knf_to_closure(env, cond), knf_to_closure(env, body))
     }

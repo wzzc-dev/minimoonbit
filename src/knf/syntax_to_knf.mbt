@@ -700,10 +700,10 @@ test {
 ///|
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/struct1.mbt",
+    "contest-2025-data/test_cases/mbt/struct2.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
-  println("parse: " + parse.to_string())
+  println("parse: " + parse.to_json().stringify())
   try {
     let typed = @typing.typing(parse)
     // println("typed: " + typed.to_json().stringify())
@@ -711,7 +711,7 @@ test {
     let pre = KnfEnv::syntax_preprocess(env, typed)
     // println("pre: " + pre.to_string())
     let knf = KnfEnv::to_knf(env, pre)
-    println(knf)
+    println("knf: " + knf.to_json().stringify())
   } catch {
     @typing.TyErr(s) => {
       println("typing error")
