@@ -473,29 +473,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         _ => let_args(self, syn, args_syns)
       }
     }
-    Tuple(syns) => {
-      let syns_names = Array::new()
-      fn let_tuple(syns : Array[@types.Syntax]) -> Knf raise KnfErr {
-        match syns.pop() {
-          None => Tuple(syns_names)
-          Some(syn) => {
-            let (name, ty, knf) = KnfEnv::get_knf(self, syn)
-            match syn {
-              Var(_) => {
-                syns_names.push(name)
-                let_tuple(syns)
-              }
-              _ => {
-                syns_names.push(name)
-                Let((name, ty), knf, let_tuple(syns))
-              }
-            }
-          }
-        }
-      }
-
-      let_tuple(syns)
-    }
+    Tuple(syns) => make_tuple(self, syns)
     LetTuple(args, syn, rest) => {
       //println("Enter LetTuple")
       let mut env_tuple = self.externals
@@ -652,6 +630,30 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
   }
 }
 
+fn make_tuple(env: KnfEnv, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
+  let syns_names = Array::new()
+  let lets = Array::new()
+  
+  // Process all syntax elements first
+  for syn in syns {
+    let (name, ty, knf) = KnfEnv::get_knf(env, syn)
+    syns_names.push(name)
+    match syn {
+      Var(_) => () // No Let needed for variables
+      _ => lets.push((name, ty, knf))
+    }
+  }
+  
+  // Build the result by nesting Let expressions from inside out
+  let mut result = Tuple(syns_names)
+  for i = lets.length() - 1; i >= 0; i = i - 1 {
+    let (name, ty, knf) = lets[i]
+    result = Let((name, ty), knf, result)
+  }
+  
+  result
+}
+
 ///|
 pub(all) suberror KnfErr String derive(ToJson(style="flat"))
 
@@ -700,7 +702,7 @@ test {
 ///|
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/struct2.mbt",
+    "contest-2025-data/test_cases/mbt/struct1.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_json().stringify())
