@@ -1,5 +1,5 @@
 ///|
-pub typealias @immut/hashmap.HashMap[Name, LowType] as LocalEnv
+pub typealias @immut/hashmap.T[Name, LowType] as LocalEnv
 
 ///|
 pub fn knf_program_to_closure(
@@ -182,7 +182,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
 
 ///|
 fn fv_to_array(
-  fv : @hashset.HashSet[FreeVarWithType],
+  fv : @hashset.T[FreeVarWithType],
 ) -> Array[(@types.Name, LowType)] {
   let res = []
   fv.each(fn(fv) { res.push((fv.name, fv.ty)) })
@@ -256,7 +256,7 @@ pub impl Compare for FreeVarWithType with compare(self, other) {
 }
 
 ///|
-impl Eq for FreeVarWithType with equal(
+impl Eq for FreeVarWithType with op_equal(
   self : FreeVarWithType,
   other : FreeVarWithType,
 ) {
@@ -269,7 +269,7 @@ fn new_fv(name : @types.Name, ty : LowType) -> FreeVarWithType {
 }
 
 ///|
-fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
+fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
   match e {
     Unit => @hashset.new()
     Int(_) => @hashset.new()

@@ -130,33 +130,66 @@ pub fn Type::size_of(self : Type, size_of_ptr : Int) -> Int {
   }
 }
 
-///|
-// pub fn Type::op_equal(self : Type, other : Type) -> Bool {
-//   match (self, other) {
-//     (Unit, Unit) => true
-//     (Bool, Bool) => true
-//     (Int, Int) => true
-//     (Double, Double) => true
-//     (Fun(xs, x), Fun(ys, y)) => xs == ys && x == y
-//     (Tuple(xs), Tuple(ys)) => xs == ys
-//     (Array(x), Array(y)) => x == y
-//     (Ptr, Ptr) => true
-//     (Var(x), Var(y)) => x.val == y.val
-//     _ => false
-//   }
-// }
 
-pub impl Eq for Type with equal(self, other) -> Bool {
+pub impl Eq for Type with op_equal(self, other) -> Bool {
   match (self, other) {
-    (Unit, Unit) => true
-    (Bool, Bool) => true
-    (Int, Int) => true
-    (Double, Double) => true
-    (Fun(xs, x), Fun(ys, y)) => xs == ys && x == y
-    (Tuple(xs), Tuple(ys)) => xs == ys
-    (Array(x), Array(y)) => x == y
-    (Ptr, Ptr) => true
-    (Var(x), Var(y)) => x.val == y.val
+    (Type::Unit, Type::Unit) => true
+    (Type::Bool, Type::Bool) => true
+    (Type::Int, Type::Int) => true
+    (Type::Double, Type::Double) => true
+    (Type::Fun(xs, x), Type::Fun(ys, y)) => {
+      if xs.length() != ys.length() {
+        false
+      } else {
+        let mut equal = true
+        for i = 0; i < xs.length(); i = i + 1 {
+          if not(xs[i].op_equal(ys[i])) {
+            equal = false
+            break
+          }
+        }
+        equal && x.op_equal(y)
+      }
+    }
+    (Type::Tuple(xs), Type::Tuple(ys)) => {
+      if xs.length() != ys.length() {
+        false
+      } else {
+        let mut equal = true
+        for i = 0; i < xs.length(); i = i + 1 {
+          if not(xs[i].op_equal(ys[i])) {
+            equal = false
+            break
+          }
+        }
+        equal
+      }
+    }
+    (Type::Array(x), Type::Array(y)) => x.op_equal(y)
+    (Type::Struct(name1, fields1), Type::Struct(name2, fields2)) => {
+      name1 == name2 && {
+        if fields1.length() != fields2.length() {
+          false
+        } else {
+          let mut equal = true
+          for i = 0; i < fields1.length(); i = i + 1 {
+            if fields1[i].0 != fields2[i].0 || not(fields1[i].1.op_equal(fields2[i].1)) {
+              equal = false
+              break
+            }
+          }
+          equal
+        }
+      }
+    }
+    (Type::Enum(name1, variants1), Type::Enum(name2, variants2)) => {
+      name1 == name2 && variants1 == variants2
+    }
+    (Type::UserDefineType(name1, fields1), Type::UserDefineType(name2, fields2)) => {
+      name1 == name2 && fields1.val == fields2.val
+    }
+    (Type::Ptr, Type::Ptr) => true
+    (Type::Var(x), Type::Var(y)) => x.val.op_equal(y.val)
     _ => false
   }
 }

@@ -222,7 +222,7 @@ pub fn AssemblyFunction::output(
 
 ///|
 pub struct Env {
-  vars : @immut/hashmap.HashMap[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
+  vars : @immut/hashmap.T[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
   mut current_offset : Int // 当前可用的栈偏移
   fundefs : Array[@closure.FuncDef] // 函数定义
 }

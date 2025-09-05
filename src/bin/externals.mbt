@@ -137,7 +137,7 @@ fn add_closure_interpreter_fns(
 }
 
 ///|
-fn externals() -> @immut/hashmap.HashMap[String, @types.Type] {
+fn externals() -> @immut/hashmap.T[String, @types.Type] {
   @immut/hashmap.new()
   .add("read_int", @types.Fun([], Int))
   .add("read_char", @types.Fun([], Int))
