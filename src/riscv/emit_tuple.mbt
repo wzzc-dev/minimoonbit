@@ -12,12 +12,12 @@ fn emit_make_tuple(
 
   // 2. 存储元素
   for i, elem in elems {
-    // instrs.push(Comment("start : 存储元素：" + i.to_string() + "; name:" + elem.to_string()))
+    instrs.push(Comment("start : 存储元素：" + i.to_string() + "; name:" + elem.to_string()))
     instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, elem) }))
     // @util.logger("emit_make_tuple:" + elem.to_string())
     // debug(T1, instrs)
     instrs.push(Sd(T1, { base: A0, offset: i * 8 }))
-    // instrs.push(Comment("end : 存储元素：" + i.to_string() + "; name:" + elem.to_string()))
+    instrs.push(Comment("end : 存储元素：" + i.to_string() + "; name:" + elem.to_string()))
   }
 }
 
@@ -53,17 +53,17 @@ fn emit_tuple_get(
   instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
 }
 
-// ///|
-// fn debug(reg : Reg, instrs : Array[RvAsm]) -> Unit {
-//   instrs.push(Comment("debug: 元组元素 start print"))
-//   instrs.push(Mv(T6, A0))
+///|
+fn _debug(reg : Reg, instrs : Array[RvAsm]) -> Unit {
+  instrs.push(Comment("debug: 元组元素 start print"))
+  instrs.push(Mv(T6, A0))
   
-//   instrs.push(Lw(A0, { base: reg, offset: 0 }))
-//   instrs.push(Call("minimbt_print_int"))
-//   instrs.push(Lw(A0, { base: reg, offset: 8 }))
-//   instrs.push(Call("minimbt_print_int"))
-//   instrs.push(Lw(A0, { base: reg, offset: 16 }))
-//   instrs.push(Call("minimbt_print_int"))
-//   instrs.push(Mv(A0, T6))
-//   instrs.push(Comment("debug: 元组元素 end print"))
-// }
+  instrs.push(Lw(A0, { base: reg, offset: 0 }))
+  instrs.push(Call("minimbt_print_int"))
+  instrs.push(Lw(A0, { base: reg, offset: 4 }))
+  instrs.push(Call("minimbt_print_int"))
+  instrs.push(Lw(A0, { base: reg, offset: 8 }))
+  instrs.push(Call("minimbt_print_int"))
+  instrs.push(Mv(A0, T6))
+  instrs.push(Comment("debug: 元组元素 end print"))
+}

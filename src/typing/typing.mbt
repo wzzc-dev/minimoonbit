@@ -462,14 +462,12 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
             _ => raise TyErr("The first operand of LetTuple should be tuple")
           }
       }
-    Put(name, n, value) =>
+    Put(name, n, value, rest) => {
       match infer(ctx, n) {
         Int =>
           match infer(ctx, name) {
             Array(t) =>
-              if t == infer(ctx, value) {
-                Unit
-              } else {
+              if t != infer(ctx, value) {
                 raise TyErr(
                   "The operand of Put should have same type: " +
                   "\n e: " + e.to_string() +
@@ -500,6 +498,9 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
             infer(ctx, n).to_string(),
           )
       }
+      infer(ctx, rest)
+    }
+      
     ArrayExpr(es) => {
       let ty = infer(ctx, es[0])
       let tys = es.map(e => infer(ctx, e))
@@ -602,8 +603,8 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
         deref_term(e1),
         deref_term(e2),
       )
-    Put(name, t, value) =>
-      Put(deref_term(name), deref_term(t), deref_term(value))
+    Put(name, t, value, rest) =>
+      Put(deref_term(name), deref_term(t), deref_term(value), deref_term(rest))
     While(e1, e2) => While(deref_term(e1), deref_term(e2))
     Return(e) =>
       match e {

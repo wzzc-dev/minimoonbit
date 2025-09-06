@@ -302,7 +302,7 @@ pub fn KnfInterpreter::eval(
           )
       }
     }
-    Put(arr, idx, v) => {
+    Put(arr, idx, v, e) => {
       let arr = find(env, arr)
       let idx = find(env, idx)
       let v = find(env, v)
@@ -317,7 +317,7 @@ pub fn KnfInterpreter::eval(
             idx.to_string(),
           )
       }
-      Unit
+      self.eval(env, e)
     }
     ExternalArray(_) => fail("ExternalArray is not supported")
     ExternalFunctionApplication(name, args) => {

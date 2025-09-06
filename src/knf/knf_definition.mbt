@@ -33,7 +33,7 @@ pub(all) enum Knf {
   LetTuple(Array[(Name, Type)], Name, Knf)
   FieldAccess(Name, Int)
   Get(Name, Name)
-  Put(Name, Name, Name)
+  Put(Name, Name, Name, Knf)
   ExternalArray(Name)
   ExternalFunctionApplication(String, Array[Name])
 

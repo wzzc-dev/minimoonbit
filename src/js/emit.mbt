@@ -172,8 +172,11 @@ fn emit_expr(expr : @closure.Expr) -> String {
       ";\n" +
       "})()"
     ArrayGet(e1, e2) => e1.to_string() + "[" + e2.to_string() + "]"
-    ArrayPut(e1, e2, e3) =>
-      e1.to_string() + "[" + e2.to_string() + "] = " + e3.to_string()
+    ArrayPut(e1, e2, e3, e4) => {
+  
+      e1.to_string() + "[" + e2.to_string() + "] = " + e3.to_string() + ";" +
+      emit_expr(e4)
+    }
     ExternalArray(e) => e.inner().to_string()
     ExternalFunctionApplication(l, xs) => {
       let args = []

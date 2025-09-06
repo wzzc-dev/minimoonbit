@@ -139,7 +139,10 @@ fn PrettyKnf::print_one_level(
       }
       logger.write_string("])")
     }
-    Put(e1, e2, e3) => logger.write_string("Put \{e1}[\{e2}] = \{e3}")
+    Put(e1, e2, e3, e4) => {
+      logger.write_string("Put \{e1}[\{e2}] = \{e3}")
+      self.print_one_level(logger, e4)
+    }
     Get(e1, e2) => logger.write_string("Get \{e1}[\{e2}]")
     ExternalArray(name) => logger.write_string("ExternalArray(\{name})")
     ExternalFunctionApplication(name, args) => {

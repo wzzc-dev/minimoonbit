@@ -37,7 +37,7 @@ pub(all) enum Expr {
   LetTuple(Array[(Name, LowType)], Name, Expr)
   TupleGet(Name, Int)
   ArrayGet(Name, Name)
-  ArrayPut(Name, Name, Name)
+  ArrayPut(Name, Name, Name, Expr)
   ExternalArray(Label)
   ExternalFunctionApplication(Label, Array[Name])
   While(Expr, Expr)

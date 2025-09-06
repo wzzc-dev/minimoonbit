@@ -168,7 +168,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       )
       LetTuple(arr_name, name, knf_to_closure(env, cont))
     }
-    Put(name, name1, name2) => ArrayPut(name, name1, name2)
+    Put(name, name1, name2, name3) => ArrayPut(name, name1, name2, knf_to_closure(env, name3))
     Get(name, name1) => ArrayGet(name, name1)
     ExternalArray(name) => ExternalArray(name.name.to_string())
     ExternalFunctionApplication(name, arr_name) => ExternalFunctionApplication(name, arr_name)
@@ -330,8 +330,18 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
       result.union(@hashset.of([new_fv(name, Ptr)]))
     }
     Get(a, b) => @hashset.of([new_fv(a, Ptr), new_fv(b, Int)])
-    Put(a, b, c) =>
-      @hashset.of([new_fv(a, Ptr), new_fv(b, Int), new_fv(c, Ptr)])
+    Put(a, b, c, d) => {
+      let rest = @hashset.of([new_fv(a, Ptr), new_fv(b, Int), new_fv(c, Ptr)])
+
+      let result = fv(d)
+      
+      result.remove(new_fv(a, Ptr))
+      result.remove(new_fv(b, Ptr))
+      result.remove(new_fv(c, Ptr))
+
+      result.union(rest)
+    }
+      
     ExternalArray(a) => @hashset.of([new_fv(a, Ptr)])
     ExternalFunctionApplication(_, arr_name) =>
       @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))

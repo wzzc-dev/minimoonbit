@@ -521,16 +521,21 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           }
       }
     }
-    Put(syn1, syn2, syn3) => {
+    Put(syn1, syn2, syn3, rest) => {
+      
       let (name1, s1_ty, knf1) = KnfEnv::get_knf(self, syn1)
       let (name2, s2_ty, knf2) = KnfEnv::get_knf(self, syn2)
       let (name3, s3_ty, knf3) = KnfEnv::get_knf(self, syn3)
+
+      
+      let rest_knf = KnfEnv::to_knf(self, rest)
+
       match syn1 {
         Var(_) =>
           Let(
             (name2, s2_ty),
             knf2,
-            Let((name3, s3_ty), knf3, Put(name1, name2, name3)),
+            Let((name3, s3_ty), knf3, Put(name1, name2, name3, rest_knf)),
           )
         _ =>
           Let(
@@ -539,7 +544,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
             Let(
               (name2, s2_ty),
               knf2,
-              Let((name3, s3_ty), knf3, Put(name1, name2, name3)),
+              Let((name3, s3_ty), knf3, Put(name1, name2, name3, rest_knf)),
             ),
           )
       }
@@ -702,7 +707,7 @@ test {
 ///|
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/struct1.mbt",
+    "contest-2025-data/test_cases/mbt/struct4.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_json().stringify())
@@ -711,7 +716,7 @@ test {
     // println("typed: " + typed.to_json().stringify())
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = KnfEnv::syntax_preprocess(env, typed)
-    // println("pre: " + pre.to_string())
+    println("pre: " + pre.to_string())
     let knf = KnfEnv::to_knf(env, pre)
     println("knf: " + knf.to_json().stringify())
   } catch {

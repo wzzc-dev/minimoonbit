@@ -38,8 +38,8 @@ pub fn Expr::to_json(self : Expr) -> Json {
       ["LetTuple", n_ts_res.to_json(), n.to_json(), e.to_json()]
     }
     Expr::ArrayGet(n1, n2) => ["ArrayGet", n1.to_json(), n2.to_json()]
-    Expr::ArrayPut(n1, n2, n3) =>
-      ["ArrayPut", n1.to_json(), n2.to_json(), n3.to_json()]
+    Expr::ArrayPut(n1, n2, n3, e) =>
+      ["ArrayPut", n1.to_json(), n2.to_json(), n3.to_json(), e.to_json()]
     Expr::ExternalArray(l) => ["ExternalArray", l.inner().to_json()]
     Expr::While(cond, body) =>
       ["While", cond.to_json(), body.to_json()]
@@ -130,11 +130,12 @@ pub fn Expr::from_json(json : Json) -> Expr raise {
     }
     ["ArrayGet", n1, n2] =>
       Expr::ArrayGet(Name::from_json(n1), Name::from_json(n2))
-    ["ArrayPut", n1, n2, n3] =>
+    ["ArrayPut", n1, n2, n3, e] =>
       Expr::ArrayPut(
         Name::from_json(n1),
         Name::from_json(n2),
         Name::from_json(n3),
+        Expr::from_json(e),
       )
     ["ExternalArray", l] => Expr::ExternalArray(l.to_string())
     _ => fail("invalid json")

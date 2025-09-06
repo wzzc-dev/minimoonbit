@@ -189,7 +189,7 @@ fn calculate_framesize_expr(expr : @closure.Expr) -> Int {
     LetTuple(names_tys, _, e) =>
       names_tys.length() * 8 + calculate_framesize_expr(e)
     ArrayGet(_, _) => 16
-    ArrayPut(_, _, _) => 16
+    ArrayPut(_, _, _, e) => 16 + calculate_framesize_expr(e)
     ExternalArray(_) => 8
     _ => 0
   }
@@ -397,8 +397,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     LetTuple(names, tuple, e) => emit_let_tuple(names, tuple, e, instrs, env)
     TupleGet(tuple, index) => emit_tuple_get(tuple, index, instrs, env)
     ArrayGet(array, index) => emit_array_get(array, index, instrs, env)
-    ArrayPut(array, index, value) =>
+    ArrayPut(array, index, value, rest) => {
       emit_array_put(array, index, value, instrs, env)
+      instrs.append(compile_expr(rest, env))
+    }
     ExternalArray(label) => instrs.push(La(reg_ret, label.inner()))
     ExternalFunctionApplication(label, xs) => {
       emit_args(xs, env, instrs)

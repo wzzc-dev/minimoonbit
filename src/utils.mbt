@@ -168,8 +168,8 @@ pub fn Syntax::to_json(self : Syntax) -> Json {
     Array(size, init) => ["ArrayMake", size.to_json(), init.to_json()]
     ArrayExpr(es) => ["ArrayExpr", es.map(Syntax::to_json) |> Json::array]
     Get(arr, idx) => ["Get", arr.to_json(), idx.to_json()]
-    Put(arr, idx, value) =>
-      ["Put", arr.to_json(), idx.to_json(), value.to_json()]
+    Put(arr, idx, value, rest) =>
+      ["Put", arr.to_json(), idx.to_json(), value.to_json(), rest.to_json()]
     Enum(name, variant) => ["Enum", name, variant]
     Struct(name, generic, fields, rest) => ["Struct", name, generic, fields.map(x => ([x.0 |> Json::string, x.1.to_json()] : Json)) |> Json::array, rest.to_json()]
     StructConstruct(name, fields) => ["StructConstruct", name, fields.map(x => ([x.0 |> Json::string, x.1.to_json()] : Json)) |> Json::array]
@@ -330,6 +330,7 @@ pub fn Syntax::from_json(json : Json) -> Syntax raise Error {
         arr |> Syntax::from_json(),
         idx |> Syntax::from_json(),
         value |> Syntax::from_json(),
+        Unit,
       )
     _ => fail("invalid json: should contain an operator")
   }

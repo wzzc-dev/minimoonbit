@@ -42,6 +42,9 @@ pub fn KnfEnv::syntax_preprocess(
         KnfEnv::syntax_preprocess(self, s1),
         KnfEnv::syntax_preprocess(self, s2),
       )
+    Put(arr, idx, v, rest) => {
+      Put(arr, idx, v, KnfEnv::syntax_preprocess(self, rest))
+    }
     StructConstruct(_, fields) => {
       let result = fields.map(fn(field) {
         match field {
@@ -79,16 +82,8 @@ fn KnfEnv::process_1d_array(
 
   // Process elements in reverse order to build nested Let expressions
   for i = len - 1; i >= 0; i = i - 1 {
-    let elem = elems[i]
-
-    // Create index expression: i
-    let index_expr = @types.Syntax::Int(i)
-
-    // Create Put expression: Put(arr, i, actual_element)
-    let put_expr = @types.Syntax::Put(@types.Syntax::Var(str), index_expr, elem)
-
     // Wrap the previous result with this Put operation
-    result = Let(("_", Unit), put_expr, result)
+    result = Put(Var(str), Int(i), elems[i], result)
   }
   fn get_array_ty(ty : @types.Type) -> @types.Type {
     match ty {

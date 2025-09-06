@@ -7,6 +7,7 @@ fn emit_array_get(
 ) -> Unit {
   // 1. 加载数组基地址
   instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, array) }))
+  @util.logger("emit_array_get: " + array.to_string()+ ", env: " +  env.vars.to_string())
   // 2. 加载索引值并根据类型计算偏移
   instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
   instrs.push(Slli(T1, T1, 3)) // 8字节
@@ -27,7 +28,7 @@ fn emit_array_put(
   index : @typing.Name,
   value : @typing.Name,
   instrs : Array[RvAsm],
-  env : Env,
+  env : Env
 ) -> Unit {
   instrs.push(Comment("emit_array_put:" + array.to_string() + " " + index.to_string() + " " + value.to_string()))
   // 1. 加载数组基地址
@@ -54,6 +55,8 @@ fn emit_array_put(
     }
   }
   instrs.push(Comment("emit_array_put end"))
+
+
 }
 
 // 添加一个辅助函数来获取数组元素类型

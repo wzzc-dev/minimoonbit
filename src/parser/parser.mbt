@@ -256,12 +256,8 @@ fn fnBody(
                   @types.Syntax::While(cond, body),
                   stmt,
                 )
-              @types.Syntax::Put(arr, idx, value) =>
-                @types.Syntax::Let(
-                  ("_", @types.Type::Unit),
-                  @types.Syntax::Put(arr, idx, value),
-                  stmt,
-                )
+              @types.Syntax::Put(arr, idx, value, _) =>
+                @types.Syntax::Put(arr, idx, value, stmt)
               @types.Syntax::Return(ret_expr) => @types.Syntax::Return(ret_expr) // Return should terminate the sequence
               _ =>
                 // For other expression statements, treat as side effects
@@ -670,7 +666,7 @@ fn assignStmt(
     match input {
       (((get_expr, _), expr), _) =>
         match get_expr {
-          Get(arr, idx) => @types.Syntax::Put(arr, idx, expr)
+          Get(arr, idx) => @types.Syntax::Put(arr, idx, expr, Unit)
           Var(x) => @types.Syntax::Assign(Var(x), expr)
           _ => @types.Syntax::Let(("_", Var({ val: None })), get_expr, expr)
           // @util.die("Invalid assign statement: left side must be an array access or identifier, but got " + get_expr.to_string())

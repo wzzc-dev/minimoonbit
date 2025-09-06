@@ -135,7 +135,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
       "(i32.mul " +
       e2.to_string() +
       " (i32.const 4))))"
-    ArrayPut(e1, e2, e3) =>
+    ArrayPut(e1, e2, e3, rest) =>
       "(i32.store (i32.add " +
       e1.to_string() +
       " " +
@@ -143,7 +143,8 @@ fn emit_expr(expr : @closure.Expr) -> String {
       e2.to_string() +
       " (i32.const 4))) " +
       e3.to_string() +
-      ")"
+      ")\n" +
+      emit_expr(rest)
 
     // 其他情况暂时返回空值
     Unit => "(i32.const 0)"
