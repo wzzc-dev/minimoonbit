@@ -5,12 +5,20 @@ fn emit_array_get(
   instrs : Array[RvAsm],
   env : Env,
 ) -> Unit {
-  // 1. 加载数组基地址
+  // @util.logger("emit_array_get: " + array.to_string()+ ", env: " +  env.vars.to_string())
+  // 1. 加载数组基地址 里面保存的是数组的指针
   instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, array) }))
-  @util.logger("emit_array_get: " + array.to_string()+ ", env: " +  env.vars.to_string())
   // 2. 加载索引值并根据类型计算偏移
   instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
-  instrs.push(Slli(T1, T1, 3)) // 8字节
+  let arr_ty = get_array_element_type(array, env)
+  match arr_ty {
+    Int(_) => {
+      instrs.push(Slli(T1, T1, 2))
+    }
+    _ => {
+      instrs.push(Slli(T1, T1, 3))
+    }
+  }
   // 3. 计算最终地址
   instrs.push(Add(T0, T0, T1))
   // 4. 根据数组元素类型选择加载指令
@@ -20,6 +28,7 @@ fn emit_array_get(
     DirectFn(_, _) | ClosureFn(_, _) | Ptr => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Mv
     _ => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Ld
   }
+  // @util.logger("emit_array_get end")
 }
 
 ///|
@@ -31,16 +40,25 @@ fn emit_array_put(
   env : Env
 ) -> Unit {
   instrs.push(Comment("emit_array_put:" + array.to_string() + " " + index.to_string() + " " + value.to_string()))
-  // 1. 加载数组基地址
+  // - 1. 从栈上加载数组的基地址（这个地址是指向堆上数组的指针）
   instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, array) }))
-  // 2. 加载并计算索引偏移
+
+  // - 2. 计算元素的偏移量
   instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
-  instrs.push(Slli(T1, T1, 3))
-  // 3. 安全地计算目标地址
+  let arr_ty = get_array_element_type(array, env)
+  match arr_ty {
+    Int(_) => {
+      instrs.push(Slli(T1, T1, 2))
+    }
+    _ => {
+      instrs.push(Slli(T1, T1, 3))
+    }
+  }
+  // - 3. 计算元素在堆上的实际地址
   instrs.push(Add(T0, T0, T1))
   // 4. 加载并存储值
   let value_offset = env.vars.get(value.to_string()).unwrap().0
-  match get_array_element_type(array, env) {
+  match arr_ty {
     Double => {
       instrs.push(Fld(Ft0, { base: Fp, offset: value_offset }))
       instrs.push(Fsd(Ft0, { base: T0, offset: 0 }))
