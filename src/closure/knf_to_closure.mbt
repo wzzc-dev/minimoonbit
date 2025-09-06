@@ -1,5 +1,5 @@
 ///|
-pub typealias @immut/hashmap.T[Name, LowType] as LocalEnv
+pub typealias @immut/hashmap.HashMap[Name, LowType] as LocalEnv
 
 ///|
 pub fn knf_program_to_closure(
@@ -182,7 +182,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
 
 ///|
 fn fv_to_array(
-  fv : @hashset.T[FreeVarWithType],
+  fv : @hashset.HashSet[FreeVarWithType],
 ) -> Array[(@types.Name, LowType)] {
   let res = []
   fv.each(fn(fv) { res.push((fv.name, fv.ty)) })
@@ -256,7 +256,7 @@ pub impl Compare for FreeVarWithType with compare(self, other) {
 }
 
 ///|
-impl Eq for FreeVarWithType with op_equal(
+impl Eq for FreeVarWithType with equal(
   self : FreeVarWithType,
   other : FreeVarWithType,
 ) {
@@ -269,7 +269,7 @@ fn new_fv(name : @types.Name, ty : LowType) -> FreeVarWithType {
 }
 
 ///|
-fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
+fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
   match e {
     Unit => @hashset.new()
     Int(_) => @hashset.new()
@@ -343,7 +343,7 @@ fn fv(e : @knf.Knf) -> @hashset.T[FreeVarWithType] {
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/struct2.mbt",
+    "contest-2025-data/test_cases/mbt/struct4.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string() + "\n")

@@ -4,11 +4,11 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   //   if extenv.contains(fundef.name.inner()) {
   //     continue
   //   }
-  //   if fundef.name.inner() == "loop2" {
+  //   // if fundef.name.inner() == "loop2" {
   //   println("fundef: " + fundef.to_string())
-  //   }
+  //   // }
   // }
-  // println("minimbt_main: " + input.body.to_string())
+  // println("minimbt_main: " + input.body.to_json().stringify())
   let functions = []
 
   // 为每个函数定义生成汇编代码
@@ -222,7 +222,7 @@ pub fn AssemblyFunction::output(
 
 ///|
 pub struct Env {
-  vars : @immut/hashmap.T[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
+  vars : @immut/hashmap.HashMap[String, (Int, @closure.LowType)] // 变量名到栈偏移的映射
   mut current_offset : Int // 当前可用的栈偏移
   fundefs : Array[@closure.FuncDef] // 函数定义
 }
@@ -368,22 +368,19 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Label(label_end.inner()))
 
       // While loops return Unit, so set reg_ret to 0
-      // instrs.push(Li(reg_ret, "0"))
+      instrs.push(Li(reg_ret, "0"))
     }
     Let((name, ty), e1, e2) => {
       // 计算 e1
       instrs.append(compile_expr(e1, env))
-      if not(name.to_string() == "_" && ty == Unit) {
-        let offset = env.current_offset
-        match ty {
-          Double => instrs.push(Fsd(freg_ret, { base: Fp, offset }))
-          _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
-        }
-        env = env.add(name.to_string(), offset, ty)
-        // 更新环境
-        env.current_offset -= 8
+      let offset = env.current_offset
+      match ty {
+        Double => instrs.push(Fsd(freg_ret, { base: Fp, offset }))
+        _ => instrs.push(Sd(reg_ret, { base: Fp, offset }))
       }
-
+      env = env.add(name.to_string(), offset, ty)
+      // 更新环境
+      env.current_offset -= 8
       // 计算 e2,使用更新后的环境
       instrs.append(compile_expr(e2, env))
     }
@@ -395,9 +392,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             Double => instrs.push(Fld(freg_ret, { base: Fp, offset }))
             _ => instrs.push(Ld(reg_ret, { base: Fp, offset }))
           }
-        None =>
-          // 如果在环境中找不到，可能是外部函数或全局函数
-          instrs.push(La(reg_ret, name.to_string()))
+        None => instrs.push(La(reg_ret, name.to_string()))
       }
     MakeClosure((name, ty), closure, e) =>
       emit_make_closure(name, ty, closure, e, instrs, env)
@@ -429,54 +424,32 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     }
     TupleGet(tuple, index) => {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, tuple) }))
-      match env.vars.get(tuple.to_string()) {
-        Some((_, Tuple(arr))) => {
-          match arr[index] {
-            Double =>
-              instrs.push(Fld(freg_ret, { base: T0, offset: index * 8 }))
-            Array(_) => {
-              instrs.push(Slli(reg_ret, T0, 3 * index))
-            }
-            _ => instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
-          }
-        }
-        _ =>
-          @util.die("TupleGet: " + tuple.to_string() + ", " + index.to_string())
-      }
+      instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
     }
     ArrayGet(array, index) => {
       // 1. 加载数组基地址
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, array) }))
-
       // 2. 加载索引值并根据类型计算偏移
       instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
       instrs.push(Slli(T1, T1, 3)) // 8字节
-
       // 3. 计算最终地址
       instrs.push(Add(T0, T0, T1))
-
       // 4. 根据数组元素类型选择加载指令
       match get_array_element_type(array, env) {
         Double => instrs.push(Fld(freg_ret, { base: T0, offset: 0 }))
         Int => instrs.push(Lw(reg_ret, { base: T0, offset: 0 }))
-        Array(_) => instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))
-        DirectFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Mv
-        ClosureFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 闭包函数指针也用 Mv
-        Ptr => instrs.push(Mv(reg_ret, T0)) // 指针类型用 Mv
+        DirectFn(_, _) | ClosureFn(_, _)  | Ptr => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Mv
         _ => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Ld
       }
     }
     ArrayPut(array, index, value) => {
       // 1. 加载数组基地址
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, array) }))
-
       // 2. 加载并计算索引偏移
       instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
       instrs.push(Slli(T1, T1, 3))
-
       // 3. 安全地计算目标地址
       instrs.push(Add(T0, T0, T1))
-
       // 4. 加载并存储值
       let value_offset = env.vars.get(value.to_string()).unwrap().0
       match get_array_element_type(array, env) {
@@ -487,14 +460,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
         Int => {
           instrs.push(Lw(T2, { base: Fp, offset: value_offset }))
           instrs.push(Sw(T2, { base: T0, offset: 0 }))
-        }
-        DirectFn(_, _) | ClosureFn(_, _) | Ptr => {
-          instrs.push(Ld(T2, { base: Fp, offset: value_offset }))
-          instrs.push(Sd(T2, { base: T0, offset: 0 }))
-        }
-        Array(_) => {
-          instrs.push(Ld(T2, { base: Fp, offset: value_offset }))
-          instrs.push(Sd(T2, { base: T0, offset: 0 }))
         }
         _ => {
           instrs.push(Ld(T2, { base: Fp, offset: value_offset }))
@@ -667,19 +632,9 @@ fn emit_args(
 fn get_array_element_type(array : @typing.Name, env : Env) -> @closure.LowType {
   match env.find_type(array.to_string()) {
     Array(elem_type) => elem_type
-    Tuple(elems) =>
-      // 如果是元组，检查第一个元素是否是数组
-      match elems.get(0) {
-        Some(elem_type) => elem_type
-        _ => Ptr // 默认类型
-      }
-    _ =>
-      // 尝试从变量名推断类型
-      if array.to_string().contains("array") {
-        Int // 假设是整数数组
-      } else {
-        Ptr // 默认类型
-      }
+    Ptr => Ptr
+    _ => @util.die("get array element type error " + array.to_string() + 
+    "\n "  + env.find_type(array.to_string()).to_string())
   }
 }
 
@@ -691,10 +646,10 @@ pub let extenv = [
 ]
 
 ///|
-let _default_counter : Ref[Int] = { val: 0 }
+let default_counter : Ref[Int] = { val: 0 }
 
 ///|
-fn gen_label(name : String, counter? : Ref[Int] = _default_counter) -> Label {
+fn gen_label(name : String, counter? : Ref[Int] = default_counter) -> Label {
   counter.val = counter.val + 1
   Label("label_" + name + "_" + counter.val.to_string())
 }

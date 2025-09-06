@@ -131,7 +131,7 @@ pub fn Type::size_of(self : Type, size_of_ptr : Int) -> Int {
 }
 
 
-pub impl Eq for Type with op_equal(self, other) -> Bool {
+pub impl Eq for Type with equal(self, other) -> Bool {
   match (self, other) {
     (Type::Unit, Type::Unit) => true
     (Type::Bool, Type::Bool) => true
@@ -143,12 +143,12 @@ pub impl Eq for Type with op_equal(self, other) -> Bool {
       } else {
         let mut equal = true
         for i = 0; i < xs.length(); i = i + 1 {
-          if not(xs[i].op_equal(ys[i])) {
+          if not(xs[i].equal(ys[i])) {
             equal = false
             break
           }
         }
-        equal && x.op_equal(y)
+        equal && x.equal(y)
       }
     }
     (Type::Tuple(xs), Type::Tuple(ys)) => {
@@ -157,7 +157,7 @@ pub impl Eq for Type with op_equal(self, other) -> Bool {
       } else {
         let mut equal = true
         for i = 0; i < xs.length(); i = i + 1 {
-          if not(xs[i].op_equal(ys[i])) {
+          if not(xs[i].equal(ys[i])) {
             equal = false
             break
           }
@@ -165,7 +165,7 @@ pub impl Eq for Type with op_equal(self, other) -> Bool {
         equal
       }
     }
-    (Type::Array(x), Type::Array(y)) => x.op_equal(y)
+    (Type::Array(x), Type::Array(y)) => x.equal(y)
     (Type::Struct(name1, fields1), Type::Struct(name2, fields2)) => {
       name1 == name2 && {
         if fields1.length() != fields2.length() {
@@ -173,7 +173,7 @@ pub impl Eq for Type with op_equal(self, other) -> Bool {
         } else {
           let mut equal = true
           for i = 0; i < fields1.length(); i = i + 1 {
-            if fields1[i].0 != fields2[i].0 || not(fields1[i].1.op_equal(fields2[i].1)) {
+            if fields1[i].0 != fields2[i].0 || not(fields1[i].1.equal(fields2[i].1)) {
               equal = false
               break
             }

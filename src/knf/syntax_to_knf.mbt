@@ -1,14 +1,14 @@
 ///|
-pub typealias @immut/hashmap.T[String, Type] as LocalEnv
+pub typealias @immut/hashmap.HashMap[String, Type] as LocalEnv
 
 ///|
 struct KnfEnv {
   mut counter : Int
-  externals : @immut/hashmap.T[String, Type]
+  externals : @immut/hashmap.HashMap[String, Type]
 }
 
 ///|
-pub fn KnfEnv::new(externals : @immut/hashmap.T[String, Type]) -> KnfEnv {
+pub fn KnfEnv::new(externals : @immut/hashmap.HashMap[String, Type]) -> KnfEnv {
   { counter: 1, externals }
 }
 
