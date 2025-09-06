@@ -8,6 +8,7 @@ fn program(
   Parser(topLevel)
   .many()
   .map(fn(decls) {
+    // println("decls: " + decls.to_string())
     // Combine all top-level declarations into a single syntax tree
     decls.rev_fold(init=@types.Syntax::Unit, fn(acc, decl) {
       // println("decl: " + decl.to_string())
@@ -15,10 +16,12 @@ fn program(
       // println("")
       match decl {
         @types.Syntax::LetRec(fn_def, _) => @types.Syntax::LetRec(fn_def, acc)
-        @types.Syntax::Let(binding, value, _) => @types.Syntax::Let(binding, value, acc)
-        @types.Syntax::Struct(name, generic, fields, _) =>  @types.Syntax::Struct(name, generic, fields, acc)
-        // @types.Syntax::StructConstruct(name, fields) =>  @types.Syntax::StructConstruct(name, fields)
-        
+        @types.Syntax::Let(binding, value, _) =>
+          @types.Syntax::Let(binding, value, acc)
+        @types.Syntax::Struct(name, generic, fields, _) =>
+          @types.Syntax::Struct(name, generic, fields, acc)
+        @types.Syntax::Enum(name, generic, variants, _) =>
+          @types.Syntax::Enum(name, generic, variants, acc)
         _ => acc
       }
     })
@@ -32,7 +35,11 @@ fn topLevel(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("topLevel: " + tokens.to_string())
-  Parser(toplevelFnDecl).or(topLetDecl).or(structDecl).parse(tokens)
+  Parser(toplevelFnDecl)
+  .or(topLetDecl)
+  .or(structDecl)
+  .or(enumDecl)
+  .parse(tokens)
 }
 // top_let_decl:
 //	'let' IDENTIFIER (':' type)? '=' expr ';';
@@ -314,7 +321,12 @@ fn structDecl(
       (((((_, IDENTIFIER(struct_name)), None), _), None), _) =>
         @types.Syntax::Struct(struct_name, "", [], @types.Syntax::Unit)
       (((((_, IDENTIFIER(struct_name)), None), _), Some(structFieldList)), _) =>
-        @types.Syntax::Struct(struct_name, "", structFieldList, @types.Syntax::Unit)
+        @types.Syntax::Struct(
+          struct_name,
+          "",
+          structFieldList,
+          @types.Syntax::Unit,
+        )
       (
         (
           (
@@ -324,7 +336,13 @@ fn structDecl(
           Some(structFieldList),
         ),
         _,
-      ) => @types.Syntax::Struct(struct_name, generic, structFieldList, @types.Syntax::Unit)
+      ) =>
+        @types.Syntax::Struct(
+          struct_name,
+          generic,
+          structFieldList,
+          @types.Syntax::Unit,
+        )
       _ => @util.die("Invalid struct decl")
     }
   })
@@ -376,12 +394,97 @@ fn structField(
 
 // enum_decl:
 //  'enum' ('[' UPPER_IDENTIFIER ']')? UPPER_IDENTIFIER '{' enum_variant_list? '}';
+
+///|
+fn enumDecl(
+  tokens : ArrayView[@lex.Token],
+) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  ptoken_enum
+  .parser_and(identifier)
+  .zeroOrOnce(lbracket.parser_and(identifier).parser_and(rbracket))
+  .parser_and(lcurlybracket)
+  .zeroOrOnce(enumVariantList)
+  .parser_and(rcurlybracket)
+  .map(fn(input) {
+    match input {
+      (((((_, IDENTIFIER(enum_name)), None), _), Some(enumVariantList)), _) =>
+        @types.Syntax::Enum(enum_name, "", enumVariantList, @types.Syntax::Unit)
+      _ => @util.die("Invalid enum decl")
+    }
+  })
+  .parse(tokens)
+}
+
 // enum_variant_list:
 // 	enum_variant (';' enum_variant)* ';'?;
+
+///|
+fn enumVariantList(
+  tokens : ArrayView[@lex.Token],
+) -> (Array[(String, Array[@types.Type])], ArrayView[@lex.Token])? {
+  // @util.logger("enumVariantList: tokens: " + tokens.to_string())
+  Parser(enumVariant)
+  .parser_and(semicolon.parser_and(enumVariant).many())
+  .zeroOrOnce(semicolon)
+  .map(fn(input) {
+    // @util.logger("enumVariantList: input: " + input.to_string())
+    match input {
+      ((enumVariant, enumVariantList), _) => {
+        let enumVariants = [enumVariant]
+        for x in enumVariantList {
+          let (_, x) = x
+          enumVariants.push(x)
+        }
+        enumVariants
+      }
+    }
+  })
+  .parse(tokens)
+}
 // enum_variant:
 //   UPPER_IDENTIFIER ('(' enum_variant_field_list? ')')?;
+
+///|
+fn enumVariant(
+  tokens : ArrayView[@lex.Token],
+) -> ((String, Array[@types.Type]), ArrayView[@lex.Token])? {
+  // @util.logger("enumVariant: tokens: " + tokens[:10].to_string())
+  identifier
+  .zeroOrOnce(lparen.parser_and(enumVariantFieldList).parser_and(rparen))
+  .map(fn(input) {
+    // @util.logger("enumVariant: input: " + input.to_string())
+    match input {
+      (IDENTIFIER(id), None) => (id, [])
+      (IDENTIFIER(id), Some(((_, enumVariantFieldList), _))) =>
+        (id, enumVariantFieldList)
+      _ => @util.die("Invalid enum variant")
+    }
+  })
+  .parse(tokens)
+}
 // enum_variant_field_list:
 // 	type (',' type)*;
+
+///|
+fn enumVariantFieldList(
+  tokens : ArrayView[@lex.Token],
+) -> (Array[@types.Type], ArrayView[@lex.Token])? {
+  Parser(parseType)
+  .parser_and(ptoken_comma.parser_and(parseType).many())
+  .map(fn(input) {
+    match input {
+      (type_, typeList) => {
+        let types = [type_]
+        for x in typeList {
+          let (_, x) = x
+          types.push(x)
+        }
+        types
+      }
+    }
+  })
+  .parse(tokens)
+}
 
 // nontop_fn_decl:
 // 	'fn' IDENTIFIER '(' nontop_param_list? ')' (
@@ -782,12 +885,8 @@ fn leftValue(
   .zeroOrOnce(
     dot
     .parser_and(identifier)
-    .parser_or(
-      lbracket
-      .parser_and(expr)
-      .parser_and(rbracket)
-    )
-    .many()
+    .parser_or(lbracket.parser_and(expr).parser_and(rbracket))
+    .many(),
   )
   .map(fn(input) {
     match input {
@@ -995,7 +1094,9 @@ fn ifLevelExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // @util.logger("ifLevelExpr: " + tokens.to_string())
-  Parser(getOrApplyLevelExpr).or(ifExpr).parse(tokens)
+  Parser(getOrApplyLevelExpr).or(ifExpr)
+  // .or(matchExpr)
+  .parse(tokens)
 }
 
 // if_expr: 'if' expr block_expr ('else' (if_expr | block_expr))?;
@@ -1020,6 +1121,23 @@ fn ifExpr(
   })
   .parse(tokens)
 }
+
+// match_expr: 'match' expr '{' match_arm_list '}';
+// match_arm_list:
+// 	match_arm (';' match_arm)* ';'?;
+// match_arm:
+//  	pattern '=>' expr;
+
+// pattern:
+//   NUMBER
+//   | 'true'
+//   | 'false'
+//   | '(' pattern (',' pattern)* ')' // Tuple pattern
+//   | WILDCARD // Wildcard pattern
+//   | IDENTIFIER // Variable pattern
+//   | (UPPER_IDENTIFIER '::')? UPPER_IDENTIFIER ('(' pattern ( ',' pattern )* ')')?; // Enum variant pattern
+
+
 // get_or_apply_level_expr:
 // 	value_expr # value_expr_
 // 	// x[y]
@@ -1166,6 +1284,7 @@ fn getOrApplyLevelExpr(
 // 	| not_expr
 // 	| array_make_expr
 //  | struct_construct_expr;
+//  | enum_construct_expr
 
 ///|
 fn valueExpr(
@@ -1174,6 +1293,7 @@ fn valueExpr(
   // println("valueExpr: " + tokens.to_string())
   Parser(arrayMakeExpr)
   .or(structConstructExpr)
+  .or(enumConstructExpr)
   .or(unitExpr)
   .or(groupExpr)
   .or(tupleExpr)
@@ -1602,6 +1722,58 @@ fn structFieldExpr(
   .parse(tokens)
 }
 
+// enum_construct_expr:
+//   (UPPER_IDENTIFIER '::')? UPPER_IDENTIFIER ('(' enum_construct_field_list? ')')?;
+
+///|
+fn enumConstructExpr(
+  tokens : ArrayView[@lex.Token],
+) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  @util.logger("enumConstructExpr: " + tokens[:10].to_string())
+  identifier
+  .zeroOrOnce(ptoken_colon.parser_and(ptoken_colon).parser_and(identifier))
+  .parser_and(lparen)
+  .parser_and(enumConstructFieldList)
+  .parser_and(rparen)
+  .map(fn(input) {
+    // @util.logger("enumConstructExpr input: " + input.to_string())
+    match input {
+      ((((IDENTIFIER(name), None), _), enum_construct_field_list), _) => {
+        @types.Syntax::EnumConstruct(name, enum_construct_field_list)
+      }
+      _ => @types.Syntax::Unit
+    }
+  })
+  .parse(tokens)
+}
+
+// enum_construct_field_list:
+// 	expr (',' expr)*; // Point(1, 2)
+
+///|
+fn enumConstructFieldList(
+  tokens : ArrayView[@lex.Token],
+) -> (Array[@types.Syntax], ArrayView[@lex.Token])? {
+  // @util.logger("enumConstructFieldList: " + tokens.to_string())
+  Parser(expr)
+  .parser_and(ptoken_comma.parser_and(expr).many())
+  .map(fn(input) {
+    match input {
+      (expr, exprs) => {
+        let result = [expr]
+        let exprs = exprs.map(fn(input) {
+          match input {
+            (_, expr) => expr
+          }
+        })
+        result.append(exprs)
+        result
+      }
+    }
+  })
+  .parse(tokens)
+}
+
 // type:
 // 	'Unit'
 // 	| 'Bool'
@@ -1651,7 +1823,8 @@ fn genericType(
   userIdentifier
   .map(fn(input) {
     match input {
-      @lex.Token::USER_IDENTIFIER(name) => @types.Type::UserDefineType(name, {val: []})
+      @lex.Token::USER_IDENTIFIER(name) =>
+        @types.Type::UserDefineType(name, { val: [] })
       _ => @util.die("error user")
     }
   })
@@ -1667,7 +1840,8 @@ fn userDefineType(
   .map(fn(input) {
     // @util.logger("userDefineType: " + input.to_string())
     match input {
-      @lex.Token::IDENTIFIER(name) => @types.Type::UserDefineType(name, { val: []})
+      @lex.Token::IDENTIFIER(name) =>
+        @types.Type::UserDefineType(name, { val: [] })
       _ => @util.die("error user")
     }
   })
@@ -1926,7 +2100,7 @@ test {
 test {
   let tokens = []
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/struct1.mbt",
+    "contest-2025-data/test_cases/mbt/enum1.mbt",
   )
   // println(_test2)
   @lex.julex({ str: _test2, offset: 0, array: tokens })

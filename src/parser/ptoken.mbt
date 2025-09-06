@@ -277,3 +277,10 @@ let ptoken_cmp_operator : Parser[@lex.Token] = ptoken(fn(input) {
     _ => false
   }
 })
+
+let ptoken_enum : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
+    @lex.Token::ENUM => true
+    _ => false
+  }
+})

@@ -60,7 +60,7 @@ test {
   )
   inspect(
     Type::from_json(Type::Array(Type::Int).to_json()),
-    content="Array(Int)", 
+    content="Array(Int)",
   )
   inspect(
     Type::from_json(Type::Var({ val: None }).to_json()),
@@ -170,14 +170,36 @@ pub fn Syntax::to_json(self : Syntax) -> Json {
     Get(arr, idx) => ["Get", arr.to_json(), idx.to_json()]
     Put(arr, idx, value, rest) =>
       ["Put", arr.to_json(), idx.to_json(), value.to_json(), rest.to_json()]
-    Enum(name, variant) => ["Enum", name, variant]
-    Struct(name, generic, fields, rest) => ["Struct", name, generic, fields.map(x => ([x.0 |> Json::string, x.1.to_json()] : Json)) |> Json::array, rest.to_json()]
-    StructConstruct(name, fields) => ["StructConstruct", name, fields.map(x => ([x.0 |> Json::string, x.1.to_json()] : Json)) |> Json::array]
+    Enum(name, generic, variant, rest) =>
+      ["Enum", name, generic, variant, rest.to_json()]
+    EnumConstruct(name, fields) =>
+      [
+        "EnumConstruct",
+        name,
+        fields.map(x => (x.to_json() : Json)) |> Json::array,
+      ]
+    Struct(name, generic, fields, rest) =>
+      [
+        "Struct",
+        name,
+        generic,
+        fields.map(x => ([x.0 |> Json::string, x.1.to_json()] : Json))
+        |> Json::array,
+        rest.to_json(),
+      ]
+    StructConstruct(name, fields) =>
+      [
+        "StructConstruct",
+        name,
+        fields.map(x => ([x.0 |> Json::string, x.1.to_json()] : Json))
+        |> Json::array,
+      ]
     While(e, stmts) => ["While", e.to_json(), stmts.to_json()]
     Return(e) => ["Return", e.map(Syntax::to_json)]
     Assign(name, value) => ["Assign", name.to_json(), value.to_json()]
     FieldAccess(e, name) => ["FieldAccess", e.to_json(), name.to_json()]
-    UserDefineType(name, fields) => ["UserDefineType", name.to_json(), fields.to_json()]
+    UserDefineType(name, fields) =>
+      ["UserDefineType", name.to_json(), fields.to_json()]
   }
 }
 

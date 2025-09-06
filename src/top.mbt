@@ -29,10 +29,11 @@ pub(all) enum Syntax {
   LetTuple(Array[(String, Type)], Syntax, Syntax) // let (_ , _) : (_, _)= _; _
   Put(Syntax, Syntax, Syntax, Syntax) // _[_] = _; _
   Assign(Syntax, Syntax) // _ = _
-  Struct(String, String, Array[(String, Type)], Syntax) // struct _ [_] { _: _, _: _ } _
+  Struct(String, String, Array[(String, Type)], Syntax) // struct _ [_] { _: _, _: _ }  _
   StructConstruct(String, Array[(String, Syntax)]) // _::{ _: _, _: _ }
   FieldAccess(Syntax, String) // _.field
-  Enum(String, Array[String]) // enum { A, B, C }
+  Enum(String, String, Array[(String, Array[Type])], Syntax) // enum [_] { A, B, C }  _
+  EnumConstruct(String, Array[Syntax]) // _::{ _: _, _: _ }
   While(Syntax, Syntax) // while x { ... }
   Return(Syntax?) // return _;
 } derive(Show, ToJson(style="flat"))
