@@ -41,7 +41,7 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
       }
       unify(ty1, ty2)
     }
-    (UserDefineType(name1, fields1), UserDefineType(name2, fields2)) => {
+    (UserDefineType(name1, fields1), UserDefineType(name2, fields2)) =>
       // @util.logger("user define type unify: " + name1 + " " + name2)
       // @util.logger("fields1: " + fields1.to_string())
       // @util.logger("fields2: " + fields2.to_string())
@@ -53,11 +53,14 @@ fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
           fields2.val = fields1.val
         }
       } else {
-        raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
+        raise TyErr(
+          "type unify error 1: " + t1.to_string() + " " + t2.to_string(),
+        )
       }
-    }
     _ =>
-      raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
+      raise TyErr(
+        "type unify error 2: " + t1.to_string() + " " + t2.to_string(),
+      )
   }
 }
 
@@ -73,7 +76,14 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
       }
       match (ty1.val, ty2.val) {
         (Some(val1), Some(val2)) => check_occur(val1, val2)
-        _ => raise TyErr("Unexpected None value in type variable")
+        (None, None) => ()
+        _ =>
+          raise TyErr(
+            "Unexpected None value in type variable: " +
+            t1.to_string() +
+            " t2: " +
+            t2.to_string(),
+          )
       }
     }
     (Var(ty1), Array(Var(ty))) | (Array(Var(ty)), Var(ty1)) => {
@@ -84,7 +94,13 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
       }
       match (ty1.val, ty.val) {
         (Some(val1), Some(val2)) => check_occur(val1, val2)
-        _ => raise TyErr("Unexpected None value in type variable")
+        _ =>
+          raise TyErr(
+            "The type of array element should not be a type variable: " +
+            t1.to_string() +
+            " t2: " +
+            t2.to_string(),
+          )
       }
     }
     (Tuple(tys), Var(ty1)) | (Var(ty1), Tuple(tys)) =>
@@ -93,12 +109,17 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
           Var(t) =>
             if physical_equal(t, ty1) {
               raise TyErr(
-                "The type of tuple element should not be a type variable ",
+                "The type of tuple element should not be a type variable: " +
+                t.to_string(),
               )
             } else {
               match ty1.val {
                 Some(val) => check_occur(val, ty)
-                None => raise TyErr("Unexpected None value in type variable")
+                None =>
+                  raise TyErr(
+                    "The type of tuple Unexpected None value in type variable: " +
+                    t.to_string(),
+                  )
               }
             }
           _ => ()
@@ -109,27 +130,34 @@ fn check_occur(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
         match t1.val {
           Some(val) => {
             if physical_equal(t, val) {
-              raise TyErr("The type of function should not be a type variable")
+              raise TyErr(
+                "The type of function should not be a type variable: " +
+                t.to_string(),
+              )
             }
             check_occur(val, t)
           }
-          None => raise TyErr("Unexpected None value in type variable")
+          None => ()
         }
       }
       if physical_equal(ty, t1) {
-        raise TyErr("The type of function should not be a type variable")
+        raise TyErr(
+          "The type of function should not be a type variable: " +
+          ty.to_string(),
+        )
       } else {
         match (t1.val, ty.val) {
           (Some(val1), Some(val2)) => check_occur(val1, val2)
-          _ => raise TyErr("Unexpected None value in type variable")
+          _ => ()
         }
       }
     }
-    (UserDefineType(name1, _), UserDefineType(name2, _)) => {
+    (UserDefineType(name1, _), UserDefineType(name2, _)) =>
       if name1 != name2 {
-        raise TyErr("type unify error: " + t1.to_string() + " " + t2.to_string())
+        raise TyErr(
+          "type unify error: " + t1.to_string() + " " + t2.to_string(),
+        )
       }
-    }
     _ => ()
   }
 }
@@ -147,12 +175,11 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     Int(_) => Int
     Int64(_) => Int
     Double(_) => Double
-    UserDefineType(name, fields) => UserDefineType(name, {val: fields})
+    UserDefineType(name, fields) => UserDefineType(name, { val: fields })
     Struct(name, _, fields, rest) => {
-      let ty = @types.Type::UserDefineType(name, {val: fields})
+      let ty = @types.Type::UserDefineType(name, { val: fields })
       let newctx = ctx.inner().add(name, ty)
       infer(newctx, rest)
-
     }
     StructConstruct(name, fields) => {
       let types = fields.map(fn(field) {
@@ -160,8 +187,30 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         let ty = infer(ctx, syn)
         (name, ty)
       })
-      UserDefineType(name, {val: types})
+      UserDefineType(name, { val: types })
     }
+    Enum(enum_name, _, enum_variant_list, cont) => {
+      let newctx = ctx
+      let enum_variant_list_ty = enum_variant_list.map(fn(variant) {
+        let (name, fields) = variant
+        (name, @types.Type::Tuple(fields))
+      })
+      let ty = @types.Type::UserDefineType(enum_name, {
+        val: enum_variant_list_ty,
+      })
+      // @util.logger("Enum: " + enum_name + " " + ty.to_string())
+      let newctx = newctx.inner().add(enum_name, ty)
+      infer(newctx, cont)
+    }
+    EnumConstruct(_enum_name, _arr) =>
+      // @util.logger("EnumConstruct: " + _enum_name)
+      // let enum_variant_list_ty = _arr.map(fn(arr) {
+      //   match arr {
+      //     syn => infer(ctx, syn)
+      //   }
+      // })
+      // @util.logger(@types.Type::Tuple(enum_variant_list_ty).to_string())
+      Var({ val: None })
     FieldAccess(e, name) => {
       let t = infer(ctx, e)
       match t {
@@ -174,17 +223,24 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           }
           let struct_ty = ctx.inner().get(struct_name)
           match struct_ty {
-            Some(UserDefineType(_, fields)) => {
+            Some(UserDefineType(_, fields)) =>
               for field in fields.val {
                 let (name2, ty) = field
                 if name2 == name {
                   return ty
                 }
               }
-            }
-            _ => raise TyErr("struct not found " + struct_name + " in " + t.to_string() + 
-                "\n struct_ty: " + struct_ty.to_string() +
-                "\n name: " + name)
+            _ =>
+              raise TyErr(
+                "struct not found " +
+                struct_name +
+                " in " +
+                t.to_string() +
+                "\n struct_ty: " +
+                struct_ty.to_string() +
+                "\n name: " +
+                name,
+              )
           }
           raise TyErr("field not found " + name + " in " + t.to_string())
         }
@@ -192,7 +248,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       }
     }
     // eg.
-    Var(x) =>{
+    Var(x) =>
       // if x == "_arr" {
       //   @util.logger("infer: Var(x) =>" + x + "\n  ctx.inner().get(x): " + ctx.inner().get(x).to_string())
       // }
@@ -211,7 +267,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
               t
             }
           }
-      }}
+      }
     Tuple(tys) => {
       let result = []
       for ty in tys {
@@ -224,17 +280,21 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         Bool => Bool
         _ => raise TyErr("The operand of Not is not a bool value")
       }
-    Array(n, syn) => {
+    Array(n, syn) =>
       // @util.logger("infer: Array: " + syn.to_string() + " \n")
       match infer(ctx, n) {
         Int => Array(infer(ctx, syn))
-        _ => raise TyErr("The operand of Array is not a int value\n" + 
-          "n = " + n.to_string() + "\n" +
-          "syn = " + syn.to_string() + "\n"
-        )
+        _ =>
+          raise TyErr(
+            "The operand of Array is not a int value\n" +
+            "n = " +
+            n.to_string() +
+            "\n" +
+            "syn = " +
+            syn.to_string() +
+            "\n",
+          )
       }
-    }
-      
     Neg(syn, ..) as neg =>
       match infer(ctx, syn) {
         Int => {
@@ -269,28 +329,45 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         Int =>
           match infer(ctx, arr) {
             Array(t) => t
-            _ => raise TyErr("The operand of Get should have Type Array, but got: " + arr.to_string())
+            _ =>
+              raise TyErr(
+                "The operand of Get should have Type Array, but got: " +
+                arr.to_string(),
+              )
           }
         _ => raise TyErr("The index of Get should have Type Int")
       }
     If(condition, b1, b2) =>
       match infer(ctx, condition) {
         Bool =>
-          if infer(ctx, b1) == infer(ctx, b2) {
-            return infer(ctx, b1)
-          } else {
-            let b1_ty = infer(ctx, b1)
-            let b2_ty = infer(ctx, b2)
-            raise TyErr(
-              "The branchs of If should have same type: b1 " +
-              b1.to_string() +
-              " b2 " +
-              b2.to_string() +
-              " but got: b1 ty: " +
-              b1_ty.to_string() +
-              " b2 ty:" +
-              b2_ty.to_string(),
-            )
+          match (infer(ctx, b1), infer(ctx, b2)) {
+            (Tuple(t1), Tuple(t2)) => {
+              for index = 0; index < t1.length(); index = index + 1 {
+                let ty1 = t1[index]
+                let ty2 = t2[index]
+                match (ty1, ty2) {
+                  (_, Var(_)) => unify(ty1, ty2)
+                  (Var(_), _) => unify(ty2, ty1)
+                  _ => ()
+                }
+              }
+              Tuple(t1)
+            }
+            (ty1, ty2) =>
+              if ty1 == ty2 {
+                ty1
+              } else {
+                 raise TyErr(
+                  "The branchs of If should have same type: b1 " +
+                  b1.to_string() +
+                  " b2 " +
+                  b2.to_string() +
+                  " but got: b1 ty: " +
+                  ty1.to_string() +
+                  " b2 ty:" +
+                  ty2.to_string(),
+                )
+              }
           }
         _ => raise TyErr("The condition of If should have Type Bool")
       }
@@ -339,13 +416,82 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           Bool
         }
         (Bool, Bool) => Bool
-        
+        (Var(t), Bool) | (Bool, Var(t)) => {
+          t.val = Some(Bool)
+          Bool
+        }
+        (Var(t), UserDefineType(name, fields))
+        | (UserDefineType(name, fields), Var(t)) => {
+          // @util.logger("Eq: " + t.to_string() + " " + name.to_string())
+          t.val = Some(UserDefineType(name, fields))
+          Bool
+        }
+        (UserDefineType(_name1, fields1), Tuple(fields2)) => {
+          if fields1.val.length() != fields2.length() {
+            raise TyErr(
+              "The operands of " + e.to_string() + " should have same type",
+            )
+          } else {
+            let ty1 = fields1.val.map(fn(input) { input.1 })
+            if ty1 != fields2 {
+              raise TyErr(
+                "The operands of " +
+                e.to_string() +
+                " should have same type; ty1: " +
+                ty1.to_string() +
+                ", fields2: " +
+                fields2.to_string(),
+              )
+            }
+          }
+          Bool
+        }
+        (UserDefineType(name1, fields1), UserDefineType(name2, fields2)) => {
+          if name1 != name2 {
+            raise TyErr(
+              "The operands of " +
+              e.to_string() +
+              " should have same type; name1: " +
+              name1.to_string() +
+              ", name2: " +
+              name2.to_string() +
+              ", fields1: " +
+              fields1.to_string() +
+              ", fields2: " +
+              fields2.to_string(),
+            )
+          }
+          Bool
+        }
+        (Tuple(fields1), Tuple(fields2)) => {
+          if fields1.length() != fields2.length() {
+            raise TyErr(
+              "The operands of " +
+              e.to_string() +
+              " should have same type; fields1: " +
+              fields1.to_string() +
+              ", fields2: " +
+              fields2.to_string(),
+            )
+          }
+          Bool
+        }
         _ =>
           raise TyErr(
-            "The operands of " + e.to_string() + " should have same type",
+            "The operands of " +
+            e.to_string() +
+            " should have same type" +
+            " l: " +
+            l.to_string() +
+            " r: " +
+            r.to_string() +
+            " l infer: " +
+            infer(ctx, l).to_string() +
+            " r infer: " +
+            infer(ctx, r).to_string(),
           )
       }
-    Let((name, ty), value, s1) => {
+    Let((name, ty), value, s1) =>
       // @util.logger("Let: " + name + " " + ty.to_string() + " " + value.to_string())
       match ty {
         Var({ val: None }) => {
@@ -390,11 +536,22 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           }
         }
       }
-    }
-      
     LetRec({ name: (f, t), args: params, body }, rest) => {
       let env_with_f = ctx.inner().add(f, t)
-      let params_ty = params.map(t => t.1.repr())
+      // let params_ty = params.map(t => t.1.repr())
+      let params_ty = params.map(fn(input) {
+        match input {
+          (_, UserDefineType(name, _fields)) => {
+            let t = ctx.inner().get(name).unwrap()
+            match t {
+              UserDefineType(_, fields) => _fields.val = fields.val
+              _ => @util.die("let user define type")
+            }
+            t
+          }
+          t => t.1.repr()
+        }
+      })
       let mut env_with_params = env_with_f
       for p in params {
         match p {
@@ -404,8 +561,6 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           // }
           _ => env_with_params = env_with_params.add(p.0, p.1)
         }
-
-        
       }
       let body_ty = infer(env_with_params, body)
       unify(t, Fun(params_ty, body_ty))
@@ -437,12 +592,40 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
                 _ => raise TyErr("Tuple expected, found {}")
               }
             }
+            App(_, _) => {
+              let t = infer(ctx, s1)
+              match t {
+                Tuple(arr_tup) => {
+                  for i, value in arr {
+                    // println("unifying " + value.1.to_string() + " with " + arr_tup[i].to_string())
+                    unify(value.1, arr_tup[i])
+                  }
+                  infer(ctx, s2)
+                }
+                _ => raise TyErr("Tuple expected, found {}")
+              }
+            }
+            If(_, _, _) => {
+              let t = infer(ctx, s1)
+              match t {
+                Tuple(arr_tup) => {
+                  for i, value in arr {
+                    // println("unifying " + value.1.to_string() + " with " + arr_tup[i].to_string())
+                    unify(value.1, arr_tup[i])
+                  }
+                  infer(ctx, s2)
+                }
+                _ => raise TyErr("Tuple expected, found {}")
+              }
+            }
             _ =>
               raise TyErr(
                 "The first operand of LetTuple should be tuple, but got: " +
                 s1.to_string() +
-                " with type: " +
-                infer(ctx, s1).to_string(),
+                "\nwith type: " +
+                infer(ctx, s1).to_string() +
+                "\narr[0].1: " +
+                arr[0].1.to_string(),
               )
           }
         _ =>
@@ -470,7 +653,8 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
               if t != infer(ctx, value) {
                 raise TyErr(
                   "The operand of Put should have same type: " +
-                  "\n e: " + e.to_string() +
+                  "\n e: " +
+                  e.to_string() +
                   "\n (name, n, value): " +
                   (name, n, value).to_string() +
                   "\n infer(ctx, name): " +
@@ -500,25 +684,21 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       }
       infer(ctx, rest)
     }
-      
     ArrayExpr(es) => {
       let ty = infer(ctx, es[0])
       let tys = es.map(e => infer(ctx, e))
-
       for t in tys {
         unify(t, ty)
       }
       Array(tys[0])
     }
-    
-    Enum(_, _) => Unit
     While(cond, body) => {
       let cond_ty = infer(ctx, cond)
       unify(cond_ty, Bool)
       ignore(infer(ctx, body))
       Unit
     }
-    Return(r) => {
+    Return(r) =>
       match r {
         Some(e) => {
           let e_ty = infer(ctx, e)
@@ -526,7 +706,6 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         }
         None => Unit
       }
-    }
     Assign(name, value) => {
       let name_ty = infer(ctx, name)
       let value_ty = infer(ctx, value)
@@ -613,11 +792,12 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
       }
     ArrayExpr(es) => ArrayExpr(es.map(e => deref_term(e)))
     Struct(name, generic, es, rest) => Struct(name, generic, es, rest)
-    StructConstruct(name, arr) => StructConstruct(name, arr) 
-    Enum(name, e) => Enum(name, e)
+    StructConstruct(name, arr) => StructConstruct(name, arr)
+    Enum(name, generic, e, rest) => Enum(name, generic, e, rest)
     Int64(i) => Int64(i)
     Assign(name, value) => Assign(deref_term(name), deref_term(value))
     UserDefineType(name, fields) => UserDefineType(name, fields)
+    EnumConstruct(name, e) => EnumConstruct(name, e)
     // _ => @util.die("deref_term: unknown syntax: " + syntax.to_string())
   }
 }
@@ -724,7 +904,6 @@ test {
     "contest-2025-data/test_cases/mbt/struct1.mbt",
   )
   let parse = @parser.parse_from_string(_test2)
-  
   println("parse: " + parse.to_json().stringify() + "\n")
   try {
     let typed = typing(parse)
@@ -754,7 +933,6 @@ test {
     let _test2 = (try? @fs.read_file_to_string(
       "contest-2025-data/test_cases/mbt/" + file,
     )).unwrap()
-    
     let parse = @parser.parse_from_string(_test2)
     try {
       let typed = typing(parse)

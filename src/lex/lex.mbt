@@ -129,6 +129,10 @@ pub fn julex(context : Context) -> Unit {
       array.push(SEMICOLON)
       context.offset += 1
     }
+    '_' => {
+      array.push(WILDCARD)
+      context.offset += 1
+    }
     ' ' | '\n' | '\t' | '\r' | '\\' => context.offset += 1
     ch =>
       if ch >= '0' && ch <= '9' {
@@ -208,10 +212,17 @@ fn matchIdentifier(ident : String) -> Token {
     "let" => LET
     "struct" => STRUCT
     "enum" => ENUM
+    "match" => MATCH
     "mut" => MUT
     "while" => WHILE
     "return" => RETURN
-    _ => IDENTIFIER(ident)
+    _ => {
+      // if ident[0] >= 'A' && ident[0] <= 'Z' {
+      //   UPPER_IDENTIFIER(ident)
+      // } else {
+        IDENTIFIER(ident)
+      // }
+    }
   }
 }
 
@@ -232,7 +243,8 @@ pub(all) enum Token {
   NUMBER(Int)
   BIG_NUMBER(Int64)
   IDENTIFIER(String)
-  USER_IDENTIFIER(String)
+  UPPER_IDENTIFIER(String)
+  WILDCARD
   CMP_OPERATOR(String)
   AND
   OR
@@ -258,6 +270,7 @@ pub(all) enum Token {
   COMMENT
   STRUCT
   ENUM
+  MATCH
   MUT
   WHILE
   RETURN

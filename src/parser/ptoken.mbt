@@ -141,7 +141,7 @@ let identifier : Parser[@lex.Token] = ptoken(fn(token) {
 let userIdentifier : Parser[@lex.Token] = ptoken(fn(token) {
   // @util.logger("identifier token: " + token.to_string())
   match token {
-    @lex.Token::USER_IDENTIFIER(_) => true
+    @lex.Token::UPPER_IDENTIFIER(_) => true
     _ => false
   }
 })
@@ -281,6 +281,42 @@ let ptoken_cmp_operator : Parser[@lex.Token] = ptoken(fn(input) {
 let ptoken_enum : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::ENUM => true
+    _ => false
+  }
+})
+
+let ptoken_match : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
+    @lex.Token::MATCH => true
+    _ => false
+  }
+})
+
+let ptoken_true : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
+    @lex.Token::TRUE => true
+    _ => false
+  }
+})
+
+let ptoken_false : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
+    @lex.Token::FALSE => true
+    _ => false
+  }
+})
+
+let ptoken_wildcard : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
+    @lex.Token::WILDCARD => true
+    _ => false
+  }
+})
+
+
+let ptoken_gt : Parser[@lex.Token] = ptoken(fn(input) {
+  match input {
+    @lex.Token::CMP_OPERATOR(">") => true
     _ => false
   }
 })

@@ -34,7 +34,7 @@ fn program(
 fn topLevel(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // println("topLevel: " + tokens.to_string())
+  // println("topLevel: " + tokens[0:10].to_string())
   Parser(toplevelFnDecl)
   .or(topLetDecl)
   .or(structDecl)
@@ -58,16 +58,18 @@ fn topLetDecl(
   .map(fn(input) {
     // @util.logger("topLetDecl input: " + input.to_string())
     match input {
-      (((((_, @lex.Token::IDENTIFIER(id)), type_annotation), _), expr), _) => {
+      (((((_, binding), type_annotation), _), expr), _) => {
+        let binding = match binding {
+          @lex.Token::IDENTIFIER(id) => id
+          @lex.Token::UPPER_IDENTIFIER(id) => id
+          @lex.Token::WILDCARD => "_"
+          _ => @util.die("Invalid binding: " + binding.to_string())
+        }
         let type_ = match type_annotation {
           Some(t) => t
           None => @types.Type::Var({ val: None })
         }
-        @types.Syntax::Let((id, type_), expr, @types.Syntax::Unit)
-      }
-      _ => {
-        println("Invalid top let declaration: " + tokens.to_string())
-        panic()
+        @types.Syntax::Let((binding, type_), expr, @types.Syntax::Unit)
       }
     }
   })
@@ -617,17 +619,26 @@ fn stmt(
   .parse(tokens)
 }
 
+// binding: IDENTIFIER | WILDCARD ;
+fn binding(
+  tokens : ArrayView[@lex.Token],
+) -> (@lex.Token, ArrayView[@lex.Token])? {
+  identifier
+  .or(ptoken_wildcard)
+  .parse(tokens)
+}
+
 ///|
 /// let_tuple_stmt:
 /// 	'let' '(' IDENTIFIER (',' IDENTIFIER)* ')' type_annotation? '=' expr ';';
 fn letTupleStmt(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // println("letTupleStmt: " + tokens.to_string())
+  // @util.logger("letTupleStmt: " + tokens[:10].to_string())
   ptoken_let
   .parser_and(lparen)
-  .parser_and(identifier)
-  .parser_and(ptoken_comma.parser_and(identifier).many())
+  .parser_and(binding)
+  .parser_and(ptoken_comma.parser_and(binding).many())
   .parser_and(rparen)
   .zeroOrOnce(typeAnnotation)
   .parser_and(ptoken_assign)
@@ -640,7 +651,7 @@ fn letTupleStmt(
         (
           (
             (
-              (((_, @lex.Token::IDENTIFIER(identifier)), identifiers), _),
+              (((_, identifier), identifiers), _),
               type_annotation,
             ),
             _,
@@ -649,11 +660,21 @@ fn letTupleStmt(
         ),
         _,
       ) => {
+        let identifier = match identifier {
+          @lex.Token::IDENTIFIER(id) => id
+          @lex.Token::WILDCARD => "_".to_string()
+          _ => {
+            println("let tuple ident: " + identifier.to_string())
+            panic()
+          }
+        }
         let ids = [(identifier, @types.Type::Var({ val: None }))]
         for x in identifiers {
           match x {
             (_, @lex.Token::IDENTIFIER(i)) =>
               ids.push((i, @types.Type::Var({ val: None })))
+            (_, @lex.Token::WILDCARD) =>
+              ids.push(("_".to_string(), @types.Type::Var({ val: None })))
             (_, ident) => {
               println("let tuple ident: " + ident.to_string())
               panic()
@@ -676,10 +697,6 @@ fn letTupleStmt(
           None => @types.Syntax::LetTuple(ids, expr, @types.Syntax::Unit)
         }
       }
-      _ => {
-        println("Invalid let tuple statement")
-        panic()
-      }
     }
   })
   .parse(tokens)
@@ -691,10 +708,10 @@ fn letTupleStmt(
 fn letStmt(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // @util.logger("letStmt token : " + tokens.to_string())
+  // @util.logger("letStmt token : " + tokens[:10].to_string())
   ptoken_let
   .zeroOrOnce(ptoken_mut)
-  .parser_and(identifier)
+  .parser_and(binding)
   .zeroOrOnce(typeAnnotation)
   .parser_and(ptoken_assign)
   .parser_and(expr)
@@ -702,16 +719,18 @@ fn letStmt(
   .map(fn(input) {
     // @util.logger("letStmt input: " + input.to_string())
     match input {
-      (((((_, @lex.Token::IDENTIFIER(id)), type_annotation), _), expr), _) => {
+      (((((_, binding), type_annotation), _), expr), _) => {
+        let binding = match binding {
+          @lex.Token::IDENTIFIER(id) => id
+          @lex.Token::UPPER_IDENTIFIER(id) => id
+          @lex.Token::WILDCARD => "_"
+          _ => @util.die("Invalid binding: " + binding.to_string())
+        }
         let type_ = match type_annotation {
           Some(t) => t
           None => @types.Type::Var({ val: None })
         }
-        @types.Syntax::Let((id, type_), expr, @types.Syntax::Unit)
-      }
-      _ => {
-        println("Invalid let statement: " + tokens.to_string())
-        panic()
+        @types.Syntax::Let((binding, type_), expr, @types.Syntax::Unit)
       }
     }
   })
@@ -911,7 +930,7 @@ fn leftValue(
 fn expr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  // @util.logger("expr:" + tokens.to_string())
+  // @util.logger("expr:" + tokens[:10].to_string())
   Parser(orLevelExpr).parse(tokens)
 }
 
@@ -1094,9 +1113,7 @@ fn ifLevelExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // @util.logger("ifLevelExpr: " + tokens.to_string())
-  Parser(getOrApplyLevelExpr).or(ifExpr)
-  // .or(matchExpr)
-  .parse(tokens)
+  Parser(getOrApplyLevelExpr).or(ifExpr).or(matchExpr).parse(tokens)
 }
 
 // if_expr: 'if' expr block_expr ('else' (if_expr | block_expr))?;
@@ -1123,10 +1140,76 @@ fn ifExpr(
 }
 
 // match_expr: 'match' expr '{' match_arm_list '}';
+
+///|
+fn matchExpr(
+  tokens : ArrayView[@lex.Token],
+) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("matchExpr: " + tokens[:10].to_string()) 
+  ptoken_match
+  .parser_and(expr)
+  .parser_and(lcurlybracket.parser_and(matchArmList).parser_and(rcurlybracket))
+  .map(fn(input) {
+    // @util.logger("matchExpr input: " + input.to_string())
+    match input {
+      ((_, expr), ((_, match_arm_list), _)) => {
+        let result = match_arm_list[0].1
+        // for arm in match_arm_list {
+        //   result = @types.Syntax::If(Eq(expr, arm), arm, result)
+        // }
+
+        match_arm_list[1:].fold(init=result, fn(acc, arm) {
+          @types.Syntax::If(Eq(expr, arm.0), arm.1, acc)
+        })
+      }
+    }
+  })
+  .parse(tokens)
+}
+
 // match_arm_list:
 // 	match_arm (';' match_arm)* ';'?;
+
+///|
+fn matchArmList(
+  tokens : ArrayView[@lex.Token],
+) -> (Array[(@types.Syntax, @types.Syntax)], ArrayView[@lex.Token])? {
+  // @util.logger("matchArmList: " + tokens[:10].to_string())
+  Parser(matchArm)
+  .parser_and(semicolon.parser_and(matchArm).many())
+  .parser_and(semicolon)
+  .map(fn(input) {
+    // @util.logger("matchArmList input: " + input.to_string())
+    match input {
+      ((match_arm, match_arms), _) => {
+        let result = [match_arm]
+        result.append(match_arms.map(fn(input) { input.1 }))
+        result
+      }
+    }
+  })
+  .parse(tokens)
+}
 // match_arm:
 //  	pattern '=>' expr;
+
+///|
+fn matchArm(
+  tokens : ArrayView[@lex.Token],
+) -> ((@types.Syntax, @types.Syntax), ArrayView[@lex.Token])? {
+  // @util.logger("matchArm: " + tokens[:10].to_string())
+  Parser(pattern)
+  .parser_and(ptoken_assign)
+  .parser_and(ptoken_gt)
+  .parser_and(expr)
+  .map(fn(input) {
+    // @util.logger("matchArm input: " + input.to_string())
+    match input {
+      (((pattern, _), _), expr) => (pattern, expr)
+    }
+  })
+  .parse(tokens)
+}
 
 // pattern:
 //   NUMBER
@@ -1137,6 +1220,111 @@ fn ifExpr(
 //   | IDENTIFIER // Variable pattern
 //   | (UPPER_IDENTIFIER '::')? UPPER_IDENTIFIER ('(' pattern ( ',' pattern )* ')')?; // Enum variant pattern
 
+///|
+fn pattern(
+  tokens : ArrayView[@lex.Token],
+) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("pattern: " + tokens[:10].to_string())
+  // IDENTIFIER("RGB"), LPAREN, IDENTIFIER("r"), COMMA, IDENTIFIER("g"), COMMA, IDENTIFIER("b"), RPAREN
+  ptoken_number
+  .parser_or(ptoken_true)
+  .parser_or(ptoken_false)
+  .parser_or(
+    lparen
+    .parser_and(
+      Parser(pattern).parser_and(ptoken_comma.parser_and(pattern).many()),
+    )
+    .parser_and(rparen),
+  )
+  .parser_or(ptoken_wildcard)
+  .parser_or(
+    identifier
+    .zeroOrOnce(ptoken_colon.parser_or(ptoken_colon).parser_and(identifier))
+    .zeroOrOnce(
+      lparen
+      .parser_and(pattern)
+      .parser_and(ptoken_comma.parser_and(pattern).many())
+      .parser_and(rparen),
+    ),
+  )
+  .parser_or(identifier)
+  .map(fn(input) {
+    // @util.logger("pattern input: " + input.to_string())
+    match input {
+      (
+        Some(
+          (
+            Some(
+              (
+                Some(
+                  (
+                    Some((Some((Some(@lex.Token::NUMBER(number)), None)), None)),
+                    None,
+                  )
+                ),
+                None,
+              )
+            ),
+            None,
+          )
+        ),
+        None,
+      ) => @types.Syntax::Int(number)
+      (
+        Some(
+          (
+            Some(
+              (
+                Some((Some((Some((None, Some(@lex.Token::TRUE))), None)), None)),
+                None,
+              )
+            ),
+            None,
+          )
+        ),
+        None,
+      ) => @types.Syntax::Bool(true)
+      (
+        Some(
+          (
+            Some((Some((Some((None, Some(@lex.Token::FALSE))), None)), None)),
+            None,
+          )
+        ),
+        None,
+      ) => @types.Syntax::Bool(false)
+      (
+        Some(
+          (
+            Some((Some((None, Some(((_, (pattern1, patterns)), _)))), None)),
+            None,
+          )
+        ),
+        None,
+      ) => {
+        let result = [pattern1]
+        result.append(patterns.map(fn(input) { input.1 }))
+        @types.Syntax::Tuple(result)
+      }
+      (Some((Some((None, Some(WILDCARD))), None)), None) =>
+        @util.die("暂未实现: " + @lex.WILDCARD.to_string())
+       (Some((None, Some(((IDENTIFIER(identifier), None), None)))), None) => {
+        @types.Syntax::Var(identifier)
+       }
+      // (None, Some(IDENTIFIER(identifier))) =>
+      //   @types.Syntax::Var(identifier)
+      (Some((None, Some(((IDENTIFIER(identifier1), None), Some((((_, pattern1), patterns), _)))))), None) => {
+        // @util.logger("pattern: input: " + input.to_string())
+        let result = [pattern1]
+        result.append(patterns.map(fn(input) { input.1 }))
+        // @util.logger("pattern: result: " + result.to_string())
+        @types.Syntax::EnumConstruct(identifier1, result)
+      }
+      _ => @util.die("pattern: " + input.to_string())
+    }
+  })
+  .parse(tokens)
+}
 
 // get_or_apply_level_expr:
 // 	value_expr # value_expr_
@@ -1338,20 +1526,13 @@ fn groupExpr(
 fn tupleExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // @util.logger("tupleExpr: " + tokens[:10].to_string())
   lparen
   .parser_and(expr)
-  .parser_and(
-    ptoken(fn(input) {
-      match input {
-        @lex.Token::COMMA => true
-        _ => false
-      }
-    })
-    .parser_and(expr)
-    .many(),
-  )
+  .parser_and(ptoken_comma.parser_and(expr).many())
   .parser_and(rparen)
   .map(fn(input) {
+    // @util.logger("tupleExpr input: " + input.to_string())
     match input {
       (((_, first), arr), _) => {
         // println("tuple_expr: " + arr.to_string())
@@ -1729,7 +1910,7 @@ fn structFieldExpr(
 fn enumConstructExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
-  @util.logger("enumConstructExpr: " + tokens[:10].to_string())
+  // @util.logger("enumConstructExpr: " + tokens[:10].to_string())
   identifier
   .zeroOrOnce(ptoken_colon.parser_and(ptoken_colon).parser_and(identifier))
   .parser_and(lparen)
@@ -1738,9 +1919,8 @@ fn enumConstructExpr(
   .map(fn(input) {
     // @util.logger("enumConstructExpr input: " + input.to_string())
     match input {
-      ((((IDENTIFIER(name), None), _), enum_construct_field_list), _) => {
-        @types.Syntax::EnumConstruct(name, enum_construct_field_list)
-      }
+      ((((IDENTIFIER(name), None), _), enum_construct_field_list), _) =>
+        @types.Syntax::App(Var(name), enum_construct_field_list)
       _ => @types.Syntax::Unit
     }
   })
@@ -1823,7 +2003,7 @@ fn genericType(
   userIdentifier
   .map(fn(input) {
     match input {
-      @lex.Token::USER_IDENTIFIER(name) =>
+      @lex.Token::UPPER_IDENTIFIER(name) =>
         @types.Type::UserDefineType(name, { val: [] })
       _ => @util.die("error user")
     }
@@ -2104,7 +2284,7 @@ test {
   )
   // println(_test2)
   @lex.julex({ str: _test2, offset: 0, array: tokens })
-  // println("tokens: " + tokens.to_string())
+  println("tokens: " + tokens.to_string())
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println("prog: " + prog.to_json().stringify())
 }

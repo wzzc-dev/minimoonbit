@@ -33,7 +33,7 @@ pub(all) enum Syntax {
   StructConstruct(String, Array[(String, Syntax)]) // _::{ _: _, _: _ }
   FieldAccess(Syntax, String) // _.field
   Enum(String, String, Array[(String, Array[Type])], Syntax) // enum [_] { A, B, C }  _
-  EnumConstruct(String, Array[Syntax]) // _::{ _: _, _: _ }
+  EnumConstruct(String, Array[Syntax]) // _(_,_,_)
   While(Syntax, Syntax) // while x { ... }
   Return(Syntax?) // return _;
 } derive(Show, ToJson(style="flat"))
@@ -91,9 +91,7 @@ pub impl ToJson for Type with to_json(self : Type) -> Json {
     | Struct(_)
     | Var(_) => self.to_json()
     UserDefineType(name, val) => {
-      ["UserDefineType", name, val.val.map(fn(f) {
-        [f.0, f.1.to_string()]
-      })]
+      ["UserDefineType", name, val.val.to_json()]
     }
   }
 }
