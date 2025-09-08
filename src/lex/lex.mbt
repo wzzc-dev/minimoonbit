@@ -217,11 +217,11 @@ fn matchIdentifier(ident : String) -> Token {
     "while" => WHILE
     "return" => RETURN
     _ => {
-      // if ident[0] >= 'A' && ident[0] <= 'Z' {
-      //   UPPER_IDENTIFIER(ident)
-      // } else {
+      if ident[0] >= 'A' && ident[0] <= 'Z' {
+        UPPER_IDENTIFIER(ident)
+      } else {
         IDENTIFIER(ident)
-      // }
+      }
     }
   }
 }

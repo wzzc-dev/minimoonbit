@@ -353,7 +353,7 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/struct4.mbt",
+    "contest-2025-data/test_cases/mbt/enum1.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_string() + "\n")

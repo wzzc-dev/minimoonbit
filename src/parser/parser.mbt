@@ -61,7 +61,6 @@ fn topLetDecl(
       (((((_, binding), type_annotation), _), expr), _) => {
         let binding = match binding {
           @lex.Token::IDENTIFIER(id) => id
-          @lex.Token::UPPER_IDENTIFIER(id) => id
           @lex.Token::WILDCARD => "_"
           _ => @util.die("Invalid binding: " + binding.to_string())
         }
@@ -312,17 +311,17 @@ fn structDecl(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   ptoken_struct
-  .parser_and(identifier)
-  .zeroOrOnce(lbracket.parser_and(identifier).parser_and(rbracket))
+  .parser_and(upperIdentifier)
+  .zeroOrOnce(lbracket.parser_and(upperIdentifier).parser_and(rbracket))
   .parser_and(lcurlybracket)
   .zeroOrOnce(structFieldList)
   .parser_and(rcurlybracket)
   .map(fn(input) {
     // @util.logger("structDecl: input: " + input.to_string())
     match input {
-      (((((_, IDENTIFIER(struct_name)), None), _), None), _) =>
+      (((((_, UPPER_IDENTIFIER(struct_name)), None), _), None), _) =>
         @types.Syntax::Struct(struct_name, "", [], @types.Syntax::Unit)
-      (((((_, IDENTIFIER(struct_name)), None), _), Some(structFieldList)), _) =>
+      (((((_, UPPER_IDENTIFIER(struct_name)), None), _), Some(structFieldList)), _) =>
         @types.Syntax::Struct(
           struct_name,
           "",
@@ -332,7 +331,7 @@ fn structDecl(
       (
         (
           (
-            ((_, IDENTIFIER(struct_name)), Some(((_, IDENTIFIER(generic)), _))),
+            ((_, UPPER_IDENTIFIER(struct_name)), Some(((_, UPPER_IDENTIFIER(generic)), _))),
             _,
           ),
           Some(structFieldList),
@@ -402,14 +401,14 @@ fn enumDecl(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   ptoken_enum
-  .parser_and(identifier)
-  .zeroOrOnce(lbracket.parser_and(identifier).parser_and(rbracket))
+  .parser_and(upperIdentifier)
+  .zeroOrOnce(lbracket.parser_and(upperIdentifier).parser_and(rbracket))
   .parser_and(lcurlybracket)
   .zeroOrOnce(enumVariantList)
   .parser_and(rcurlybracket)
   .map(fn(input) {
     match input {
-      (((((_, IDENTIFIER(enum_name)), None), _), Some(enumVariantList)), _) =>
+      (((((_, UPPER_IDENTIFIER(enum_name)), None), _), Some(enumVariantList)), _) =>
         @types.Syntax::Enum(enum_name, "", enumVariantList, @types.Syntax::Unit)
       _ => @util.die("Invalid enum decl")
     }
@@ -451,13 +450,13 @@ fn enumVariant(
   tokens : ArrayView[@lex.Token],
 ) -> ((String, Array[@types.Type]), ArrayView[@lex.Token])? {
   // @util.logger("enumVariant: tokens: " + tokens[:10].to_string())
-  identifier
+  upperIdentifier
   .zeroOrOnce(lparen.parser_and(enumVariantFieldList).parser_and(rparen))
   .map(fn(input) {
     // @util.logger("enumVariant: input: " + input.to_string())
     match input {
-      (IDENTIFIER(id), None) => (id, [])
-      (IDENTIFIER(id), Some(((_, enumVariantFieldList), _))) =>
+      (UPPER_IDENTIFIER(id), None) => (id, [])
+      (UPPER_IDENTIFIER(id), Some(((_, enumVariantFieldList), _))) =>
         (id, enumVariantFieldList)
       _ => @util.die("Invalid enum variant")
     }
@@ -1238,8 +1237,8 @@ fn pattern(
   )
   .parser_or(ptoken_wildcard)
   .parser_or(
-    identifier
-    .zeroOrOnce(ptoken_colon.parser_or(ptoken_colon).parser_and(identifier))
+    upperIdentifier
+    .zeroOrOnce(ptoken_colon.parser_or(ptoken_colon).parser_and(upperIdentifier))
     .zeroOrOnce(
       lparen
       .parser_and(pattern)
@@ -1308,12 +1307,12 @@ fn pattern(
       }
       (Some((Some((None, Some(WILDCARD))), None)), None) =>
         @util.die("暂未实现: " + @lex.WILDCARD.to_string())
-       (Some((None, Some(((IDENTIFIER(identifier), None), None)))), None) => {
+      (None, Some(IDENTIFIER(identifier))) =>
         @types.Syntax::Var(identifier)
-       }
-      // (None, Some(IDENTIFIER(identifier))) =>
-      //   @types.Syntax::Var(identifier)
-      (Some((None, Some(((IDENTIFIER(identifier1), None), Some((((_, pattern1), patterns), _)))))), None) => {
+      (Some((None, Some(((UPPER_IDENTIFIER(id), None), None)))), None) => {
+        @types.Syntax::EnumConstruct(id, [])
+      }
+      (Some((None, Some(((UPPER_IDENTIFIER(identifier1), None), Some((((_, pattern1), patterns), _)))))), None) => {
         // @util.logger("pattern: input: " + input.to_string())
         let result = [pattern1]
         result.append(patterns.map(fn(input) { input.1 }))
@@ -1834,7 +1833,7 @@ fn structConstructExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // @util.logger("structConstructExpr: " + tokens.to_string())
-  identifier
+  upperIdentifier
   .parser_and(ptoken_colon)
   .parser_and(ptoken_colon)
   .parser_and(lcurlybracket)
@@ -1843,9 +1842,9 @@ fn structConstructExpr(
   .map(fn(input) {
     // @util.logger("structConstructExpr input: " + input.to_string())
     match input {
-      (((((IDENTIFIER(name), _), _), _), Some(struct_field_exprs)), _) =>
+      (((((UPPER_IDENTIFIER(name), _), _), _), Some(struct_field_exprs)), _) =>
         @types.Syntax::StructConstruct(name, struct_field_exprs)
-      (((((IDENTIFIER(name), _), _), _), None), _) =>
+      (((((UPPER_IDENTIFIER(name), _), _), _), None), _) =>
         @types.Syntax::StructConstruct(name, [])
       _ =>
         @util.die(
@@ -1911,16 +1910,16 @@ fn enumConstructExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // @util.logger("enumConstructExpr: " + tokens[:10].to_string())
-  identifier
-  .zeroOrOnce(ptoken_colon.parser_and(ptoken_colon).parser_and(identifier))
+  upperIdentifier
+  .zeroOrOnce(ptoken_colon.parser_and(ptoken_colon).parser_and(upperIdentifier))
   .parser_and(lparen)
   .parser_and(enumConstructFieldList)
   .parser_and(rparen)
   .map(fn(input) {
     // @util.logger("enumConstructExpr input: " + input.to_string())
     match input {
-      ((((IDENTIFIER(name), None), _), enum_construct_field_list), _) =>
-        @types.Syntax::App(Var(name), enum_construct_field_list)
+      ((((UPPER_IDENTIFIER(name), None), _), enum_construct_field_list), _) =>
+        @types.Syntax::EnumConstruct(name, enum_construct_field_list)
       _ => @types.Syntax::Unit
     }
   })
@@ -2000,7 +1999,7 @@ fn parseType(
 fn genericType(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Type, ArrayView[@lex.Token])? {
-  userIdentifier
+  upperIdentifier
   .map(fn(input) {
     match input {
       @lex.Token::UPPER_IDENTIFIER(name) =>
@@ -2016,11 +2015,11 @@ fn genericType(
 fn userDefineType(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Type, ArrayView[@lex.Token])? {
-  identifier
+  upperIdentifier
   .map(fn(input) {
     // @util.logger("userDefineType: " + input.to_string())
     match input {
-      @lex.Token::IDENTIFIER(name) =>
+      @lex.Token::UPPER_IDENTIFIER(name) =>
         @types.Type::UserDefineType(name, { val: [] })
       _ => @util.die("error user")
     }
@@ -2170,11 +2169,6 @@ fn[V1, V2] parser_or(
   parser2 : Parser[V2],
 ) -> Parser[(V1?, V2?)] {
   fn(input) {
-    // self
-    // .parse(input)
-    // .bind(value_rest => parser2
-    //   .parse(value_rest.1)
-    //   .map(value2_rest2 => ((Some(value_rest.0), Some(value2_rest2.0)), value2_rest2.1)))
     match self.parse(input) {
       Some((v1, rest1)) => Some(((Some(v1), None), rest1))
       None =>
@@ -2182,11 +2176,6 @@ fn[V1, V2] parser_or(
           None => None
           Some((v2, rest2)) => Some(((None, Some(v2)), rest2))
         }
-
-      // match parser2.parse(input) {
-      //   None => ...
-      //   Some(_) as result => result.map(v => ((None, Some(v.0)), v.1))
-      // }
     }
   }
 }
@@ -2280,7 +2269,7 @@ test {
 test {
   let tokens = []
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/enum1.mbt",
+    "contest-2025-data/test_cases/mbt/struct1.mbt",
   )
   // println(_test2)
   @lex.julex({ str: _test2, offset: 0, array: tokens })

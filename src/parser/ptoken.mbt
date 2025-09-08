@@ -138,7 +138,7 @@ let identifier : Parser[@lex.Token] = ptoken(fn(token) {
 })
 
 ///|
-let userIdentifier : Parser[@lex.Token] = ptoken(fn(token) {
+let upperIdentifier : Parser[@lex.Token] = ptoken(fn(token) {
   // @util.logger("identifier token: " + token.to_string())
   match token {
     @lex.Token::UPPER_IDENTIFIER(_) => true

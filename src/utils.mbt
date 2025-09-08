@@ -198,8 +198,6 @@ pub fn Syntax::to_json(self : Syntax) -> Json {
     Return(e) => ["Return", e.map(Syntax::to_json)]
     Assign(name, value) => ["Assign", name.to_json(), value.to_json()]
     FieldAccess(e, name) => ["FieldAccess", e.to_json(), name.to_json()]
-    UserDefineType(name, fields) =>
-      ["UserDefineType", name.to_json(), fields.to_json()]
   }
 }
 

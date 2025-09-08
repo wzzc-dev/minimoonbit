@@ -5,7 +5,6 @@ pub(all) enum Syntax {
   Int(Int) // int
   Int64(Int64) // int64
   Double(Double) // double
-  UserDefineType(String, Array[(String, Type)]) // _
   Var(String) // _
   Tuple(Array[Syntax]) // (_, _, _)
   Not(Syntax) // not(_)
