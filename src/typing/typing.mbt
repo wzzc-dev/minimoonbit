@@ -212,7 +212,14 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     EnumConstruct(enum_name, _arr) =>
       match ctx.inner().get(enum_name) {
         Some(ty) => ty
-        None => raise TyErr("enum not found " + enum_name)
+        None =>
+          raise TyErr(
+            "enum not found " +
+            enum_name +
+            " \n" +
+            "ctx: " +
+            ctx.inner().to_string(),
+          )
       }
     FieldAccess(e, name) => {
       let t = infer(ctx, e)
@@ -391,7 +398,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           prim.kind = Some(Double)
           Double
         }
-        (t1, t2) => {
+        (t1, t2) =>
           // @util.logger("ctx: " + ctx.inner().to_string())
           raise TyErr(
             "The operands of Prim should have same type: " +
@@ -403,7 +410,6 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
             " " +
             t2.to_string(),
           )
-        }
       }
     And(l, r)
     | Or(l, r)
@@ -525,14 +531,19 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         }
       }
     LetRec({ name: (f, t), args: params, body }, rest) => {
-      let env_with_f = ctx.inner().add(f, t)
+      let mut env_with_f = ctx.inner().add(f, t)
       // let params_ty = params.map(t => t.1.repr())
       let params_ty = params.map(fn(input) {
         match input {
           (_, UserDefineType(name, _fields)) => {
             let t = ctx.inner().get(name).unwrap()
             match t {
-              UserDefineType(_, fields) => _fields.val = fields.val
+              UserDefineType(_, fields) => {
+                for field in fields.val {
+                  env_with_f = env_with_f.add(field.0, t)
+                }
+                _fields.val = fields.val
+              }
               _ => @util.die("let user define type")
             }
             t
@@ -540,17 +551,10 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           t => t.1.repr()
         }
       })
-      let mut env_with_params = env_with_f
       for p in params {
-        match p {
-          // (p_name, UserDefineType(ty_name, fields)) => {
-          //   let t = UserDefineType(ty_name, fields)
-          //   env_with_params = env_with_params.add(ty_name, t)
-          // }
-          _ => env_with_params = env_with_params.add(p.0, p.1)
-        }
+        env_with_f = env_with_f.add(p.0, p.1)
       }
-      let body_ty = infer(env_with_params, body)
+      let body_ty = infer(env_with_f, body)
       unify(t, Fun(params_ty, body_ty))
       infer(env_with_f, rest)
     }
@@ -643,7 +647,12 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
 
   }
 }
-fn get_ctx_ty(ctx : LocalCtx, condition : @types.Syntax) -> LocalCtx raise TyErr {
+
+///|
+fn get_ctx_ty(
+  ctx : LocalCtx,
+  condition : @types.Syntax,
+) -> LocalCtx raise TyErr {
   match condition {
     Eq(e1, e2) => {
       let e1t = infer(ctx, e1)
@@ -653,24 +662,31 @@ fn get_ctx_ty(ctx : LocalCtx, condition : @types.Syntax) -> LocalCtx raise TyErr
           // @util.logger("unify e2t: " + e2t.to_string())
           // @util.logger("unify e2: " + e2.to_string())
           let (e2_name, field_names) = match e2 {
-            EnumConstruct(name, fields) => (name, fields.map(fn(field) {
-              match field {
-                Var(x) => x
-                _ => @util.die("EnumConstruct field not Var: " + e2.to_string())
-              }
-            }))
+            EnumConstruct(name, fields) =>
+              (
+                name,
+                fields.map(fn(field) {
+                  match field {
+                    Var(x) => x
+                    _ =>
+                      @util.die(
+                        "EnumConstruct field not Var: " + e2.to_string(),
+                      )
+                  }
+                }),
+              )
             _ => @util.die("unify e2: " + e2.to_string())
           }
-          let e2_ty_index = fields.val.search_by(fn(field) {
-            field.0 == e2_name
-          }).unwrap()
+          let e2_ty_index = fields.val
+            .search_by(fn(field) { field.0 == e2_name })
+            .unwrap()
           let e2_ty = fields.val[e2_ty_index].1
           match e2_ty {
             Tuple(tys) => {
               let mut newctx = ctx
               for i, t in tys {
-                 unify(t, tys[i])
-                 newctx = newctx.inner().add(field_names[i], t)
+                unify(t, tys[i])
+                newctx = newctx.inner().add(field_names[i], t)
               }
               newctx
             }
@@ -683,6 +699,7 @@ fn get_ctx_ty(ctx : LocalCtx, condition : @types.Syntax) -> LocalCtx raise TyErr
     _ => ctx
   }
 }
+
 ///|
 fn deref_type(t : @types.Type) -> @types.Type {
   match t {
@@ -866,7 +883,7 @@ test "typing" {
 test {
   // let x = Array::make(10, 0);
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/enum2.mbt",
+    "contest-2025-data/test_cases/mbt/enum1.mbt",
   )
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_json().stringify() + "\n")

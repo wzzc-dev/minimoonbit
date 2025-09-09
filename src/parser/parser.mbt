@@ -35,10 +35,10 @@ fn topLevel(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("topLevel: " + tokens[0:10].to_string())
-  Parser(toplevelFnDecl)
-  .or(topLetDecl)
+  Parser(enumDecl)
   .or(structDecl)
-  .or(enumDecl)
+  .or(topLetDecl)
+  .or(toplevelFnDecl)
   .parse(tokens)
 }
 // top_let_decl:
@@ -1912,15 +1912,15 @@ fn enumConstructExpr(
   // @util.logger("enumConstructExpr: " + tokens[:10].to_string())
   upperIdentifier
   .zeroOrOnce(ptoken_colon.parser_and(ptoken_colon).parser_and(upperIdentifier))
-  .parser_and(lparen)
-  .parser_and(enumConstructFieldList)
-  .parser_and(rparen)
+  .zeroOrOnce(lparen.parser_and(enumConstructFieldList).parser_and(rparen))
   .map(fn(input) {
     // @util.logger("enumConstructExpr input: " + input.to_string())
     match input {
-      ((((UPPER_IDENTIFIER(name), None), _), enum_construct_field_list), _) =>
+      ((UPPER_IDENTIFIER(name), None), Some(((_, enum_construct_field_list), _))) =>
         @types.Syntax::EnumConstruct(name, enum_construct_field_list)
-      _ => @types.Syntax::Unit
+      ((UPPER_IDENTIFIER(name), None), None) =>
+        @types.Syntax::EnumConstruct(name, [])
+      _ => @util.die("enumConstructExpr: not handled")
     }
   })
   .parse(tokens)
@@ -2269,11 +2269,11 @@ test {
 test {
   let tokens = []
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/struct1.mbt",
+    "contest-2025-data/test_cases/mbt/enum1.mbt",
   )
   // println(_test2)
   @lex.julex({ str: _test2, offset: 0, array: tokens })
-  println("tokens: " + tokens.to_string())
+  // println("tokens: " + tokens.to_string())
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println("prog: " + prog.to_json().stringify())
 }

@@ -55,13 +55,15 @@ fn KnfEnv::get_type(
   syn : @types.Syntax,
 ) -> @types.Type raise KnfErr {
   @typing.get_type(env, syn) catch {
-    @typing.TyErr(s) => raise KnfErr("KNF get_type TyErr error: " + s)
+    @typing.TyErr(s) => raise KnfErr("KNF get_type TyErr error: " + s + "\n" +
+      "syn: " + syn.to_string() + "\n" +
+      "env: " + env.to_string())
   }
 }
 
 ///|
 pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { // !Failure
-  // @util.logger(" to_knf : " + s.to_string())
+  // @util.logger(" to_knf : " + s.to_string() + "\n self: " + self.externals.to_string())
   match s {
     Unit => Unit
     Int(i) => Int(i)
@@ -388,6 +390,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       LetRec({ name: fun_name, ty, args: fun_args, body: fun_body }, rest)
     }
     App(syn, args_syns) => {
+      // @util.logger("app: syn = " + syn.to_string() + "; args_syns= " + args_syns.to_string())
       fn let_app(
         self : KnfEnv,
         f : Name,

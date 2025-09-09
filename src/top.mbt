@@ -68,8 +68,8 @@ pub(all) enum Type {
   Fun(Array[Type], Type) // (_, _, _) -> _
   Tuple(Array[Type]) // (_, _, _)
   Array(Type) // Array[_]
-  Struct(String, Array[(String, Type)]) // struct { _: _, _: _ }
-  Enum(String, Array[String]) // enum { A, B, C }
+  Struct(String, Array[(String, Type)]) // struct _ { _: _, _: _ }
+  Enum(String, Array[String]) // enum _ { A, B, C }
   UserDefineType(String, Ref[Array[(String, Type)]])
   Var(Ref[Type?])
   Ptr
