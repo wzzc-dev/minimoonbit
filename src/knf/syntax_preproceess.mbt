@@ -1,4 +1,5 @@
-///| Preprocesses the syntax tree, extracting the contents of functions `main` and `init` to top-level.
+///|
+/// Preprocesses the syntax tree, extracting the contents of functions `main` and `init` to top-level.
 pub fn KnfEnv::syntax_preprocess(
   self : KnfEnv,
   s : @types.Syntax,
@@ -10,7 +11,10 @@ pub fn KnfEnv::syntax_preprocess(
         "main" => KnfEnv::syntax_preprocess(self, fundef.body)
         _ => {
           let body = KnfEnv::syntax_preprocess(self, fundef.body)
-          LetRec({ name: fundef.name, args: fundef.args, body: body }, KnfEnv::syntax_preprocess(self, rest))
+          LetRec(
+            { name: fundef.name, args: fundef.args, body },
+            KnfEnv::syntax_preprocess(self, rest),
+          )
         }
       }
     Let((str, ty), s1, s2) =>
@@ -42,9 +46,8 @@ pub fn KnfEnv::syntax_preprocess(
         KnfEnv::syntax_preprocess(self, s1),
         KnfEnv::syntax_preprocess(self, s2),
       )
-    Put(arr, idx, v, rest) => {
+    Put(arr, idx, v, rest) =>
       Put(arr, idx, v, KnfEnv::syntax_preprocess(self, rest))
-    }
     StructConstruct(_, fields) => {
       let result = fields.map(fn(field) {
         match field {
@@ -54,8 +57,14 @@ pub fn KnfEnv::syntax_preprocess(
       Tuple(result)
     }
     Struct(name, _, fields, rest) => {
-      let env_fun = self.externals.add(name, UserDefineType(name, {val: fields}))
-      KnfEnv::syntax_preprocess({ counter: self.counter, externals: env_fun }, rest)
+      let env_fun = self.externals.add(
+        name,
+        UserDefineType(name, { val: fields }),
+      )
+      KnfEnv::syntax_preprocess(
+        { counter: self.counter, externals: env_fun },
+        rest,
+      )
     }
     Enum(name, _, variants, cont) => {
       let variants = variants.map(fn(variant) {
@@ -63,24 +72,37 @@ pub fn KnfEnv::syntax_preprocess(
           (name, ty) => (name, @types.Type::Tuple(ty))
         }
       })
-      let env_fun = self.externals.add(name, UserDefineType(name, {val: variants}))
-      KnfEnv::syntax_preprocess({ counter: self.counter, externals: env_fun }, cont)
+      let env_fun = self.externals.add(
+        name,
+        UserDefineType(name, { val: variants }),
+      )
+      KnfEnv::syntax_preprocess(
+        { counter: self.counter, externals: env_fun },
+        cont,
+      )
     }
-    // EnumConstruct(_name, variant) => {
-    //   Tuple(variant)
-    // }
+    
     If(cond, then, else_) => {
       let cond = match cond {
-        Eq(s1, s2) => @types.Syntax::Eq(KnfEnv::syntax_preprocess(self, s1), KnfEnv::syntax_preprocess(self, s2))
+        Eq(s1, s2) =>
+          @types.Syntax::Eq(
+            KnfEnv::syntax_preprocess(self, s1),
+            KnfEnv::syntax_preprocess(self, s2),
+          )
         _ => cond
       }
-      If(cond, KnfEnv::syntax_preprocess(self, then), KnfEnv::syntax_preprocess(self, else_))
+      If(
+        cond,
+        KnfEnv::syntax_preprocess(self, then),
+        KnfEnv::syntax_preprocess(self, else_),
+      )
     }
     _ => s
   }
 }
 
-///| Process 1D array (original logic)
+///|
+/// Process 1D array (original logic)
 fn KnfEnv::process_1d_array(
   self : KnfEnv,
   str : String,
@@ -110,12 +132,13 @@ fn KnfEnv::process_1d_array(
       _ => ty
     }
   }
+
   let ty = get_array_ty(ty)
-  
   Let((str, Array(ty)), array_make, result)
 }
 
-///| Process multidimensional array by flattening to 1D array
+///|
+/// Process multidimensional array by flattening to 1D array
 fn KnfEnv::process_multidimensional_array(
   self : KnfEnv,
   str : String,
@@ -124,14 +147,17 @@ fn KnfEnv::process_multidimensional_array(
   s2 : @types.Syntax,
 ) -> @types.Syntax {
   // Flatten the multidimensional array to 1D
-  let (flattened_elements, _dims) = KnfEnv::flatten_multidimensional_array(elems)
+  let (flattened_elements, _dims) = KnfEnv::flatten_multidimensional_array(
+    elems,
+  )
   // Process as a 1D array
   KnfEnv::process_1d_array(self, str, ty, flattened_elements, s2)
 }
 
-///| Flatten multidimensional array to 1D array
+///|
+/// Flatten multidimensional array to 1D array
 fn KnfEnv::flatten_multidimensional_array(
-  elems : Array[@types.Syntax]
+  elems : Array[@types.Syntax],
 ) -> (Array[@types.Syntax], Array[Int]) {
   let result : Array[@types.Syntax] = []
   let dims : Array[Int] = []
@@ -140,16 +166,17 @@ fn KnfEnv::flatten_multidimensional_array(
     match elem {
       ArrayExpr(sub_elems) => {
         // Recursively flatten sub-arrays
-        let (flattened_sub, sub_dims) = KnfEnv::flatten_multidimensional_array(sub_elems)
+        let (flattened_sub, sub_dims) = KnfEnv::flatten_multidimensional_array(
+          sub_elems,
+        )
         for sub_elem in flattened_sub {
           result.push(sub_elem)
         }
         dims.append(sub_dims)
       }
-      _ => {
+      _ =>
         // Add non-array elements directly
         result.push(elem)
-      }
     }
   }
   (result, dims)

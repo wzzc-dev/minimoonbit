@@ -401,6 +401,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       emit_array_put(array, index, value, instrs, env)
       instrs.append(compile_expr(rest, env))
     }
+    EnumConstructor(name, index, variant) => {
+      emit_enum_constructor(name, index, variant, instrs, env)
+    }
     ExternalArray(label) => instrs.push(La(reg_ret, label.inner()))
     ExternalFunctionApplication(label, xs) => {
       emit_args(xs, env, instrs)

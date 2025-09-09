@@ -1,5 +1,6 @@
 ///|
 pub(all) enum Syntax {
+  None
   Unit
   Bool(Bool) // true false
   Int(Int) // int
@@ -61,6 +62,7 @@ pub(all) struct Fundef {
 
 ///|
 pub(all) enum Type {
+  None
   Unit
   Bool
   Int
@@ -78,6 +80,7 @@ pub(all) enum Type {
 ///|
 pub impl ToJson for Type with to_json(self : Type) -> Json {
   match self {
+    None => "None"
     Unit
     | Bool
     | Int
@@ -111,6 +114,7 @@ pub fn Type::is_float_like(self : Type) -> Bool {
 ///|
 pub fn Type::size_of(self : Type, size_of_ptr : Int) -> Int {
   match self {
+    None => 0
     Unit => 0
     Bool => 4
     Int => 4
@@ -195,6 +199,7 @@ pub impl Eq for Type with equal(self, other) -> Bool {
 ///|
 pub fn Type::repr(self : Type) -> Type {
   match self {
+    None => None
     Bool | Int | Unit | Double | Ptr | UserDefineType(_) => self
     Var(t) as tvar =>
       match t.val {

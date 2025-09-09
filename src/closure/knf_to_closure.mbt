@@ -177,6 +177,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     }
     Assign(x, y) => Assign(x, y)
     FieldAccess(x, y) => TupleGet(x, y)
+    EnumConstructor(name, index, variant) => EnumConstructor(name, index, variant)
   }
 }
 
@@ -192,6 +193,7 @@ fn fv_to_array(
 ///|
 fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
   match ty {
+    None => Unit
     Unit => Unit
     Bool => Bool
     Int => Int
@@ -349,6 +351,7 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
       fv(body)
     Assign(_x, _y) => @hashset.new()
     FieldAccess(_,_) => @hashset.new()
+    EnumConstructor(_, _, _) => @hashset.new()
   }
 }
 test {

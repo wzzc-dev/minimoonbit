@@ -47,6 +47,7 @@ pub fn Knf::to_json(self : Knf) -> Json {
       ["While", cond.to_json(), body.to_json()]
     Assign(n1, n2) => ["Assign", n1.to_json(), n2.to_json()]
     FieldAccess(n1, n2) => ["FieldAccess", n1.to_json(), n2.to_json()]
+    EnumConstructor(name, index, variant) => ["EnumConstructor", name.to_json(), index, variant.to_json()]
   }
 }
 

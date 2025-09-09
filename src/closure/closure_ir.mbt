@@ -36,6 +36,7 @@ pub(all) enum Expr {
   MakeTuple(Array[Name])
   LetTuple(Array[(Name, LowType)], Name, Expr)
   TupleGet(Name, Int)
+  EnumConstructor(String, Int, Array[Name])
   ArrayGet(Name, Name)
   ArrayPut(Name, Name, Name, Expr)
   ExternalArray(Label)

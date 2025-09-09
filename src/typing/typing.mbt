@@ -173,6 +173,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
   // println("infer: " + e.to_string())
   // println("extenv: " + ctx.inner().to_string())
   match e {
+    None => None
     Unit => Unit
     Bool(_) => Bool
     Int(_) => Int
@@ -361,6 +362,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           }
           Tuple(t1.map(fn(ty) { ty.repr() }))
         }
+        (ty1, None) | (None, ty1) => ty1
         (ty1, ty2) =>
           if ty1 == ty2 {
             ty1
@@ -533,24 +535,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     LetRec({ name: (f, t), args: params, body }, rest) => {
       let mut env_with_f = ctx.inner().add(f, t)
       // let params_ty = params.map(t => t.1.repr())
-      let params_ty = params.map(fn(input) {
-        match input {
-          (_, UserDefineType(name, _fields)) => {
-            let t = ctx.inner().get(name).unwrap()
-            match t {
-              UserDefineType(_, fields) => {
-                for field in fields.val {
-                  env_with_f = env_with_f.add(field.0, t)
-                }
-                _fields.val = fields.val
-              }
-              _ => @util.die("let user define type")
-            }
-            t
-          }
-          t => t.1.repr()
-        }
-      })
+      let params_ty = params.map(t => t.1.repr())
       for p in params {
         env_with_f = env_with_f.add(p.0, p.1)
       }
@@ -780,6 +765,7 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
     Int64(i) => Int64(i)
     Assign(name, value) => Assign(deref_term(name), deref_term(value))
     EnumConstruct(name, e) => EnumConstruct(name, e)
+    None => None
     // _ => @util.die("deref_term: unknown syntax: " + syntax.to_string())
   }
 }

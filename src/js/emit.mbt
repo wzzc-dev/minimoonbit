@@ -194,6 +194,9 @@ fn emit_expr(expr : @closure.Expr) -> String {
     Assign(x, y) => x.to_string() + " = " + y.to_string()
     Unit => "undefined"
     TupleGet(tuple, index) => tuple.to_string() + "[" + index.to_string() + "]"
+    EnumConstructor(name, index, variant) => {
+      name.to_string() + "[" + index.to_string() + "]" + "(" + variant.to_string() + ")"
+    }
   }
 }
 

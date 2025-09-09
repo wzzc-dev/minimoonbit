@@ -1,6 +1,7 @@
 ///|
 pub fn to_json(self : Type) -> Json {
   match self {
+    None => "None"
     Unit => "Unit"
     Bool => "Bool"
     Int => "Int"
@@ -131,6 +132,7 @@ pub fn Fundef::from_json(json : Json) -> Fundef raise Error {
 ///|
 pub fn Syntax::to_json(self : Syntax) -> Json {
   match self {
+    None => "None"
     Unit => "Unit"
     Bool(b) => ["Bool", if b { true } else { false }]
     Int(i) => ["Int", Json::number(i.to_double())]

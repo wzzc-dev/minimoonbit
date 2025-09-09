@@ -4,7 +4,7 @@ pub typealias @immut/hashmap.HashMap[String, Type] as LocalEnv
 ///|
 struct KnfEnv {
   mut counter : Int
-  externals : @immut/hashmap.HashMap[String, Type]
+  mut externals : @immut/hashmap.HashMap[String, Type]
 }
 
 ///|
@@ -28,7 +28,7 @@ fn KnfEnv::new_temp(self : KnfEnv) -> Name {
 }
 
 ///|
-fn KnfEnv::get_knf(
+pub fn KnfEnv::get_knf(
   self : KnfEnv,
   syn : @types.Syntax,
 ) -> (Name, Type, Knf) raise KnfErr {
@@ -55,21 +55,33 @@ fn KnfEnv::get_type(
   syn : @types.Syntax,
 ) -> @types.Type raise KnfErr {
   @typing.get_type(env, syn) catch {
-    @typing.TyErr(s) => raise KnfErr("KNF get_type TyErr error: " + s + "\n" +
-      "syn: " + syn.to_string() + "\n" +
-      "env: " + env.to_string())
+    @typing.TyErr(s) =>
+      raise KnfErr(
+        "KNF get_type TyErr error: " +
+        s +
+        "\n" +
+        "syn: " +
+        syn.to_string() +
+        "\n" +
+        "env: " +
+        env.to_string(),
+      )
   }
 }
 
 ///|
 pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { // !Failure
-  // @util.logger(" to_knf : " + s.to_string() + "\n self: " + self.externals.to_string())
+  // @util.logger(
+  //   " to_knf : " + s.to_string() + "\n self: " + self.externals.to_string(),
+  // )
   match s {
     Unit => Unit
     Int(i) => Int(i)
     Int64(i) => Int64(i)
     Double(d) => Double(d)
-    Var(name) => Var((try? @types.Name::from_string(name)).unwrap())
+    Var(name) =>
+      // @util.logger("var: " + name)
+      Var((try? @types.Name::from_string(name)).unwrap())
     Bool(b) => if b { Int(1) } else { Int(0) }
     Not(syn) => KnfEnv::to_knf(self, If(syn, Int(0), Int(1)))
     If(syn1, syn2, syn3) =>
@@ -77,6 +89,13 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       match syn1 {
         Eq(lhs, rhs) => {
           let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
+          match l_ty {
+            UserDefineType(_, fields) =>
+              for field in fields.val {
+                self.externals = self.externals.add(field.0, l_ty)
+              }
+            _ => ()
+          }
           let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
           match lhs {
             Var(_) =>
@@ -359,7 +378,18 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     GE(syn1, syn2) =>
       KnfEnv::to_knf(self, If(LT(syn1, syn2), Bool(false), Bool(true)))
     Let((name, ty), syn, rest) => {
-      let knf = KnfEnv::to_knf(self, syn)
+      let mut env = self.externals
+      match ty.repr() {
+        UserDefineType(_, fields) =>
+          for field in fields.val {
+            env = env.add(field.0, ty)
+          }
+        _ => ()
+      }
+      let knf = KnfEnv::to_knf(
+        { counter: self.counter, externals: env },
+        syn,
+      )
       let new_env = {
         counter: self.counter,
         externals: self.externals.add(name, ty),
@@ -478,7 +508,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     }
     Tuple(syns) => make_tuple(self, syns)
     LetTuple(args, syn, rest) => {
-      //println("Enter LetTuple")
+      // println("Enter LetTuple")
       let mut env_tuple = self.externals
       for i in args {
         env_tuple = env_tuple.add(i.0, i.1)
@@ -525,14 +555,10 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       }
     }
     Put(syn1, syn2, syn3, rest) => {
-      
       let (name1, s1_ty, knf1) = KnfEnv::get_knf(self, syn1)
       let (name2, s2_ty, knf2) = KnfEnv::get_knf(self, syn2)
       let (name3, s3_ty, knf3) = KnfEnv::get_knf(self, syn3)
-
-      
       let rest_knf = KnfEnv::to_knf(self, rest)
-
       match syn1 {
         Var(_) =>
           Let(
@@ -623,9 +649,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       // @util.logger("(name, e_ty, knf)"  + (name, e_ty, knf).to_string())
       let index = match e_ty {
         UserDefineType(_, fields) => {
-          let index = fields.val.search_by(fn(f) {
-            f.0 == field
-          })
+          let index = fields.val.search_by(fn(f) { f.0 == field })
           index.unwrap()
         }
         _ => @util.die("not support field access")
@@ -634,14 +658,31 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       // let let_index = Let((index_name, Int), index, FieldAccess(name, index_name))
       Let((name, e_ty), knf, FieldAccess(name, index))
     }
+    EnumConstruct(name, variant) => {
+      // @util.logger("EnumConstruct " + name + " " + variant.to_string())
+      // @util.logger("self.externals " + self.externals.to_string())
+      let ty = self.externals.get(name).unwrap()
+      // @util.logger("ty " + ty.to_string())
+      let index = match ty.repr() {
+        UserDefineType(_, fields) => {
+          // @util.logger("fields " + fields.to_string())
+          let index = fields.val.search_by(fn(f) { f.0 == name })
+          index.unwrap()
+        }
+        _ => @util.die("not support enum construct: " + ty.to_string())
+      }
+      make_enum_constructor(self, name, index, variant)
+    }
+    None => KnfEnv::to_knf(self, Unit)
     _ => raise KnfErr("not supported syntax " + s.to_string())
   }
 }
 
-fn make_tuple(env: KnfEnv, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
+///|
+fn make_tuple(env : KnfEnv, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
   let syns_names = Array::new()
   let lets = Array::new()
-  
+
   // Process all syntax elements first
   for syn in syns {
     let (name, ty, knf) = KnfEnv::get_knf(env, syn)
@@ -651,14 +692,36 @@ fn make_tuple(env: KnfEnv, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
       _ => lets.push((name, ty, knf))
     }
   }
-  
+
   // Build the result by nesting Let expressions from inside out
   let mut result = Tuple(syns_names)
   for i = lets.length() - 1; i >= 0; i = i - 1 {
     let (name, ty, knf) = lets[i]
     result = Let((name, ty), knf, result)
   }
-  
+  result
+}
+
+///|
+fn make_enum_constructor(env : KnfEnv, name: String, index: Int, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
+  let syns_names = Array::new()
+  let lets = Array::new()
+
+  // Process all syntax elements first
+  for syn in syns {
+    let (name, ty, knf) = KnfEnv::get_knf(env, syn)
+    syns_names.push(name)
+    match syn {
+      Var(_) => () // No Let needed for variables
+      _ => lets.push((name, ty, knf))
+    }
+  }
+  let mut result = EnumConstructor(name, index, syns_names)
+  // Build the result by nesting Let expressions from inside out
+  for i = lets.length() - 1; i >= 0; i = i - 1 {
+    let (name, ty, knf) = lets[i]
+    result = Let((name, ty), knf, result)
+  }
   result
 }
 
@@ -719,9 +782,9 @@ test {
     // println("typed: " + typed.to_json().stringify())
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = KnfEnv::syntax_preprocess(env, typed)
-    println("pre: " + pre.to_string())
-    let knf = KnfEnv::to_knf(env, pre)
-    println("knf: " + knf.to_json().stringify())
+    println("pre: " + pre.to_json().stringify())
+    let _knf = KnfEnv::to_knf(env, pre)
+    // println("knf: " + knf.to_json().stringify())
   } catch {
     @typing.TyErr(s) => {
       println("typing error")

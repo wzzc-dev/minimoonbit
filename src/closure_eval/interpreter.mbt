@@ -363,6 +363,7 @@ pub fn ClosureInterpreter::eval(
         _ => fail("type mismatch, tupleget expects Tuple and Int")
       }
     }
+    _ => fail("unimplemented")
   }
 }
 

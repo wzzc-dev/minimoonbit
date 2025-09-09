@@ -1152,12 +1152,15 @@ fn matchExpr(
     // @util.logger("matchExpr input: " + input.to_string())
     match input {
       ((_, expr), ((_, match_arm_list), _)) => {
-        let result = match_arm_list[0].1
-        // for arm in match_arm_list {
-        //   result = @types.Syntax::If(Eq(expr, arm), arm, result)
-        // }
+        // let result = match_arm_list[0].1
+        // // for arm in match_arm_list {
+        // //   result = @types.Syntax::If(Eq(expr, arm), arm, result)
+        // // }
 
-        match_arm_list[1:].fold(init=result, fn(acc, arm) {
+        // match_arm_list[1:].fold(init=result, fn(acc, arm) {
+        //   @types.Syntax::If(Eq(expr, arm.0), arm.1, acc)
+        // })
+        match_arm_list.fold(init=@types.Syntax::None, fn(acc, arm) {
           @types.Syntax::If(Eq(expr, arm.0), arm.1, acc)
         })
       }
