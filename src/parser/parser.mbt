@@ -1151,7 +1151,7 @@ fn matchExpr(
   .map(fn(input) {
     // @util.logger("matchExpr input: " + input.to_string())
     match input {
-      ((_, expr), ((_, match_arm_list), _)) => {
+      ((_, expr), ((_, match_arm_list), _)) => 
         // let result = match_arm_list[0].1
         // // for arm in match_arm_list {
         // //   result = @types.Syntax::If(Eq(expr, arm), arm, result)
@@ -1160,10 +1160,21 @@ fn matchExpr(
         // match_arm_list[1:].fold(init=result, fn(acc, arm) {
         //   @types.Syntax::If(Eq(expr, arm.0), arm.1, acc)
         // })
-        match_arm_list.fold(init=@types.Syntax::None, fn(acc, arm) {
-          @types.Syntax::If(Eq(expr, arm.0), arm.1, acc)
-        })
-      }
+        // fn to_pattern(pattern : @types.Syntax) -> @types.Pattern {
+        //   match pattern {
+        //     @types.Syntax::Var("_") => @types.Pattern::PWildcard
+        //     @types.Syntax::Var(name) => @types.Pattern::PVar(name)
+        //     @types.Syntax::Int(val) => @types.Pattern::PInt(val)
+        //     @types.Syntax::Bool(val) => @types.Pattern::PBool(val)
+        //     @types.Syntax::Tuple(patterns) =>
+        //       @types.Pattern::PTuple(patterns.map(input => to_pattern(input)))
+        //     _ => @util.die("matchExpr: unknown pattern: " + pattern.to_string())
+        //   }
+        // }
+        // match_arm_list.fold(init=@types.Syntax::None, fn(acc, arm) {
+        //   @types.Syntax::If(Eq(expr, arm.0), arm.1, acc)
+        // })
+        @types.Syntax::Match(expr, match_arm_list)
     }
   })
   .parse(tokens)
@@ -1175,7 +1186,7 @@ fn matchExpr(
 ///|
 fn matchArmList(
   tokens : ArrayView[@lex.Token],
-) -> (Array[(@types.Syntax, @types.Syntax)], ArrayView[@lex.Token])? {
+) -> (Array[(@types.Pattern, @types.Syntax)], ArrayView[@lex.Token])? {
   // @util.logger("matchArmList: " + tokens[:10].to_string())
   Parser(matchArm)
   .parser_and(semicolon.parser_and(matchArm).many())
@@ -1198,7 +1209,7 @@ fn matchArmList(
 ///|
 fn matchArm(
   tokens : ArrayView[@lex.Token],
-) -> ((@types.Syntax, @types.Syntax), ArrayView[@lex.Token])? {
+) -> ((@types.Pattern, @types.Syntax), ArrayView[@lex.Token])? {
   // @util.logger("matchArm: " + tokens[:10].to_string())
   Parser(pattern)
   .parser_and(ptoken_assign)
@@ -1225,7 +1236,7 @@ fn matchArm(
 ///|
 fn pattern(
   tokens : ArrayView[@lex.Token],
-) -> (@types.Syntax, ArrayView[@lex.Token])? {
+) -> (@types.Pattern, ArrayView[@lex.Token])? {
   // @util.logger("pattern: " + tokens[:10].to_string())
   // IDENTIFIER("RGB"), LPAREN, IDENTIFIER("r"), COMMA, IDENTIFIER("g"), COMMA, IDENTIFIER("b"), RPAREN
   ptoken_number
@@ -1241,7 +1252,9 @@ fn pattern(
   .parser_or(ptoken_wildcard)
   .parser_or(
     upperIdentifier
-    .zeroOrOnce(ptoken_colon.parser_or(ptoken_colon).parser_and(upperIdentifier))
+    .zeroOrOnce(
+      ptoken_colon.parser_or(ptoken_colon).parser_and(upperIdentifier),
+    )
     .zeroOrOnce(
       lparen
       .parser_and(pattern)
@@ -1271,7 +1284,7 @@ fn pattern(
           )
         ),
         None,
-      ) => @types.Syntax::Int(number)
+      ) => @types.Pattern::PInt(number)
       (
         Some(
           (
@@ -1285,7 +1298,7 @@ fn pattern(
           )
         ),
         None,
-      ) => @types.Syntax::Bool(true)
+      ) => @types.Pattern::PBool(true)
       (
         Some(
           (
@@ -1294,7 +1307,7 @@ fn pattern(
           )
         ),
         None,
-      ) => @types.Syntax::Bool(false)
+      ) => @types.Pattern::PBool(false)
       (
         Some(
           (
@@ -1306,21 +1319,36 @@ fn pattern(
       ) => {
         let result = [pattern1]
         result.append(patterns.map(fn(input) { input.1 }))
-        @types.Syntax::Tuple(result)
+        // @types.Syntax::Tuple(result)
+        @types.Pattern::PTuple(result)
       }
       (Some((Some((None, Some(WILDCARD))), None)), None) =>
         @util.die("暂未实现: " + @lex.WILDCARD.to_string())
-      (None, Some(IDENTIFIER(identifier))) =>
-        @types.Syntax::Var(identifier)
-      (Some((None, Some(((UPPER_IDENTIFIER(id), None), None)))), None) => {
-        @types.Syntax::EnumConstruct(id, [])
+      (None, Some(IDENTIFIER(identifier))) => @types.Pattern::PVar(identifier)
+      (Some((None, Some(((UPPER_IDENTIFIER(id), None), None)))), None) =>{
+        // @types.Syntax::EnumConstruct(id, [])
+        @types.Pattern::PEnumVariant(id, [])
       }
-      (Some((None, Some(((UPPER_IDENTIFIER(identifier1), None), Some((((_, pattern1), patterns), _)))))), None) => {
+      (
+        Some(
+          (
+            None,
+            Some(
+              (
+                (UPPER_IDENTIFIER(identifier1), None),
+                Some((((_, pattern1), patterns), _)),
+              )
+            ),
+          )
+        ),
+        None,
+      ) => {
         // @util.logger("pattern: input: " + input.to_string())
         let result = [pattern1]
         result.append(patterns.map(fn(input) { input.1 }))
         // @util.logger("pattern: result: " + result.to_string())
-        @types.Syntax::EnumConstruct(identifier1, result)
+        // @types.Syntax::EnumConstruct(identifier1, result)
+        @types.Pattern::PEnumVariant(identifier1, result)
       }
       _ => @util.die("pattern: " + input.to_string())
     }

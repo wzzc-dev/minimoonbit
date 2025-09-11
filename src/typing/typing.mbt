@@ -628,6 +628,49 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       unify(name_ty, value_ty)
       Unit
     }
+    Match(_, arms) => {
+      let mut body_ty = @types.Type::Unit
+      let (pat, body) = arms[0]
+      // @util.logger("match: pat: " + pat.to_string())
+      // @util.logger("match: ctx: " + ctx.inner().to_string())
+      let mut ctx = ctx
+      match pat {
+        PEnumVariant(name, patts) => {
+          let index = match ctx.inner().get(name) {
+            Some(UserDefineType(_, fields)) =>
+              fields.val.search_by(fn(input) { input.0 == name })
+            _ => @util.die("match: not found var: " + name.to_string())
+          }
+          let arr = match ctx.inner().get(name) {
+            Some(UserDefineType(_, fields)) =>
+              fields.val.get(index.unwrap()).unwrap().1
+            _ => @util.die("match: not found var: " + name.to_string())
+          }
+          let arr = match arr {
+            Tuple(arr) => arr
+            _ =>
+              @util.die(
+                "match: not found var: " +
+                name.to_string() +
+                " in " +
+                arr.to_string(),
+              )
+          }
+          let _ = patts.mapi(fn(i, pat) {
+            match pat {
+              PVar(name) => ctx = ctx.inner().add(name, arr[i])
+              _ => @util.die("not support match pattern: " + pat.to_string())
+            }
+          })
+
+        }
+        _ => @util.die("not support match pattern: " + pat.to_string())
+      }
+      // @util.logger("match: pat_ty: " + ctx.inner().to_string())
+      body_ty = infer(ctx, body)
+      // @util.logger("match: body_ty: " + body_ty.to_string())
+      body_ty
+    }
     // _ => @util.die("infer: unknown syntax: " + e.to_string())
 
   }
@@ -766,6 +809,11 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
     Assign(name, value) => Assign(deref_term(name), deref_term(value))
     EnumConstruct(name, e) => EnumConstruct(name, e)
     None => None
+    Match(expr, arms) =>
+      Match(
+        deref_term(expr),
+        arms.map(fn(input) { (input.0, deref_term(input.1)) }),
+      )
     // _ => @util.die("deref_term: unknown syntax: " + syntax.to_string())
   }
 }

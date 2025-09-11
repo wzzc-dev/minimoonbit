@@ -15,7 +15,8 @@ pub fn to_json(self : Type) -> Json {
     Ptr => "Ptr"
     Enum(name, variants) => ["Enum", name, variants]
     Struct(name, fields) => ["Struct", name, fields]
-    UserDefineType(name, fields) => ["UserDefineType", name, fields.val.to_json()]
+    UserDefineType(name, fields) =>
+      ["UserDefineType", name, fields.val.to_json()]
   }
 }
 
@@ -200,6 +201,12 @@ pub fn Syntax::to_json(self : Syntax) -> Json {
     Return(e) => ["Return", e.map(Syntax::to_json)]
     Assign(name, value) => ["Assign", name.to_json(), value.to_json()]
     FieldAccess(e, name) => ["FieldAccess", e.to_json(), name.to_json()]
+    Match(expr, arms) =>
+      [
+        "Match",
+        expr.to_json(),
+        arms.map(fn(input) { (input.0.to_json(), input.1.to_json()) }),
+      ]
   }
 }
 

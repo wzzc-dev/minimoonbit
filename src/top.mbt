@@ -34,10 +34,19 @@ pub(all) enum Syntax {
   FieldAccess(Syntax, String) // _.field
   Enum(String, String, Array[(String, Array[Type])], Syntax) // enum [_] { A, B, C }  _
   EnumConstruct(String, Array[Syntax]) // _(_,_,_)
+  Match(Syntax, Array[(Pattern, Syntax)])
   While(Syntax, Syntax) // while x { ... }
   Return(Syntax?) // return _;
 } derive(Show, ToJson(style="flat"))
 
+pub(all) enum Pattern {
+  PVar(String)
+  PInt(Int)
+  PBool(Bool)
+  PTuple(Array[Pattern])
+  PEnumVariant(String, Array[Pattern])
+  PWildcard
+} derive(Show, ToJson(style="flat"))
 ///|
 pub(all) enum Kind {
   Int

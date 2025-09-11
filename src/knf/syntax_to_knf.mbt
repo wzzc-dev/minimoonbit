@@ -2,7 +2,7 @@
 pub typealias @immut/hashmap.HashMap[String, Type] as LocalEnv
 
 ///|
-struct KnfEnv {
+pub struct KnfEnv {
   mut counter : Int
   mut externals : @immut/hashmap.HashMap[String, Type]
 }
@@ -23,6 +23,12 @@ pub fn KnfEnv::init_counter_from_existing(
 ///|
 fn KnfEnv::new_temp(self : KnfEnv) -> Name {
   let temp = Name::slot_only(self.counter)
+  self.counter += 1
+  temp
+}
+
+fn KnfEnv::new_name(self : KnfEnv, name : String) -> Name {
+  let temp = Name::name_and_slot(name, self.counter)
   self.counter += 1
   temp
 }
@@ -72,7 +78,10 @@ fn KnfEnv::get_type(
 ///|
 pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { // !Failure
   // @util.logger(
-  //   " to_knf : " + s.to_string() + "\n self: " + self.externals.to_string(),
+  //   " to_knf : " + s.to_string()
+  // )
+  // @util.logger(
+  //   " self: " + self.externals.to_string(),
   // )
   match s {
     Unit => Unit
@@ -658,20 +667,109 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       // let let_index = Let((index_name, Int), index, FieldAccess(name, index_name))
       Let((name, e_ty), knf, FieldAccess(name, index))
     }
+    Enum(name, _, variants, cont) => {
+      let variants = variants.map(fn(variant) {
+        match variant {
+          (name, ty) =>{
+             (name, @types.Type::Tuple(ty))}
+        }
+      })
+      let mut env_fun = self.externals.add(
+        name,
+        UserDefineType(name, { val: variants }),
+      )
+      for variant in variants {
+        let (name, _) = variant
+        env_fun = env_fun.add(
+          name,
+          UserDefineType(name, { val: variants }),
+        )
+      }
+      // @util.logger("Enum name: " + name.to_string())
+      KnfEnv::to_knf(
+        { counter: self.counter, externals: env_fun },
+        cont,
+      )
+    }
     EnumConstruct(name, variant) => {
-      // @util.logger("EnumConstruct " + name + " " + variant.to_string())
-      // @util.logger("self.externals " + self.externals.to_string())
+      // @util.logger("env: " + self.counter.to_string())
       let ty = self.externals.get(name).unwrap()
-      // @util.logger("ty " + ty.to_string())
       let index = match ty.repr() {
         UserDefineType(_, fields) => {
-          // @util.logger("fields " + fields.to_string())
           let index = fields.val.search_by(fn(f) { f.0 == name })
           index.unwrap()
         }
         _ => @util.die("not support enum construct: " + ty.to_string())
       }
-      make_enum_constructor(self, name, index, variant)
+      let i = KnfEnv::get_knf(self, Int(index))
+      let result = [i.0]
+      let x = variant.fold(init=Tuple(result), (acc, variant) => {
+        let (name, variant_ty, knf) = KnfEnv::get_knf(self, variant)
+        result.push(name)
+        // @util.logger("EnumConstruct acc: " + acc.to_string())
+        Let((name, variant_ty), knf, acc)
+      })
+      // @util.logger("EnumConstruct x: " + x.to_string())
+      // @util.logger("EnumConstruct i: " + Let((i.0, i.1), i.2, x).to_string())
+      Let((i.0, i.1), i.2, x)
+    }
+    Match(expr, arms) => {
+      // @util.logger("Match expr: " + expr.to_string())
+      // @util.logger("Match e'nüenü: " + self.externals.to_string())
+      let tag = KnfEnv::new_name(self, "match_tag")
+      let (name, _expr_ty, _knf) = KnfEnv::get_knf(self, expr)
+      // @util.logger("Match expr: " + expr.to_string() + " name:" + name.to_string() + " expr_ty:" + _expr_ty.to_string())
+      let arms_knf = arms.rev_fold(init=Unit, (acc, arm) => {
+        let (pat, body) = arm
+        // @util.logger("Match arm: " + pat.to_string())
+        let index = match pat {
+          PEnumVariant(name, _) => {
+            // @util.logger("PEnumVariant self.externals: " + self.externals.to_string())
+            let ty = self.externals.get(name).unwrap()
+            let index = match ty.repr() {
+              UserDefineType(_, fields) => {
+                // @util.logger("EnumConstruct name: " + name.to_string())
+                let index = fields.val.search_by(fn(f) { f.0 == name })
+                // @util.logger("EnumConstruct index: " + index.to_string())
+                match index {
+                  Some(index) => (index, fields.val[index].1)
+                  None => @util.die("not support enum construct: " + ty.to_string() + "search by name: " + name.to_string())
+                }
+              }
+              _ => @util.die("not support enum construct: " + ty.to_string())
+            }
+            index
+          }
+          _ => @util.die("not support match pattern: " + pat.to_string())
+        }
+        let is_expr = KnfEnv::get_knf(self, Int(index.0))
+        let body = KnfEnv::get_knf(self, body)
+        // IfEq(tag, is_expr.0, body.2, acc)
+        let body2 = match index.1 {
+          Tuple(patterns_ty) => {
+            if patterns_ty.length() == 0 {
+              body.2
+            } else {
+              let names = match pat {
+                PEnumVariant(_, patts) => patts.map(fn(pat) { match pat {
+                  PVar(name) => KnfEnv::new_name(self, name)
+                  _ => @util.die("not support match pattern: " + pat.to_string())
+                }})
+                _ => @util.die("not support match pattern: " + pat.to_string())
+              }
+              patterns_ty.foldi(init=Tuple(names), (i, acc, pat_ty) => {
+                Let((names[names.length() - i - 1], pat_ty), FieldAccess(name, names.length() - i), acc)
+              })
+            }
+          }
+          _ => @util.die("not support match pattern: " + pat.to_string())
+        }
+        // @util.logger("Match acc  acc: " + acc.to_string())
+        Let((is_expr.0, is_expr.1), is_expr.2, IfEq(tag, is_expr.0, body2, acc))
+      })
+      // Let((tag, Int), FieldAccess(name, 0), arms_knf)
+      Let((name, _expr_ty), _knf, Let((tag, Int), FieldAccess(name, 0), arms_knf))
+      // @util.die("not support match: expr: " + expr.to_string() + "; arms: " + arms.to_string())
     }
     None => KnfEnv::to_knf(self, Unit)
     _ => raise KnfErr("not supported syntax " + s.to_string())
@@ -701,30 +799,6 @@ fn make_tuple(env : KnfEnv, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
   }
   result
 }
-
-///|
-fn make_enum_constructor(env : KnfEnv, name: String, index: Int, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
-  let syns_names = Array::new()
-  let lets = Array::new()
-
-  // Process all syntax elements first
-  for syn in syns {
-    let (name, ty, knf) = KnfEnv::get_knf(env, syn)
-    syns_names.push(name)
-    match syn {
-      Var(_) => () // No Let needed for variables
-      _ => lets.push((name, ty, knf))
-    }
-  }
-  let mut result = EnumConstructor(name, index, syns_names)
-  // Build the result by nesting Let expressions from inside out
-  for i = lets.length() - 1; i >= 0; i = i - 1 {
-    let (name, ty, knf) = lets[i]
-    result = Let((name, ty), knf, result)
-  }
-  result
-}
-
 ///|
 pub(all) suberror KnfErr String derive(ToJson(style="flat"))
 
@@ -773,18 +847,19 @@ test {
 ///|
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/enum1.mbt",
+    "contest-2025-data/test_cases/mbt/enum2.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
-  println("parse: " + parse.to_json().stringify())
+  // println("parse: " + parse.to_json().stringify())
   try {
     let typed = @typing.typing(parse)
     // println("typed: " + typed.to_json().stringify())
     let env = KnfEnv::new(@immut/hashmap.new())
     let pre = KnfEnv::syntax_preprocess(env, typed)
-    println("pre: " + pre.to_json().stringify())
+    // println("pre: " + pre.to_json().stringify())
+    // @util.logger("env: " + env.externals.to_string())
     let _knf = KnfEnv::to_knf(env, pre)
-    // println("knf: " + knf.to_json().stringify())
+    println("knf: " + _knf.to_json().stringify())
   } catch {
     @typing.TyErr(s) => {
       println("typing error")

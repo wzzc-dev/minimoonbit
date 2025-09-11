@@ -67,35 +67,7 @@ pub fn KnfEnv::syntax_preprocess(
       )
     }
     Enum(name, _, variants, cont) => {
-      let variants = variants.map(fn(variant) {
-        match variant {
-          (name, ty) => (name, @types.Type::Tuple(ty))
-        }
-      })
-      let env_fun = self.externals.add(
-        name,
-        UserDefineType(name, { val: variants }),
-      )
-      KnfEnv::syntax_preprocess(
-        { counter: self.counter, externals: env_fun },
-        cont,
-      )
-    }
-    
-    If(cond, then, else_) => {
-      let cond = match cond {
-        Eq(s1, s2) =>
-          @types.Syntax::Eq(
-            KnfEnv::syntax_preprocess(self, s1),
-            KnfEnv::syntax_preprocess(self, s2),
-          )
-        _ => cond
-      }
-      If(
-        cond,
-        KnfEnv::syntax_preprocess(self, then),
-        KnfEnv::syntax_preprocess(self, else_),
-      )
+      Enum(name, "", variants, KnfEnv::syntax_preprocess(self, cont))
     }
     _ => s
   }
