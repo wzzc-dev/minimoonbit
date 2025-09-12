@@ -664,7 +664,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       }
       // let index_name = (try? @types.Name::from_string(name.name.unwrap() + "_" + field + "_index")).unwrap()
       // let let_index = Let((index_name, Int), index, FieldAccess(name, index_name))
-      Let((name, e_ty), knf, FieldAccess(name, index))
+      Let((name, e_ty), knf, FieldAccess(name, e_ty, index))
     }
     Enum(name, _, variants, cont) => {
       let variants = variants.map(fn(variant) {
@@ -758,7 +758,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
               }
               let result = body.2
               patterns_ty.foldi(init=result, (i, acc, pat_ty) => {
-                Let((names[names.length() - i - 1], pat_ty), FieldAccess(name, names.length() - i), acc)
+                Let((names[names.length() - i - 1], pat_ty), FieldAccess(name, pat_ty, names.length() - i), acc)
               })
             }
           }
@@ -794,8 +794,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         // @util.logger("Match acc  acc: " + acc.to_string())
         Let((is_expr.0, is_expr.1), is_expr.2, IfEq(tag, is_expr.0, pattern_body, acc))
       })
-      // @util.logger("Match : " + Let((name, _expr_ty), _knf, Let((tag, Int), FieldAccess(name, 0), arms_knf)).to_string())
-      Let((name, _expr_ty), _knf, Let((tag, Int), FieldAccess(name, 0), arms_knf))
+      // @util.logger("Match : " + Let((name, _expr_ty), _knf, Let((tag, Int), FieldAccess(name, _expr_ty, 0), arms_knf)).to_string())
+      Let((name, _expr_ty), _knf, Let((tag, Int), FieldAccess(name, _expr_ty, 0), arms_knf))
       // @util.die("not support match: expr: " + expr.to_string() + "; arms: " + arms.to_string())
     }
     None => KnfEnv::to_knf(self, Unit)

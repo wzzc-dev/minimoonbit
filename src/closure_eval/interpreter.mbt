@@ -356,7 +356,7 @@ pub fn ClosureInterpreter::eval(
       let new_env = env.add(x, y)
       self.eval(new_env, Unit)
     }
-    TupleGet(tuple, index) => {
+    TupleGet(tuple, _ty, index) => {
       let tuple = find(env, tuple)
       match (tuple, index) {
         (Tuple(arr), idx) => arr[idx]

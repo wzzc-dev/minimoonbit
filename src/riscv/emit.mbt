@@ -395,7 +395,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     CallDirect(label, args) => emit_call_direct(label, args, instrs, env)
     MakeTuple(elems) => emit_make_tuple(elems, instrs, env)
     LetTuple(names, tuple, e) => emit_let_tuple(names, tuple, e, instrs, env)
-    TupleGet(tuple, index) => emit_tuple_get(tuple, index, instrs, env)
+    TupleGet(tuple, ty, index) => emit_tuple_get(tuple, ty, index, instrs, env)
     ArrayGet(array, index) => emit_array_get(array, index, instrs, env)
     ArrayPut(array, index, value, rest) => {
       emit_array_put(array, index, value, instrs, env)

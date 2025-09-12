@@ -43,10 +43,18 @@ fn emit_let_tuple(
 ///|
 fn emit_tuple_get(
   tuple : @typing.Name,
+  ty : @closure.LowType,
   index : Int,
   instrs : Array[RvAsm],
   env : Env,
 ) -> Unit {
   instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, tuple) }))
-  instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
+  match ty {
+    Double => {
+      instrs.push(Fld(freg_ret, { base: T0, offset: index * 8 }))
+    }
+    _ => {
+      instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
+    }
+  }
 }

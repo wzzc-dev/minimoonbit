@@ -176,7 +176,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       While(knf_to_closure(env, cond), knf_to_closure(env, body))
     }
     Assign(x, y) => Assign(x, y)
-    FieldAccess(x, y) => TupleGet(x, y)
+    FieldAccess(x, ty, y) => TupleGet(x, ty_to_low_type(ty, false), y)
     EnumConstructor(name, index, variant) => EnumConstructor(name, index, variant)
   }
 }
@@ -350,7 +350,7 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
     While(_, body) =>
       fv(body)
     Assign(_x, _y) => @hashset.new()
-    FieldAccess(_,_) => @hashset.new()
+    FieldAccess(_, _, _) => @hashset.new()
     EnumConstructor(_, _, _) => @hashset.new()
   }
 }

@@ -163,7 +163,7 @@ fn PrettyKnf::print_one_level(
       logger.write_string("\n")
     }
     Assign(x, y) => logger.write_string("\{x} = \{y}")
-    FieldAccess(e, name) => logger.write_string("FieldAccess(\{e}, \{name})")
+    FieldAccess(e, t, name) => logger.write_string("FieldAccess(\{e}, \{t}, \{name})")
     EnumConstructor(name, index, variant) => logger.write_string("EnumConstructor(\{name}, \{index}, \{variant})")
   }
 }
