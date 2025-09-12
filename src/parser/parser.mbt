@@ -1611,6 +1611,8 @@ fn blockExpr(
               @types.Syntax::LetTuple(bindings, value, acc)
             @types.Syntax::LetRec(fn_def, _) =>
               @types.Syntax::LetRec(fn_def, acc)
+            @types.Syntax::Put(binding, index, value, _) =>
+              @types.Syntax::Put(binding, index, value, acc)
             _ =>
               @types.Syntax::Let(
                 ("_", @types.Type::Var({ val: None })),

@@ -305,7 +305,7 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
       let r = fv(cont)
       r.remove(new_fv(x, Unit))
       let fve = fv(e)
-      fve.remove(new_fv(x, Unit))
+      // fve.remove(new_fv(x, Unit))
       fve.union(r)
     }
     Var(x) => @hashset.of([new_fv(x, Unit)])
@@ -356,13 +356,13 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/enum2.mbt",
+    "contest-2025-data/test_cases/mbt/matmul.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
-  println("parse: " + parse.to_string() + "\n")
+  println("parse: " + parse.to_json().stringify() + "\n")
   try {
     let typed = @typing.typing(parse)
-    println("typed: " + typed.to_string() + "\n")
+    println("typed: " + typed.to_json().stringify() + "\n")
     let env = @knf.KnfEnv::new(@immut/hashmap.new())
     let pre = @knf.KnfEnv::syntax_preprocess(env, typed)
     println("pre: " + pre.to_json().stringify() + "\n")
