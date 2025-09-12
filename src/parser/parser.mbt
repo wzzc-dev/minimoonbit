@@ -1152,28 +1152,6 @@ fn matchExpr(
     // @util.logger("matchExpr input: " + input.to_string())
     match input {
       ((_, expr), ((_, match_arm_list), _)) => 
-        // let result = match_arm_list[0].1
-        // // for arm in match_arm_list {
-        // //   result = @types.Syntax::If(Eq(expr, arm), arm, result)
-        // // }
-
-        // match_arm_list[1:].fold(init=result, fn(acc, arm) {
-        //   @types.Syntax::If(Eq(expr, arm.0), arm.1, acc)
-        // })
-        // fn to_pattern(pattern : @types.Syntax) -> @types.Pattern {
-        //   match pattern {
-        //     @types.Syntax::Var("_") => @types.Pattern::PWildcard
-        //     @types.Syntax::Var(name) => @types.Pattern::PVar(name)
-        //     @types.Syntax::Int(val) => @types.Pattern::PInt(val)
-        //     @types.Syntax::Bool(val) => @types.Pattern::PBool(val)
-        //     @types.Syntax::Tuple(patterns) =>
-        //       @types.Pattern::PTuple(patterns.map(input => to_pattern(input)))
-        //     _ => @util.die("matchExpr: unknown pattern: " + pattern.to_string())
-        //   }
-        // }
-        // match_arm_list.fold(init=@types.Syntax::None, fn(acc, arm) {
-        //   @types.Syntax::If(Eq(expr, arm.0), arm.1, acc)
-        // })
         @types.Syntax::Match(expr, match_arm_list)
     }
   })

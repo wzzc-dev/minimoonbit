@@ -528,7 +528,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       )
       let arr_nm_ty = args.map(t => {
         let nm = @types.Name::name_only(t.0)
-        (nm, t.1)
+        (nm, t.1.repr())
       })
       match syn {
         Var(str) => {
@@ -536,9 +536,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           LetTuple(arr_nm_ty, x, after)
         }
         _ => {
-          let x = self.new_temp()
-          let k = KnfEnv::to_knf(self, syn)
-          Let((x, Unit), k, LetTuple(arr_nm_ty, x, after))
+          let k = KnfEnv::get_knf(self, syn)
+          Let((k.0, k.1), k.2, LetTuple(arr_nm_ty, k.0, after))
         }
       }
     }
@@ -719,7 +718,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       let tag = KnfEnv::new_name(self, "match_tag")
       let (name, _expr_ty, _knf) = KnfEnv::get_knf(self, expr)
       // @util.logger("Match expr: " + expr.to_string() + " name:" + name.to_string() + " expr_ty:" + _expr_ty.to_string())
-      let arms_knf = arms.rev_fold(init=Unit, (acc, arm) => {
+      // @util.logger("arms: " + arms.to_string())
+      fn gen_match(arm: (@types.Pattern, @types.Syntax)) raise KnfErr{
         let (pat, body) = arm
         // @util.logger("Match arm: " + pat.to_string())
         let index = match pat {
@@ -732,7 +732,53 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
                 let index = fields.val.search_by(fn(f) { f.0 == name })
                 // @util.logger("EnumConstruct index: " + index.to_string())
                 match index {
-                  Some(index) => (index, fields.val[index].1)
+                  Some(index) => (index, fields.val[index])
+                  None => @util.die("not support enum construct: " + ty.to_string() + "search by name: " + name.to_string())
+                }
+              }
+              _ => @util.die("not support enum construct: " + ty.to_string())
+            }
+            index
+          }
+          _ => @util.die("not support match pattern: " + pat.to_string())
+        }
+        let body = KnfEnv::get_knf(self, body)
+        // IfEq(tag, is_expr.0, body.2, acc)
+        match index.1 {
+          (_, Tuple(patterns_ty)) => {
+            if patterns_ty.length() == 0 {
+              body.2
+            } else {
+              let names = match pat {
+                PEnumVariant(_, patts) => patts.map(fn(pat) { match pat {
+                  PVar(name) => Name::name_only(name)
+                  _ => @util.die("not support match pattern: " + pat.to_string())
+                }})
+                _ => @util.die("not support match pattern: " + pat.to_string())
+              }
+              let result = body.2
+              patterns_ty.foldi(init=result, (i, acc, pat_ty) => {
+                Let((names[names.length() - i - 1], pat_ty), FieldAccess(name, names.length() - i), acc)
+              })
+            }
+          }
+          _ => @util.die("not support match pattern: " + pat.to_string())
+        }
+      }
+      let arms_knf = arms[1:].rev_fold(init=gen_match(arms[0]), (acc, arm) => {
+        let (pat, _) = arm
+        // @util.logger("Match arm: " + pat.to_string())
+        let index = match pat {
+          PEnumVariant(name, _) => {
+            // @util.logger("PEnumVariant self.externals: " + self.externals.to_string())
+            let ty = self.externals.get(name).unwrap()
+            let index = match ty.repr() {
+              UserDefineType(_, fields) => {
+                // @util.logger("EnumConstruct name: " + name.to_string())
+                let index = fields.val.search_by(fn(f) { f.0 == name })
+                // @util.logger("EnumConstruct index: " + index.to_string())
+                match index {
+                  Some(index) => (index, fields.val[index])
                   None => @util.die("not support enum construct: " + ty.to_string() + "search by name: " + name.to_string())
                 }
               }
@@ -743,31 +789,12 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           _ => @util.die("not support match pattern: " + pat.to_string())
         }
         let is_expr = KnfEnv::get_knf(self, Int(index.0))
-        let body = KnfEnv::get_knf(self, body)
-        // IfEq(tag, is_expr.0, body.2, acc)
-        let body2 = match index.1 {
-          Tuple(patterns_ty) => {
-            if patterns_ty.length() == 0 {
-              body.2
-            } else {
-              let names = match pat {
-                PEnumVariant(_, patts) => patts.map(fn(pat) { match pat {
-                  PVar(name) => KnfEnv::new_name(self, name)
-                  _ => @util.die("not support match pattern: " + pat.to_string())
-                }})
-                _ => @util.die("not support match pattern: " + pat.to_string())
-              }
-              patterns_ty.foldi(init=Tuple(names), (i, acc, pat_ty) => {
-                Let((names[names.length() - i - 1], pat_ty), FieldAccess(name, names.length() - i), acc)
-              })
-            }
-          }
-          _ => @util.die("not support match pattern: " + pat.to_string())
-        }
+        let pattern_body = gen_match(arm)
+
         // @util.logger("Match acc  acc: " + acc.to_string())
-        Let((is_expr.0, is_expr.1), is_expr.2, IfEq(tag, is_expr.0, body2, acc))
+        Let((is_expr.0, is_expr.1), is_expr.2, IfEq(tag, is_expr.0, pattern_body, acc))
       })
-      // Let((tag, Int), FieldAccess(name, 0), arms_knf)
+      // @util.logger("Match : " + Let((name, _expr_ty), _knf, Let((tag, Int), FieldAccess(name, 0), arms_knf)).to_string())
       Let((name, _expr_ty), _knf, Let((tag, Int), FieldAccess(name, 0), arms_knf))
       // @util.die("not support match: expr: " + expr.to_string() + "; arms: " + arms.to_string())
     }
@@ -850,7 +877,7 @@ test {
     "contest-2025-data/test_cases/mbt/enum2.mbt",
   )).unwrap() //cls-reg-bug.mbt
   let parse = @parser.parse_from_string(_test2)
-  // println("parse: " + parse.to_json().stringify())
+  println("parse: " + parse.to_json().stringify())
   try {
     let typed = @typing.typing(parse)
     // println("typed: " + typed.to_json().stringify())
