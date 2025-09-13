@@ -39,32 +39,33 @@ pub impl Show for NameFromStringError with output(
 pub fn Name::from_string(s : String) -> Name raise NameFromStringError {
   match s.find(".") {
     Some(first_dot) => {
-      let name = s.substring(start=0, end=first_dot)
-      let slot_s = s.substring(start=first_dot + 1, end=s.length())
+      let mut slot_s = ""
       try {
+        let name = s[0:first_dot].to_string()
+        slot_s = s[first_dot + 1:s.length()].to_string()
         let slot = @strconv.parse_int(slot_s, base=10)
         Name::name_and_slot(name, slot)
-      } catch {          
-        StrConvError(e) => raise NameFromStringError::InvalidSlotNumber(e, slot_s)
+      } catch {
+        @strconv.StrConvError(e) =>
+          raise NameFromStringError::InvalidSlotNumber(e, slot_s)
+        _ => raise NameFromStringError::InvalidSlotNumber(s, slot_s)
       }
     }
     None =>
-      if s.has_prefix("_") &&
-        s.length() > 1 &&
-        s
-        .substring(start=1, end=s.length())
-        .iter()
-        .all(fn(c) { c >= '0' && c <= '9' }) {
-        let slot_s = s.substring(start=1, end=s.length())
-        try {
+      try {
+        if s.has_prefix("_") &&
+          s.length() > 1 &&
+          s[1:s.length()].iter().all(fn(c) { c >= '0' && c <= '9' }) {
+          let slot_s = s[1:s.length()].to_string()
           let slot = @strconv.parse_int(slot_s, base=10)
           Name::slot_only(slot)
-        } catch {
-          @strconv.StrConvError(e) =>
-            raise NameFromStringError::InvalidSlotNumber(e, slot_s)
+        } else {
+          Name::name_only(s)
         }
-      } else {
-        Name::name_only(s)
+      } catch {
+        @strconv.StrConvError(e) =>
+          raise NameFromStringError::InvalidSlotNumber(e, s.to_string())
+        _ => raise NameFromStringError::InvalidSlotNumber(s, s.to_string())
       }
   }
 }
