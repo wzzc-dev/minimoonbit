@@ -25,7 +25,7 @@ fn emit_array_get(
   match get_array_element_type(array, env) {
     Double => instrs.push(Fld(freg_ret, { base: T0, offset: 0 }))
     Int => instrs.push(Lw(reg_ret, { base: T0, offset: 0 }))
-    DirectFn(_, _) | ClosureFn(_, _) | Ptr => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Mv
+    DirectFn(_, _) | ClosureFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Mv
     _ => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Ld
   }
   // @util.logger("emit_array_get end")

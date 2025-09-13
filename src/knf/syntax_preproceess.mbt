@@ -20,18 +20,18 @@ pub fn KnfEnv::syntax_preprocess(
     Let((str, ty), s1, s2) =>
       match s1 {
         ArrayExpr(elems) => {
-          // Check if this is a multidimensional array by examining first element
-          let is_multidimensional = match elems[0] {
-            ArrayExpr(_) => true
-            _ => false
-          }
-          if is_multidimensional {
-            // Handle multidimensional array
-            KnfEnv::process_multidimensional_array(self, str, ty, elems, s2)
-          } else {
-            // Handle 1D array (original logic)
+          // // Check if this is a multidimensional array by examining first element
+          // let is_multidimensional = match elems[0] {
+          //   ArrayExpr(_) => true
+          //   _ => false
+          // }
+          // if is_multidimensional {
+          //   // Handle multidimensional array
+          //   KnfEnv::process_multidimensional_array(self, str, ty, elems, s2)
+          // } else {
+          //   // Handle 1D array (original logic)
             KnfEnv::process_1d_array(self, str, ty, elems, s2)
-          }
+          // }
         }
         _ =>
           Let(
@@ -66,9 +66,8 @@ pub fn KnfEnv::syntax_preprocess(
         rest,
       )
     }
-    Enum(name, _, variants, cont) => {
+    Enum(name, _, variants, cont) =>
       Enum(name, "", variants, KnfEnv::syntax_preprocess(self, cont))
-    }
     _ => s
   }
 }
@@ -107,6 +106,10 @@ fn KnfEnv::process_1d_array(
 
   let ty = get_array_ty(ty)
   Let((str, Array(ty)), array_make, result)
+}
+
+test {
+  ignore(KnfEnv::process_multidimensional_array)
 }
 
 ///|
