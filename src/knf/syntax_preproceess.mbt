@@ -20,18 +20,45 @@ pub fn KnfEnv::syntax_preprocess(
     Let((str, ty), s1, s2) =>
       match s1 {
         ArrayExpr(elems) => {
-          // // Check if this is a multidimensional array by examining first element
-          // let is_multidimensional = match elems[0] {
-          //   ArrayExpr(_) => true
-          //   _ => false
-          // }
-          // if is_multidimensional {
-          //   // Handle multidimensional array
-          //   KnfEnv::process_multidimensional_array(self, str, ty, elems, s2)
-          // } else {
-          //   // Handle 1D array (original logic)
+          // Check if this is a multidimensional array by examining first element
+          let is_multidimensional = match elems[0] {
+            ArrayExpr(_) => true
+            _ => false
+          }
+          if is_multidimensional {
+            // Handle multidimensional array
+            KnfEnv::process_multidimensional_array(self, str, ty, elems, s2)
+          } else {
+            // Handle 1D array (original logic)
             KnfEnv::process_1d_array(self, str, ty, elems, s2)
-          // }
+          }
+        }
+        Array(len, ArrayExpr(elems)) => {
+          let elems_len = elems.length()
+          // Create Array::make(len, default_value) where default_value is based on first expr
+          let array_make_sub = @types.Syntax::Array(Int(elems_len), elems[0])
+          let array_make = @types.Syntax::Array(len, array_make_sub)
+
+          // Process elements in reverse order to build nested Let expressions
+          let mut sub_result = array_make
+          for i = elems_len - 1; i >= 0; i = i - 1 {
+            // Wrap the previous result with this Put operation
+            sub_result = Put(Var(str + "_sub"), Int(i), elems[i], sub_result)
+          }
+
+          
+          let sub_ty = match elems[0] {
+            Int(_) => @types.Type::Int
+            Double(_) => @types.Type::Double
+            _ => Ptr
+          }
+          let sub = @types.Syntax::Let((str + "_sub", Array(sub_ty)), array_make_sub, sub_result)
+
+          Let(
+            (str, ty),
+            sub,
+            KnfEnv::syntax_preprocess(self, s2),
+          )
         }
         _ =>
           Let(
@@ -82,11 +109,8 @@ fn KnfEnv::process_1d_array(
   s2 : @types.Syntax,
 ) -> @types.Syntax {
   let len = elems.length()
-
   // Create Array::make(len, default_value) where default_value is based on first expr
-  let len_expr = @types.Syntax::Int(len)
-  let arr_ty = elems[0]
-  let array_make = @types.Syntax::Array(len_expr, arr_ty)
+  let array_make = @types.Syntax::Array(Int(len), elems[0])
 
   // Build the nested structure from inside out
   // Start with the innermost expression
@@ -97,23 +121,11 @@ fn KnfEnv::process_1d_array(
     // Wrap the previous result with this Put operation
     result = Put(Var(str), Int(i), elems[i], result)
   }
-  fn get_array_ty(ty : @types.Type) -> @types.Type {
-    match ty {
-      Array(ty) => get_array_ty(ty)
-      _ => ty
-    }
-  }
-
-  let ty = get_array_ty(ty)
-  Let((str, Array(ty)), array_make, result)
-}
-
-test {
-  ignore(KnfEnv::process_multidimensional_array)
+  Let((str, ty), array_make, result)
 }
 
 ///|
-/// Process multidimensional array by flattening to 1D array
+/// Process multidimensional array
 fn KnfEnv::process_multidimensional_array(
   self : KnfEnv,
   str : String,
@@ -121,38 +133,46 @@ fn KnfEnv::process_multidimensional_array(
   elems : Array[@types.Syntax],
   s2 : @types.Syntax,
 ) -> @types.Syntax {
-  // Flatten the multidimensional array to 1D
-  let (flattened_elements, _dims) = KnfEnv::flatten_multidimensional_array(
-    elems,
-  )
-  // Process as a 1D array
-  KnfEnv::process_1d_array(self, str, ty, flattened_elements, s2)
-}
-
-///|
-/// Flatten multidimensional array to 1D array
-fn KnfEnv::flatten_multidimensional_array(
-  elems : Array[@types.Syntax],
-) -> (Array[@types.Syntax], Array[Int]) {
-  let result : Array[@types.Syntax] = []
-  let dims : Array[Int] = []
-  dims.push(elems.length())
-  for elem in elems {
-    match elem {
-      ArrayExpr(sub_elems) => {
-        // Recursively flatten sub-arrays
-        let (flattened_sub, sub_dims) = KnfEnv::flatten_multidimensional_array(
+  let len = elems.length()
+  let mut result = KnfEnv::syntax_preprocess(self, s2)
+  for i = len - 1; i >= 0; i = i - 1 {
+    let sub_elem = elems[i]
+    let (sub_array_ty, temp_var_name) = match ty {
+      Array(inner_ty) =>
+        (inner_ty, @types.Syntax::Var(str + "_sub_" + i.to_string()))
+      _ => (ty, sub_elem)
+    }
+    let processed_sub_array = match sub_elem {
+      ArrayExpr(sub_elems) =>
+        KnfEnv::process_multidimensional_array(
+          self,
+          str + "_sub_" + i.to_string(),
+          sub_array_ty,
           sub_elems,
+          temp_var_name,
         )
-        for sub_elem in flattened_sub {
-          result.push(sub_elem)
-        }
-        dims.append(sub_dims)
-      }
-      _ =>
-        // Add non-array elements directly
-        result.push(elem)
+      _ => sub_elem
+    }
+    // Wrap the result with the sub-array processing and Put operation
+    result = match processed_sub_array {
+      Let((temp_name, temp_ty), temp_init, _) =>
+        // Replace the placeholder with Put operation
+        Let(
+          (temp_name, temp_ty),
+          temp_init,
+          Put(Var(str), Int(i), processed_sub_array, result),
+        )
+      _ => Put(Var(str), Int(i), processed_sub_array, result)
     }
   }
-  (result, dims)
+  let first_subarray_expr = match elems[0] {
+    ArrayExpr(sub_elems) => {
+      let sub_len = sub_elems.length()
+      @types.Syntax::Array(@types.Syntax::Int(sub_len), sub_elems[0])
+    }
+    _ => elems[0]
+  }
+  let len_expr = @types.Syntax::Int(len)
+  let outer_array_make = @types.Syntax::Array(len_expr, first_subarray_expr)
+  Let((str, ty), outer_array_make, result)
 }
