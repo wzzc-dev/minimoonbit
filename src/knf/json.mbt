@@ -39,7 +39,7 @@ pub fn Knf::to_json(self : Knf) -> Json {
       ["LetTuple", n_ts_res.to_json(), n.to_json(), k.to_json()]
     }
     Get(n1, n2) => ["Get", n1.to_json(), n2.to_json()]
-    Put(n1, n2, n3, e) => ["Put", n1.to_json(), n2.to_json(), n3.to_json(), e.to_json()]
+    Put(n1, n2, n3) => ["Put", n1.to_json(), n2.to_json(), n3.to_json()]
     ExternalArray(n) => ["ExternalArray", n.to_json()]
     ExternalFunctionApplication(s, ns) =>
       ["ExternalFunctionApplication", s.to_json(), ns.to_json()]
@@ -125,8 +125,8 @@ pub fn Knf::from_json(json : Json) -> Knf raise {
       LetTuple(n_ts_res, Name::from_json(n), Knf::from_json(k))
     }
     ["Get", n1, n2] => Get(Name::from_json(n1), Name::from_json(n2))
-    ["Put", n1, n2, n3, e] =>
-      Put(Name::from_json(n1), Name::from_json(n2), Name::from_json(n3), Knf::from_json(e))
+    ["Put", n1, n2, n3] =>
+      Put(Name::from_json(n1), Name::from_json(n2), Name::from_json(n3))
     ["ExternalArray", n] => ExternalArray(Name::from_json(n))
     ["ExternalFunctionApplication", String(s), Array(ns)] => {
       let rns = []

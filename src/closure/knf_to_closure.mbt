@@ -168,7 +168,7 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       )
       LetTuple(arr_name, name, knf_to_closure(env, cont))
     }
-    Put(name, name1, name2, name3) => ArrayPut(name, name1, name2, knf_to_closure(env, name3))
+    Put(name, name1, name2) => ArrayPut(name, name1, name2)
     Get(name, name1) => ArrayGet(name, name1)
     ExternalArray(name) => ExternalArray(name.name.to_string())
     ExternalFunctionApplication(name, arr_name) => ExternalFunctionApplication(name, arr_name)
@@ -332,18 +332,7 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
       result.union(@hashset.of([new_fv(name, Ptr)]))
     }
     Get(a, b) => @hashset.of([new_fv(a, Ptr), new_fv(b, Int)])
-    Put(a, b, c, d) => {
-      let rest = @hashset.of([new_fv(a, Ptr), new_fv(b, Int), new_fv(c, Ptr)])
-
-      let result = fv(d)
-      
-      result.remove(new_fv(a, Ptr))
-      result.remove(new_fv(b, Ptr))
-      result.remove(new_fv(c, Ptr))
-
-      result.union(rest)
-    }
-      
+    Put(a, b, c) => @hashset.of([new_fv(a, Ptr), new_fv(b, Int), new_fv(c, Ptr)])
     ExternalArray(a) => @hashset.of([new_fv(a, Ptr)])
     ExternalFunctionApplication(_, arr_name) =>
       @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
@@ -356,7 +345,7 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
 }
 test {
   let _test2 = (try? @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/matmul.mbt",
+    "contest-2025-data/test_cases/mbt/conv_pool.mbt",
   )).unwrap()
   let parse = @parser.parse_from_string(_test2)
   println("parse: " + parse.to_json().stringify() + "\n")
@@ -367,11 +356,12 @@ test {
     let pre = @knf.KnfEnv::syntax_preprocess(env, typed)
     println("pre: " + pre.to_json().stringify() + "\n")
     let knf = @knf.KnfEnv::to_knf(env, pre)
-    println("knf: " + knf.to_json().stringify() + "\n")
+    println("knf: ")
+    println(knf.to_json().stringify() + "\n")
     let closure = knf_program_to_closure(knf,Map::from_iter(@immut/hashmap.new().iter()))
     // println("closure: " + closure.to_string() + "\n")
     println("closure: ")
-    println(closure.to_json().stringify())
+    // println(closure.to_json().stringify())
   } catch {
     @typing.TyErr(s) => {
       println("typing error")

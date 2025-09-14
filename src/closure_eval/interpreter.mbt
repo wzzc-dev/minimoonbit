@@ -310,7 +310,7 @@ pub fn ClosureInterpreter::eval(
         _ => fail("type mismatch, get expects Array and Int")
       }
     }
-    ArrayPut(arr, idx, v, e) => {
+    ArrayPut(arr, idx, v) => {
       let arr = find(env, arr)
       let idx = find(env, idx)
       let v = find(env, v)
@@ -325,7 +325,7 @@ pub fn ClosureInterpreter::eval(
             idx.to_string(),
           )
       }
-      self.eval(env, e)
+      Unit
     }
     ExternalArray(_) => fail("ExternalArray is not supported")
     ExternalFunctionApplication(l, xs) => {

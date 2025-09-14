@@ -561,7 +561,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         _ => raise TyErr("Tuple expected, found {}")
       }
     }
-    Put(name, n, value, rest) => {
+    Put(name, n, value) => {
       match infer(ctx, n) {
         Int =>
           match infer(ctx, name) {
@@ -598,7 +598,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
             infer(ctx, n).to_string(),
           )
       }
-      infer(ctx, rest)
+      Unit
     }
     ArrayExpr(es) => {
       let ty = infer(ctx, es[0])
@@ -793,8 +793,8 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
         deref_term(e1),
         deref_term(e2),
       )
-    Put(name, t, value, rest) =>
-      Put(deref_term(name), deref_term(t), deref_term(value), deref_term(rest))
+    Put(name, t, value) =>
+      Put(deref_term(name), deref_term(t), deref_term(value))
     While(e1, e2) => While(deref_term(e1), deref_term(e2))
     Return(e) =>
       match e {

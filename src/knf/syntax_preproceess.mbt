@@ -43,7 +43,7 @@ pub fn KnfEnv::syntax_preprocess(
           let mut sub_result = array_make
           for i = elems_len - 1; i >= 0; i = i - 1 {
             // Wrap the previous result with this Put operation
-            sub_result = Put(Var(str + "_sub"), Int(i), elems[i], sub_result)
+            sub_result = Let(("_", Unit), Put(Var(str + "_sub"), Int(i), elems[i]), sub_result)
           }
 
           
@@ -73,8 +73,6 @@ pub fn KnfEnv::syntax_preprocess(
         KnfEnv::syntax_preprocess(self, s1),
         KnfEnv::syntax_preprocess(self, s2),
       )
-    Put(arr, idx, v, rest) =>
-      Put(arr, idx, v, KnfEnv::syntax_preprocess(self, rest))
     StructConstruct(_, fields) => {
       let result = fields.map(fn(field) {
         match field {
@@ -119,7 +117,7 @@ fn KnfEnv::process_1d_array(
   // Process elements in reverse order to build nested Let expressions
   for i = len - 1; i >= 0; i = i - 1 {
     // Wrap the previous result with this Put operation
-    result = Put(Var(str), Int(i), elems[i], result)
+    result = Let(("_", Unit), Put(Var(str), Int(i), elems[i]), result)
   }
   Let((str, ty), array_make, result)
 }
@@ -160,9 +158,9 @@ fn KnfEnv::process_multidimensional_array(
         Let(
           (temp_name, temp_ty),
           temp_init,
-          Put(Var(str), Int(i), processed_sub_array, result),
+          Let(("_", Unit), Put(Var(str), Int(i), processed_sub_array), result),
         )
-      _ => Put(Var(str), Int(i), processed_sub_array, result)
+      _ => Let(("_", Unit), Put(Var(str), Int(i), processed_sub_array), result)
     }
   }
   let first_subarray_expr = match elems[0] {

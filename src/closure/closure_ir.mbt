@@ -38,7 +38,7 @@ pub(all) enum Expr {
   TupleGet(Name, LowType, Int)
   EnumConstructor(String, Int, Array[Name])
   ArrayGet(Name, Name)
-  ArrayPut(Name, Name, Name, Expr)
+  ArrayPut(Name, Name, Name)
   ExternalArray(Label)
   ExternalFunctionApplication(Label, Array[Name])
   While(Expr, Expr)

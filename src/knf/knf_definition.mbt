@@ -35,7 +35,7 @@ pub(all) enum Knf {
   EnumConstructor(String, Int, Array[Name])
 
   Get(Name, Name)
-  Put(Name, Name, Name, Knf)
+  Put(Name, Name, Name)
   ExternalArray(Name)
   ExternalFunctionApplication(String, Array[Name])
 

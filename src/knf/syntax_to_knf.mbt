@@ -562,17 +562,16 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           }
       }
     }
-    Put(syn1, syn2, syn3, rest) => {
+    Put(syn1, syn2, syn3) => {
       let (name1, s1_ty, knf1) = KnfEnv::get_knf(self, syn1)
       let (name2, s2_ty, knf2) = KnfEnv::get_knf(self, syn2)
       let (name3, s3_ty, knf3) = KnfEnv::get_knf(self, syn3)
-      let rest_knf = KnfEnv::to_knf(self, rest)
       match syn1 {
         Var(_) =>
           Let(
             (name2, s2_ty),
             knf2,
-            Let((name3, s3_ty), knf3, Put(name1, name2, name3, rest_knf)),
+            Let((name3, s3_ty), knf3, Put(name1, name2, name3))
           )
         _ =>
           Let(
@@ -581,7 +580,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
             Let(
               (name2, s2_ty),
               knf2,
-              Let((name3, s3_ty), knf3, Put(name1, name2, name3, rest_knf)),
+              Let((name3, s3_ty), knf3, Put(name1, name2, name3)),
             ),
           )
       }
