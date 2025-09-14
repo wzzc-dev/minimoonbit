@@ -48,6 +48,7 @@ pub fn Knf::to_json(self : Knf) -> Json {
     Assign(n1, n2) => ["Assign", n1.to_json(), n2.to_json()]
     FieldAccess(n1, t, n2) => ["FieldAccess", n1.to_json(), t.to_json(), n2.to_json()]
     EnumConstructor(name, index, variant) => ["EnumConstructor", name.to_json(), index, variant.to_json()]
+    ArrayData(label, data) => ["ArrayData", label.to_json(), data.map(fn(d) { d.to_json() })]
   }
 }
 
@@ -127,7 +128,14 @@ pub fn Knf::from_json(json : Json) -> Knf raise {
     ["Get", n1, n2] => Get(Name::from_json(n1), Name::from_json(n2))
     ["Put", n1, n2, n3] =>
       Put(Name::from_json(n1), Name::from_json(n2), Name::from_json(n3))
-    ["ExternalArray", n] => ExternalArray(Name::from_json(n))
+    ["ExternalArray", n] => ExternalArray(n.to_string())
+    ["ArrayData", label, Array(ns)] => {
+      let rns = []
+      for it in ns {
+        rns.push(Knf::from_json(it))
+      }
+      ArrayData(label.to_string(), rns)
+    }
     ["ExternalFunctionApplication", String(s), Array(ns)] => {
       let rns = []
       for it in ns {

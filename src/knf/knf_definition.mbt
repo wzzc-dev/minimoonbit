@@ -36,9 +36,10 @@ pub(all) enum Knf {
 
   Get(Name, Name)
   Put(Name, Name, Name)
-  ExternalArray(Name)
+  ExternalArray(String)
   ExternalFunctionApplication(String, Array[Name])
-
+  ArrayData(String, Array[Knf])
+  
   While(Knf, Knf)   // While(condition, body)
   Assign(Name, Name)
 } derive(Show, Eq)

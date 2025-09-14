@@ -10,6 +10,43 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   // }
   // println("minimbt_main: " + input.body.to_json().stringify())
   let functions = []
+  for static_array in input.static_arrays {
+    
+    fn get_elems(name: String, arr : Array[@closure.LowTypeValue]) {
+      let body = []
+      let elems = []
+      for i, elem in arr {
+        match elem {
+          DoubleValue(d) => elems.push(d.to_string())
+          IntValue(i) => elems.push(i.to_string())
+          PtrValue(a) => {
+            get_elems(name + "_" + i.to_string(), a)
+            elems.push(name + "_" + i.to_string())
+          }
+        }
+      }
+      if elems.length() > 0 {
+        match arr[0] {
+          PtrValue(_) => {
+            body.push(Data(".dword", elems))
+          }
+          IntValue(_) => {
+            body.push(Data(".word", elems))
+          }
+          DoubleValue(_) => {
+            body.push(Data(".double", elems))
+          }
+        }
+      }
+      functions.push({
+        name: name,
+        asm_export: false,
+        body,
+      })
+    }
+
+    get_elems(static_array.label.inner(), static_array.elements)
+  }
 
   // 为每个函数定义生成汇编代码
   for fundef in input.fundefs {
@@ -397,13 +434,12 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     LetTuple(names, tuple, e) => emit_let_tuple(names, tuple, e, instrs, env)
     TupleGet(tuple, ty, index) => emit_tuple_get(tuple, ty, index, instrs, env)
     ArrayGet(array, index) => emit_array_get(array, index, instrs, env)
-    ArrayPut(array, index, value) => {
+    ArrayPut(array, index, value) =>
       emit_array_put(array, index, value, instrs, env)
-    }
-    EnumConstructor(name, index, variant) => {
+    EnumConstructor(name, index, variant) =>
       emit_enum_constructor(name, index, variant, instrs, env)
-    }
     ExternalArray(label) => instrs.push(La(reg_ret, label.inner()))
+    StaticArrayRef(label) => instrs.push(La(reg_ret, label.inner()))
     ExternalFunctionApplication(label, xs) => {
       emit_args(xs, env, instrs)
       instrs.push(Call(Label(label.inner())))

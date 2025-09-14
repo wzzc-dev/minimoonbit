@@ -196,6 +196,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
     EnumConstructor(name, index, variant) => {
       name.to_string() + "[" + index.to_string() + "]" + "(" + variant.to_string() + ")"
     }
+    StaticArrayRef(Label(_)) => "undefined"
   }
 }
 

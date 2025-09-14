@@ -37,6 +37,8 @@ pub(all) enum Syntax {
   Match(Syntax, Array[(Pattern, Syntax)])
   While(Syntax, Syntax) // while x { ... }
   Return(Syntax?) // return _;
+  ArrayData(String, Array[Syntax])
+  ExternalArray(String)
 } derive(Show, ToJson(style="flat"))
 
 pub(all) enum Pattern {
@@ -84,6 +86,8 @@ pub(all) enum Type {
   UserDefineType(String, Ref[Array[(String, Type)]])
   Var(Ref[Type?])
   Ptr
+  /// Represents data for static arrays stored in data segment
+  ArrayData(Array[Syntax])
 } derive(Show)
 
 ///|
@@ -100,7 +104,8 @@ pub impl ToJson for Type with to_json(self : Type) -> Json {
     | Ptr
     | Enum(_)
     | Struct(_)
-    | Var(_) => self.to_json()
+    | Var(_)
+    | ArrayData(_) => self.to_json()
     UserDefineType(name, val) => {
       ["UserDefineType", name, val.val.to_json()]
     }
@@ -132,7 +137,7 @@ pub fn Type::size_of(self : Type, size_of_ptr : Int) -> Int {
       fs.fold(init=0, (sum, elem) => sum + elem.1.size_of(size_of_ptr))
     UserDefineType(_) => 8
     Enum(_, _) => 4
-    Tuple(_) | Fun(_, _) | Array(_) | Ptr => size_of_ptr
+    Tuple(_) | Fun(_, _) | Array(_) | Ptr | ArrayData(_) => size_of_ptr
     Var(t) =>
       match t.val {
         Some(t) => t.size_of(size_of_ptr)
@@ -200,6 +205,7 @@ pub impl Eq for Type with equal(self, other) -> Bool {
       name1 == name2 && fields1.val == fields2.val
     }
     (Type::Ptr, Type::Ptr) => true
+    (Type::ArrayData(_), Type::ArrayData(_)) => true
     (Type::Var(x), Type::Var(y)) => x.val.op_equal(y.val)
     _ => false
   }
@@ -222,6 +228,7 @@ pub fn Type::repr(self : Type) -> Type {
     Fun(xs, x) => Fun(xs.map(t => t.repr()), x.repr())
     Tuple(xs) => Tuple(xs.map(t => t.repr()))
     Array(x) => Array(x.repr())
+    ArrayData(_) => self
     Struct(name, fs) => Struct(name, fs.map(f => (f.0, f.1.repr())))
     Enum(name, fs) => Enum(name, fs)
   }

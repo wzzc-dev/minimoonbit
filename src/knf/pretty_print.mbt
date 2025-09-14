@@ -164,6 +164,14 @@ fn PrettyKnf::print_one_level(
     Assign(x, y) => logger.write_string("\{x} = \{y}")
     FieldAccess(e, t, name) => logger.write_string("FieldAccess(\{e}, \{t}, \{name})")
     EnumConstructor(name, index, variant) => logger.write_string("EnumConstructor(\{name}, \{index}, \{variant})")
+    ArrayData(label, data) => {
+      logger.write_string("ArrayData(\{label}, [")
+      for d in data {
+        logger.write_string(d.to_string())
+        logger.write_string(", ")
+      }
+      logger.write_string("])")
+    }
   }
 }
 

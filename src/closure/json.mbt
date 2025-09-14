@@ -53,6 +53,7 @@ pub fn Expr::to_json(self : Expr) -> Json {
     Expr::EnumConstructor(name, index, variant) => {
       ["EnumConstructor", name.to_json(), index.to_json(), variant.to_json()]
     }
+    Expr::StaticArrayRef(Label(l)) => ["StaticArrayRef", l.to_json()]
   }
 }
 
@@ -140,6 +141,7 @@ pub fn Expr::from_json(json : Json) -> Expr raise {
         Name::from_json(n3)
       )
     ["ExternalArray", l] => Expr::ExternalArray(l.to_string())
+    ["StaticArrayRef", l] => Expr::StaticArrayRef(l.to_string())
     _ => fail("invalid json")
   }
 }
@@ -286,6 +288,47 @@ pub fn FuncDef::from_json(json : Json) -> FuncDef raise {
   }
 }
 
+pub fn LowTypeValue::to_json(self : LowTypeValue) -> Json {
+  match self {
+    LowTypeValue::IntValue(i) => ["IntValue", i.to_json()]
+    LowTypeValue::DoubleValue(d) => ["DoubleValue", d.to_json()]
+    LowTypeValue::PtrValue(l) => ["PtrValue", l.map(LowTypeValue::to_json)]
+  }
+}
+
+///|
+pub fn LowTypeValue::from_json(json : Json) -> LowTypeValue raise {
+  match json {
+    ["IntValue", i] => LowTypeValue::IntValue(@json.from_json(i))
+    ["DoubleValue", d] => LowTypeValue::DoubleValue(@json.from_json(d))
+    ["PtrValue", l] => {
+      match l {
+        Array(elements) => LowTypeValue::PtrValue(elements.map(LowTypeValue::from_json))
+        _ => fail("invalid json")
+      }
+    }
+    _ => fail("invalid json")
+  }
+}
+
+///|
+pub fn StaticArrayData::to_json(self : StaticArrayData) -> Json {
+  {
+    "label": self.label.inner().to_json(),
+    "elements": self.elements.to_json(),
+  }
+}
+
+///|
+pub fn StaticArrayData::from_json(json : Json) -> StaticArrayData raise {
+  match json {
+    { "label": String(label), "elements": Array(elements), .. } => {
+      { label: Label(label), elements: elements.map(LowTypeValue::from_json) }
+    }
+    _ => fail("invalid json")
+  }
+}
+
 ///|
 pub fn Program::to_json(self : Program) -> Json {
   {
@@ -297,12 +340,12 @@ pub fn Program::to_json(self : Program) -> Json {
 ///|
 pub fn Program::from_json(json : Json) -> Program raise {
   match json {
-    { "fundefs": Array(fundefs), "body": body, .. } => {
+    { "fundefs": Array(fundefs), "body": body, "static_arrays": Array(static_arrays), .. } => {
       let fundefs_res = []
       for f in fundefs {
         fundefs_res.push(FuncDef::from_json(f))
       }
-      { fundefs: fundefs_res, body: Expr::from_json(body) }
+      { fundefs: fundefs_res, body: Expr::from_json(body) , static_arrays: static_arrays.map(StaticArrayData::from_json)}
     }
     _ => fail("invalid json")
   }

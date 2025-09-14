@@ -85,6 +85,8 @@ pub(all) enum RvAsm {
   // Comments
   Label(String)
   Comment(String)
+  // data
+  Data(String, Array[String])
 }
 
 ///|
@@ -284,6 +286,17 @@ impl Show for RvAsm with output(self, logger) {
     Comment(comment) => {
       logger.write_string("# ")
       logger.write_string(comment)
+    }
+    // data
+    Data(label, data) => {
+      logger.write_string(label)
+      logger.write_string(" ")
+      for index,i in data {
+        logger.write_string(i)
+        if index != data.length() - 1 {
+          logger.write_string(", ")
+        }
+      }
     }
   }
 }

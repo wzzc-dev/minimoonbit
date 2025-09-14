@@ -1,4 +1,19 @@
 ///|
+/// Represents static array data that will be placed in the data segment
+pub(all) struct StaticArrayData {
+  label : Label
+  elements : Array[LowTypeValue]
+} derive(Show, ToJson)
+
+///|
+/// Represents a value in a static array
+pub(all) enum LowTypeValue {
+  IntValue(Int)
+  DoubleValue(Double)
+  PtrValue(Array[LowTypeValue])
+} derive(Show, ToJson)
+
+///|
 pub(all) struct Label(String) derive(Show, ToJson)
 
 ///|
@@ -43,6 +58,8 @@ pub(all) enum Expr {
   ExternalFunctionApplication(Label, Array[Name])
   While(Expr, Expr)
   Assign(Name, Name)
+  /// Reference to static array data in data segment
+  StaticArrayRef(Label)
 } derive(Show, ToJson(style="flat"))
 
 ///|
@@ -68,4 +85,6 @@ pub(all) struct FuncDef {
 pub(all) struct Program {
   fundefs : Array[FuncDef]
   body : Expr
+  /// Static array data to be placed in data segment
+  static_arrays : Array[StaticArrayData]
 } derive(Show, ToJson)

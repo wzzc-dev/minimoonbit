@@ -17,6 +17,7 @@ pub fn to_json(self : Type) -> Json {
     Struct(name, fields) => ["Struct", name, fields]
     UserDefineType(name, fields) =>
       ["UserDefineType", name, fields.val.to_json()]
+    ArrayData(_) => "ArrayData"
   }
 }
 
@@ -207,6 +208,8 @@ pub fn Syntax::to_json(self : Syntax) -> Json {
         expr.to_json(),
         arms.map(fn(input) { (input.0.to_json(), input.1.to_json()) }),
       ]
+    ExternalArray(label) => ["ExternalArray", label |> Json::string]
+    ArrayData(label, es) => ["ArrayData", label |> Json::string, es.map(Syntax::to_json) |> Json::array]
   }
 }
 
@@ -360,6 +363,11 @@ pub fn Syntax::from_json(json : Json) -> Syntax raise Error {
         idx |> Syntax::from_json(),
         value |> Syntax::from_json(),
       )
+    ["ExternalArray", label] =>
+      match label.as_string() {
+        Some(label) => ExternalArray(label)
+        None => fail("invalid json: should contain a string as label")
+      }
     _ => fail("invalid json: should contain an operator")
   }
 }

@@ -9,6 +9,7 @@ pub fn knf_program_to_closure(
   // println("knf ir: " + prog.to_string())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
+  let static_arrays : Array[StaticArrayData] = []
   extern_env.each(fn(name, ty) {
     let mut low_type : LowType = Unit
     let args_low_ty = []
@@ -31,7 +32,7 @@ pub fn knf_program_to_closure(
       body: Unit,
     })
   })
-  let body : Expr = knf_to_closure(fundefs, prog)
+  let body : Expr = knf_to_closure(fundefs, static_arrays, prog)
   // println("==========================")
   // println("closure ir:")
   // for i in fundefs {
@@ -41,11 +42,16 @@ pub fn knf_program_to_closure(
   // }
   // println("body: " + body.to_string())
   // println("==========================")
-  { fundefs, body }
+  // println("static_arrays: " + static_arrays.to_string())
+  { fundefs, static_arrays, body }
 }
 
 ///|
-fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
+fn knf_to_closure(
+  env : Array[FuncDef],
+  static_arrays : Array[StaticArrayData],
+  e : @knf.Knf,
+) -> Expr {
   // println("knf_to_closure: " + e.to_string())
   match e {
     Int(i) => Int(i)
@@ -65,30 +71,40 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     FDiv(a, b) => FDiv(a, b)
     FMod(a, b) => FMod(a, b)
     IfEq(a, b, ka, kb) =>
-      IfEq(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
+      IfEq(
+        a,
+        b,
+        knf_to_closure(env, static_arrays, ka),
+        knf_to_closure(env, static_arrays, kb),
+      )
     IfLe(a, b, ka, kb) =>
-      IfLe(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
+      IfLe(
+        a,
+        b,
+        knf_to_closure(env, static_arrays, ka),
+        knf_to_closure(env, static_arrays, kb),
+      )
     IfLt(a, b, ka, kb) =>
-      IfLt(a, b, knf_to_closure(env, ka), knf_to_closure(env, kb))
-    Let((x, ty), e, cont) => {
+      IfLt(
+        a,
+        b,
+        knf_to_closure(env, static_arrays, ka),
+        knf_to_closure(env, static_arrays, kb),
+      )
+    Let((x, ty), e, cont) =>
       Let(
         (x, ty_to_low_type(ty, false)),
-        knf_to_closure(env, e),
-        knf_to_closure(env, cont),
+        knf_to_closure(env, static_arrays, e),
+        knf_to_closure(env, static_arrays, cont),
       )
-    }
     LetRec({ name, ty, args, body }, cont) => {
-      let free_vars = fv(body)
-      .difference(
-        @hashset.from_array(env.map(fn(def) { 
-          new_fv(def.old_name, Unit) })),
+      let free_vars = fv(body).difference(
+        @hashset.from_array(env.map(fn(def) { new_fv(def.old_name, Unit) })),
       )
-      
       for arg in args {
         free_vars.remove(new_fv(arg.0, Unit))
       }
       free_vars.remove(new_fv(name, Unit))
-
       let is_closure = not(free_vars.is_empty())
       let make_def = fn(body : Expr) -> FuncDef {
         {
@@ -96,7 +112,10 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
           old_name: name,
           is_closure,
           ty: ty_to_low_type(ty, is_closure),
-          args: args.map((name_ty) => (name_ty.0, ty_to_low_type(name_ty.1, false))),
+          args: args.map(name_ty => (
+            name_ty.0,
+            ty_to_low_type(name_ty.1, false),
+          )),
           formal_free_vars: fv_to_array(free_vars),
           body,
         }
@@ -104,18 +123,18 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
       env.push(make_def(Unit))
 
       // 处理函数体
-      let def = make_def(knf_to_closure(env, body))
+      let def = make_def(knf_to_closure(env, static_arrays, body))
       let index = env.search_by(fn(def) { def.old_name == name }).unwrap()
       let _ = env.remove(index)
       env.push(def)
       let closure : Closure = {
         name: name.to_string(),
-        actual_free_vars: fv_to_array(free_vars).map(fv => fv.0), 
+        actual_free_vars: fv_to_array(free_vars).map(fv => fv.0),
       }
       MakeClosure(
         (name, ty_to_low_type(ty, is_closure)),
         closure,
-        knf_to_closure(env, cont),
+        knf_to_closure(env, static_arrays, cont),
       )
     }
     Apply(name, arr_name) => {
@@ -163,21 +182,44 @@ fn knf_to_closure(env : Array[FuncDef], e : @knf.Knf) -> Expr {
     // Var(n) => Var(n)
     Tuple(arr_name) => MakeTuple(arr_name)
     LetTuple(arr_name_ty, name, cont) => {
-      let arr_name = arr_name_ty.map( 
-        (name_ty) => (name_ty.0, ty_to_low_type(name_ty.1, false))
-      )
-      LetTuple(arr_name, name, knf_to_closure(env, cont))
+      let arr_name = arr_name_ty.map(name_ty => (
+        name_ty.0,
+        ty_to_low_type(name_ty.1, false),
+      ))
+      LetTuple(arr_name, name, knf_to_closure(env, static_arrays, cont))
     }
     Put(name, name1, name2) => ArrayPut(name, name1, name2)
     Get(name, name1) => ArrayGet(name, name1)
-    ExternalArray(name) => ExternalArray(name.name.to_string())
-    ExternalFunctionApplication(name, arr_name) => ExternalFunctionApplication(name, arr_name)
-    While(cond, body) => {
-      While(knf_to_closure(env, cond), knf_to_closure(env, body))
-    }
+    ExternalArray(name) => ExternalArray(name)
+    ExternalFunctionApplication(name, arr_name) =>
+      ExternalFunctionApplication(name, arr_name)
+    While(cond, body) =>
+      While(
+        knf_to_closure(env, static_arrays, cond),
+        knf_to_closure(env, static_arrays, body),
+      )
     Assign(x, y) => Assign(x, y)
     FieldAccess(x, ty, y) => TupleGet(x, ty_to_low_type(ty, false), y)
-    EnumConstructor(name, index, variant) => EnumConstructor(name, index, variant)
+    EnumConstructor(name, index, variant) =>
+      EnumConstructor(name, index, variant)
+    ArrayData(label, datas) => {
+      let name = Label(label)
+      fn gen_static_array_data(datas : Array[@knf.Knf]) -> Array[LowTypeValue] {
+        let result = []
+        for data in datas {
+          match data {
+            Int(i) => result.push(IntValue(i))
+            Double(d) => result.push(DoubleValue(d))
+            ArrayData(_, arr) => result.push(PtrValue(gen_static_array_data(arr)))
+            _ => @util.die("gen_static_array_data: " + data.to_string())
+          }
+        }
+        result
+      }
+
+      static_arrays.push({ label: name, elements: gen_static_array_data(datas) })
+      ExternalArray(name)
+    }
   }
 }
 
@@ -199,34 +241,40 @@ fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
     Int => Int
     Double => Double
     Fun(arr_ty, ty) => {
-      let arr_low_ty = arr_ty.map((ty) => ty_to_low_type(ty, is_closure))
+      let arr_low_ty = arr_ty.map(ty => ty_to_low_type(ty, is_closure))
       match is_closure {
         true => ClosureFn(arr_low_ty, ty_to_low_type(ty, is_closure))
         false => DirectFn(arr_low_ty, ty_to_low_type(ty, is_closure))
       }
     }
-    Tuple(arr_ty) =>
-      Tuple(arr_ty.map((ty) => ty_to_low_type(ty, is_closure)))
+    Tuple(arr_ty) => Tuple(arr_ty.map(ty => ty_to_low_type(ty, is_closure)))
     Array(ty) => Array(ty_to_low_type(ty, is_closure))
-    Var(ty) => match ty.val {
-      Some(UserDefineType(_, fields)) => {
-        let fields_ty = fields.val.map((field) => ty_to_low_type(field.1, is_closure))
-        Tuple(fields_ty)
+    Var(ty) =>
+      match ty.val {
+        Some(UserDefineType(_, fields)) => {
+          let fields_ty = fields.val.map(field => ty_to_low_type(
+            field.1,
+            is_closure,
+          ))
+          Tuple(fields_ty)
+        }
+        Some(ty) =>
+          // println("ty: " + ty.to_string())
+          // println("ty_to_low_type(ty, is_closure): " + ty_to_low_type(ty, is_closure).to_string())
+          ty_to_low_type(ty, is_closure)
+        _ => @util.die("ty_to_low_type: Var" + ty.to_string())
       }
-      Some(ty) => {
-        // println("ty: " + ty.to_string())
-        // println("ty_to_low_type(ty, is_closure): " + ty_to_low_type(ty, is_closure).to_string())
-        ty_to_low_type(ty, is_closure)
-      }
-      _ => @util.die("ty_to_low_type: Var" + ty.to_string())
-    }
     Ptr => Ptr
     Enum(_name, _) | Struct(_name, _) =>
       @util.die("ty_to_low_type: Enum or Struct" + ty.to_string())
     UserDefineType(_, fields) => {
-      let fields_ty = fields.val.map((field) => ty_to_low_type(field.1, is_closure))
+      let fields_ty = fields.val.map(field => ty_to_low_type(
+        field.1,
+        is_closure,
+      ))
       Tuple(fields_ty)
     }
+    ArrayData(_) => @util.die("ty_to_low_type: ArrayData" + ty.to_string())
   }
 }
 
@@ -320,10 +368,10 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
     }
     Apply(f, a) =>
       @hashset.of([new_fv(f, DirectFn([], Unit))]).union(
-        @hashset.from_array(a.map((name) => new_fv(name, Unit))),
+        @hashset.from_array(a.map(name => new_fv(name, Unit))),
       )
     Tuple(arr_name) =>
-      @hashset.from_array(arr_name.map((name) => new_fv(name, Ptr)))
+      @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
     LetTuple(arr_name_ty, name, cont) => {
       let result = fv(cont)
       for _, name_ty in arr_name_ty {
@@ -332,17 +380,20 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
       result.union(@hashset.of([new_fv(name, Ptr)]))
     }
     Get(a, b) => @hashset.of([new_fv(a, Ptr), new_fv(b, Int)])
-    Put(a, b, c) => @hashset.of([new_fv(a, Ptr), new_fv(b, Int), new_fv(c, Ptr)])
-    ExternalArray(a) => @hashset.of([new_fv(a, Ptr)])
+    Put(a, b, c) =>
+      @hashset.of([new_fv(a, Ptr), new_fv(b, Int), new_fv(c, Ptr)])
+    ExternalArray(_) => @hashset.new()
     ExternalFunctionApplication(_, arr_name) =>
       @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
-    While(_, body) =>
-      fv(body)
+    While(_, body) => fv(body)
     Assign(_x, _y) => @hashset.new()
     FieldAccess(_, _, _) => @hashset.new()
     EnumConstructor(_, _, _) => @hashset.new()
+    ArrayData(_) => @hashset.new()
   }
 }
+
+///|
 test {
   let _test2 = (try? @fs.read_file_to_string(
     "contest-2025-data/test_cases/mbt/conv_pool.mbt",
@@ -358,10 +409,13 @@ test {
     let knf = @knf.KnfEnv::to_knf(env, pre)
     println("knf: ")
     println(knf.to_json().stringify() + "\n")
-    let closure = knf_program_to_closure(knf,Map::from_iter(@immut/hashmap.new().iter()))
+    let closure = knf_program_to_closure(
+      knf,
+      Map::from_iter(@immut/hashmap.new().iter()),
+    )
     // println("closure: " + closure.to_string() + "\n")
     println("closure: ")
-    // println(closure.to_json().stringify())
+    println(closure.to_json().stringify())
   } catch {
     @typing.TyErr(s) => {
       println("typing error")

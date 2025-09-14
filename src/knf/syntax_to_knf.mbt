@@ -27,6 +27,7 @@ fn KnfEnv::new_temp(self : KnfEnv) -> Name {
   temp
 }
 
+///|
 fn KnfEnv::new_name(self : KnfEnv, name : String) -> Name {
   let temp = Name::name_and_slot(name, self.counter)
   self.counter += 1
@@ -77,12 +78,6 @@ fn KnfEnv::get_type(
 
 ///|
 pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { // !Failure
-  // @util.logger(
-  //   " to_knf : " + s.to_string()
-  // )
-  // @util.logger(
-  //   " self: " + self.externals.to_string(),
-  // )
   match s {
     Unit => Unit
     Int(i) => Int(i)
@@ -395,10 +390,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           }
         _ => ()
       }
-      let knf = KnfEnv::to_knf(
-        { counter: self.counter, externals: env },
-        syn,
-      )
+      let knf = KnfEnv::to_knf({ counter: self.counter, externals: env }, syn)
       let new_env = {
         counter: self.counter,
         externals: self.externals.add(name, ty),
@@ -571,7 +563,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           Let(
             (name2, s2_ty),
             knf2,
-            Let((name3, s3_ty), knf3, Put(name1, name2, name3))
+            Let((name3, s3_ty), knf3, Put(name1, name2, name3)),
           )
         _ =>
           Let(
@@ -668,8 +660,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     Enum(name, _, variants, cont) => {
       let variants = variants.map(fn(variant) {
         match variant {
-          (name, ty) =>{
-             (name, @types.Type::Tuple(ty))}
+          (name, ty) => (name, @types.Type::Tuple(ty))
         }
       })
       let mut env_fun = self.externals.add(
@@ -678,10 +669,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       )
       for variant in variants {
         let (name, _) = variant
-        env_fun = env_fun.add(
-          name,
-          UserDefineType(name, { val: variants }),
-        )
+        env_fun = env_fun.add(name, UserDefineType(name, { val: variants }))
       }
       // @util.logger("Enum name: " + name.to_string())
       KnfEnv::to_knf(
@@ -718,7 +706,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       let (name, _expr_ty, _knf) = KnfEnv::get_knf(self, expr)
       // @util.logger("Match expr: " + expr.to_string() + " name:" + name.to_string() + " expr_ty:" + _expr_ty.to_string())
       // @util.logger("arms: " + arms.to_string())
-      fn gen_match(arm: (@types.Pattern, @types.Syntax)) raise KnfErr{
+      fn gen_match(arm : (@types.Pattern, @types.Syntax)) raise KnfErr {
         let (pat, body) = arm
         // @util.logger("Match arm: " + pat.to_string())
         let index = match pat {
@@ -732,7 +720,13 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
                 // @util.logger("EnumConstruct index: " + index.to_string())
                 match index {
                   Some(index) => (index, fields.val[index])
-                  None => @util.die("not support enum construct: " + ty.to_string() + "search by name: " + name.to_string())
+                  None =>
+                    @util.die(
+                      "not support enum construct: " +
+                      ty.to_string() +
+                      "search by name: " +
+                      name.to_string(),
+                    )
                 }
               }
               _ => @util.die("not support enum construct: " + ty.to_string())
@@ -744,26 +738,34 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         let body = KnfEnv::get_knf(self, body)
         // IfEq(tag, is_expr.0, body.2, acc)
         match index.1 {
-          (_, Tuple(patterns_ty)) => {
+          (_, Tuple(patterns_ty)) =>
             if patterns_ty.length() == 0 {
               body.2
             } else {
               let names = match pat {
-                PEnumVariant(_, patts) => patts.map(fn(pat) { match pat {
-                  PVar(name) => Name::name_only(name)
-                  _ => @util.die("not support match pattern: " + pat.to_string())
-                }})
+                PEnumVariant(_, patts) =>
+                  patts.map(fn(pat) {
+                    match pat {
+                      PVar(name) => Name::name_only(name)
+                      _ =>
+                        @util.die(
+                          "not support match pattern: " + pat.to_string(),
+                        )
+                    }
+                  })
                 _ => @util.die("not support match pattern: " + pat.to_string())
               }
               let result = body.2
-              patterns_ty.foldi(init=result, (i, acc, pat_ty) => {
-                Let((names[names.length() - i - 1], pat_ty), FieldAccess(name, pat_ty, names.length() - i), acc)
-              })
+              patterns_ty.foldi(init=result, (i, acc, pat_ty) => Let(
+                (names[names.length() - i - 1], pat_ty),
+                FieldAccess(name, pat_ty, names.length() - i),
+                acc,
+              ))
             }
-          }
           _ => @util.die("not support match pattern: " + pat.to_string())
         }
       }
+
       let arms_knf = arms[1:].rev_fold(init=gen_match(arms[0]), (acc, arm) => {
         let (pat, _) = arm
         // @util.logger("Match arm: " + pat.to_string())
@@ -778,7 +780,13 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
                 // @util.logger("EnumConstruct index: " + index.to_string())
                 match index {
                   Some(index) => (index, fields.val[index])
-                  None => @util.die("not support enum construct: " + ty.to_string() + "search by name: " + name.to_string())
+                  None =>
+                    @util.die(
+                      "not support enum construct: " +
+                      ty.to_string() +
+                      "search by name: " +
+                      name.to_string(),
+                    )
                 }
               }
               _ => @util.die("not support enum construct: " + ty.to_string())
@@ -791,13 +799,35 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         let pattern_body = gen_match(arm)
 
         // @util.logger("Match acc  acc: " + acc.to_string())
-        Let((is_expr.0, is_expr.1), is_expr.2, IfEq(tag, is_expr.0, pattern_body, acc))
+        Let(
+          (is_expr.0, is_expr.1),
+          is_expr.2,
+          IfEq(tag, is_expr.0, pattern_body, acc),
+        )
       })
       // @util.logger("Match : " + Let((name, _expr_ty), _knf, Let((tag, Int), FieldAccess(name, _expr_ty, 0), arms_knf)).to_string())
-      Let((name, _expr_ty), _knf, Let((tag, Int), FieldAccess(name, _expr_ty, 0), arms_knf))
+      Let(
+        (name, _expr_ty),
+        _knf,
+        Let((tag, Int), FieldAccess(name, _expr_ty, 0), arms_knf),
+      )
       // @util.die("not support match: expr: " + expr.to_string() + "; arms: " + arms.to_string())
     }
-    None => KnfEnv::to_knf(self, Unit)
+    ExternalArray(label) => ExternalArray(label)
+    ArrayData(label, data) =>
+      ArrayData(
+        label,
+        data.mapi(fn(i, d) {
+          match d {
+            Int(i) => Int(i)
+            Double(d) => Double(d)
+            ArrayData(label, data) => KnfEnv::to_knf(self, ArrayData(label+"_"+i.to_string(), data))
+            ArrayExpr(data) => KnfEnv::to_knf(self, ArrayData(label+"_"+i.to_string(), data))
+            _ =>
+              raise KnfErr("not supported syntax ArrayData: " + d.to_string())
+          }
+        }),
+      )
     _ => raise KnfErr("not supported syntax " + s.to_string())
   }
 }
@@ -825,8 +855,9 @@ fn make_tuple(env : KnfEnv, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
   }
   result
 }
+
 ///|
-pub(all) suberror KnfErr String derive(ToJson(style="flat"))
+pub(all) suberror KnfErr String derive(ToJson)
 
 ///|
 test {

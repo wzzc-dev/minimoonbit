@@ -20,17 +20,35 @@ pub fn KnfEnv::syntax_preprocess(
     Let((str, ty), s1, s2) =>
       match s1 {
         ArrayExpr(elems) => {
-          // Check if this is a multidimensional array by examining first element
-          let is_multidimensional = match elems[0] {
-            ArrayExpr(_) => true
-            _ => false
-          }
-          if is_multidimensional {
-            // Handle multidimensional array
-            KnfEnv::process_multidimensional_array(self, str, ty, elems, s2)
+          // Check if this is a static array (all elements are constants)
+          if KnfEnv::is_static_array(elems) {
+            // Generate a unique label for this static array
+            
+            // Add the array data to the environment
+            let array_data = KnfEnv::extract_array_data(elems)
+           
+            // Create ExternalArray reference
+            Let(
+              (str, ty),
+              ArrayData(str, array_data),
+              KnfEnv::syntax_preprocess({
+                counter: self.counter,
+                externals: self.externals,
+              }, s2),
+            )
           } else {
-            // Handle 1D array (original logic)
-            KnfEnv::process_1d_array(self, str, ty, elems, s2)
+            // Check if this is a multidimensional array by examining first element
+            let is_multidimensional = match elems[0] {
+              ArrayExpr(_) => true
+              _ => false
+            }
+            if is_multidimensional {
+              // Handle multidimensional array
+              KnfEnv::process_multidimensional_array(self, str, ty, elems, s2)
+            } else {
+              // Handle 1D array (original logic)
+              KnfEnv::process_1d_array(self, str, ty, elems, s2)
+            }
           }
         }
         Array(len, ArrayExpr(elems)) => {
@@ -93,8 +111,33 @@ pub fn KnfEnv::syntax_preprocess(
     }
     Enum(name, _, variants, cont) =>
       Enum(name, "", variants, KnfEnv::syntax_preprocess(self, cont))
+    ExternalArray(label) => ExternalArray(label)
     _ => s
   }
+}
+
+///|
+/// Check if an array is static (all elements are constants)
+fn KnfEnv::is_static_array(elems : Array[@types.Syntax]) -> Bool {
+  for elem in elems {
+    match elem {
+      Int(_) | Double(_) | Bool(_) => ()  // These are constants
+      ArrayExpr(sub_elems) => {
+        // Recursively check if nested array is static
+        if not(KnfEnv::is_static_array(sub_elems)) {
+          return false
+        }
+      }
+      _ => return false  // Not a constant
+    }
+  }
+  true
+}
+
+///|
+/// Extract array data for static arrays
+fn KnfEnv::extract_array_data(elems : Array[@types.Syntax]) -> Array[@types.Syntax] {
+  elems
 }
 
 ///|

@@ -672,7 +672,8 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       body_ty
     }
     // _ => @util.die("infer: unknown syntax: " + e.to_string())
-
+    ExternalArray(_) => Array(@types.Type::Unit)
+    ArrayData(_) => Array(@types.Type::Unit)
   }
 }
 
@@ -755,6 +756,8 @@ fn deref_type(t : @types.Type) -> @types.Type {
 fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
   match syntax {
     FieldAccess(e, name) => FieldAccess(deref_term(e), name)
+    ExternalArray(name) => ExternalArray(name)
+    ArrayData(label, name) => ArrayData(label, name)
     Unit => Unit
     Bool(b) => Bool(b)
     Int(i) => Int(i)
