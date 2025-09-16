@@ -121,7 +121,7 @@ pub fn KnfEnv::syntax_preprocess(
 fn KnfEnv::is_static_array(elems : Array[@types.Syntax]) -> Bool {
   for elem in elems {
     match elem {
-      Int(_) | Double(_) | Bool(_) => ()  // These are constants
+      Int(_) | Double(_) | Bool(_) | Neg(_, ..) => ()  // These are constants
       ArrayExpr(sub_elems) => {
         // Recursively check if nested array is static
         if not(KnfEnv::is_static_array(sub_elems)) {

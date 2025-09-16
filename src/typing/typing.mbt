@@ -825,6 +825,7 @@ fn deref_term(syntax : @types.Syntax) -> @types.Syntax {
 pub let extenv : Map[String, @types.Type] = {
   "read_int": Fun([], Unit),
   "print_int": Fun([Int], Unit),
+  "print_float": Fun([Double], Unit),
   "read_char": Fun([], Int),
   "print_char": Fun([Int], Unit),
   "print_newline": Fun([], Unit),

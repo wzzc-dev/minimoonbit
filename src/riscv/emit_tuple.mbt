@@ -11,11 +11,11 @@ fn emit_make_tuple(
 
   // 2. 存储元素
   for i, elem in elems {
-    instrs.push(Comment("start : 存储元素：" + i.to_string() + "; name:" + elem.to_string()))
+    // instrs.push(Comment("start : 存储元素：" + i.to_string() + "; name:" + elem.to_string()))
     instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, elem) }))
     // @util.logger("emit_make_tuple:" + elem.to_string())
     instrs.push(Sd(T1, { base: A0, offset: i * 8 }))
-    instrs.push(Comment("end : 存储元素：" + i.to_string() + "; name:" + elem.to_string()))
+    // instrs.push(Comment("end : 存储元素：" + i.to_string() + "; name:" + elem.to_string()))
   }
 }
 

@@ -11,7 +11,7 @@ pub(all) enum LowTypeValue {
   IntValue(Int)
   DoubleValue(Double)
   PtrValue(Array[LowTypeValue])
-} derive(Show, ToJson)
+} derive(Show, ToJson(style="flat"))
 
 ///|
 pub(all) struct Label(String) derive(Show, ToJson)

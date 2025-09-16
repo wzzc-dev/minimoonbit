@@ -39,7 +39,7 @@ fn emit_array_put(
   instrs : Array[RvAsm],
   env : Env
 ) -> Unit {
-  instrs.push(Comment("emit_array_put:" + array.to_string() + " " + index.to_string() + " " + value.to_string()))
+  // instrs.push(Comment("emit_array_put:" + array.to_string() + " " + index.to_string() + " " + value.to_string()))
   // - 1. 从栈上加载数组的基地址（这个地址是指向堆上数组的指针）
   instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, array) }))
 
@@ -72,9 +72,7 @@ fn emit_array_put(
       instrs.push(Sd(T2, { base: T0, offset: 0 }))
     }
   }
-  instrs.push(Comment("emit_array_put end"))
-
-
+  // instrs.push(Comment("emit_array_put end"))
 }
 
 // 添加一个辅助函数来获取数组元素类型

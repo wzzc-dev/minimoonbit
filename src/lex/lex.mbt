@@ -166,7 +166,13 @@ fn lex_number_rest(context : Context, number : String) -> Unit {
   if ch >= '0' && ch <= '9' {
     context.offset += 1
     lex_number_rest(context, number + ch.to_string())
-  } else {
+  } 
+  else if ch == '.' {
+    // 处理浮点数的小数部分
+    context.offset += 1
+    lex_float_rest(context, number + ".")
+  } 
+  else {
     if number_ > 0x7fffffff {
       array.push(BIG_NUMBER(number_))
     } else {
@@ -175,6 +181,26 @@ fn lex_number_rest(context : Context, number : String) -> Unit {
   }
 }
 
+///|
+fn lex_float_rest(context : Context, number : String) -> Unit {
+  // println("lex_float_rest: " + number)
+  let { offset, str, array } = context
+  
+  if offset >= str.length() {
+    let float_number = (try? @strconv.parse_double(number)).unwrap()
+    array.push(FLOAT_NUMBER(float_number))
+    return
+  }
+  
+  let ch = str.get_char(offset).unwrap()
+  if ch >= '0' && ch <= '9' {
+    context.offset += 1
+    lex_float_rest(context, number + ch.to_string())
+  } else {
+    let float_number = (try? @strconv.parse_double(number)).unwrap()
+    array.push(FLOAT_NUMBER(float_number))
+  }
+}
 ///|
 fn lex_other_rest(context : Context, ident : String) -> Unit {
   let { str, offset, array } = context
@@ -241,6 +267,7 @@ pub(all) enum Token {
   FN
   LET
   NUMBER(Int)
+  FLOAT_NUMBER(Double)
   BIG_NUMBER(Int64)
   IDENTIFIER(String)
   UPPER_IDENTIFIER(String)
@@ -312,7 +339,7 @@ test {
 }
 test {
   let tokens = []
-  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/clamp.mbt")
+  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/test.mbt")
   println(_test2)
   julex(
     {

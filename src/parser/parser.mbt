@@ -1695,6 +1695,14 @@ fn floatingPointExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("floatingPointExpr: " + tokens.to_string())
+  Parser(floatingPointExpr1).or(floatingPointExpr2)
+  .parse(tokens)
+}
+
+fn floatingPointExpr1(
+  tokens : ArrayView[@lex.Token],
+) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("floatingPointExpr: " + tokens.to_string())
   ptoken_number
   .parser_and(dot)
   .zeroOrOnce(ptoken_number)
@@ -1741,6 +1749,25 @@ fn floatingPointExpr(
   })
   .parse(tokens)
 }
+
+fn floatingPointExpr2(
+  tokens : ArrayView[@lex.Token],
+) -> (@types.Syntax, ArrayView[@lex.Token])? {
+  // println("floatingPointExpr: " + tokens.to_string())
+  ptoken_float_number
+  
+  .map(fn(input) {
+    match input {
+      FLOAT_NUMBER(num) =>
+        // println("intExpr: " + num.to_string())
+        @types.Syntax::Double(num)
+      _ =>
+        @util.die("floatingPointExpr: not handled, input: " + tokens.to_string())
+    }
+  })
+  .parse(tokens)
+}
+
 
 // int_expr: NUMBER; // 1
 
@@ -2280,11 +2307,11 @@ test {
 test {
   let tokens = []
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/enum1.mbt",
+    "contest-2025-data/test_cases/mbt/test.mbt",
   )
-  // println(_test2)
+  println(_test2)
   @lex.julex({ str: _test2, offset: 0, array: tokens })
-  // println("tokens: " + tokens.to_string())
+  println("tokens: " + tokens.to_string())
   let (prog, _) = parser.parse(tokens[:]).unwrap()
   println("prog: " + prog.to_json().stringify())
 }

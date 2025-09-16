@@ -296,7 +296,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
     Double(d) => {
       let bits = d.reinterpret_as_int64()
       instrs.push(Li(T0, bits.to_string()))
+      // instrs.push(FcvtDl(freg_ret, T0))
       instrs.push(FmvDX(freg_ret, T0))
+
     }
     Neg(x) => {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, x) }))
@@ -465,7 +467,7 @@ fn emit_call_direct(
 
 ///|
 pub let extenv = [
-  "read_int", "print_int", "read_char", "print_char", "print_newline", "print_endline",
+  "read_int", "print_int", "print_float", "read_char", "print_char", "print_newline", "print_endline",
   "int_of_float", "float_of_int", "truncate", "floor", "abs_float", "sqrt", "sin",
   "cos", "atan", "create_array", "create_float_array", "create_ptr_array",
 ]

@@ -821,6 +821,9 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           match d {
             Int(i) => Int(i)
             Double(d) => Double(d)
+            Neg(Double(d), ..) => Double(-d)
+            Neg(Int(d), ..) => Int(-d)
+
             ArrayData(label, data) => KnfEnv::to_knf(self, ArrayData(label+"_"+i.to_string(), data))
             ArrayExpr(data) => KnfEnv::to_knf(self, ArrayData(label+"_"+i.to_string(), data))
             _ =>
@@ -857,7 +860,7 @@ fn make_tuple(env : KnfEnv, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
 }
 
 ///|
-pub(all) suberror KnfErr String derive(ToJson)
+pub(all) suberror KnfErr String derive(ToJson(style="flat"))
 
 ///|
 test {

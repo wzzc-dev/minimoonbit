@@ -32,6 +32,14 @@ let ptoken_number : Parser[@lex.Token] = ptoken(fn(token) {
 })
 
 ///|
+let ptoken_float_number : Parser[@lex.Token] = ptoken(fn(token) {
+  match token {
+    @lex.Token::FLOAT_NUMBER(_) => true
+    _ => false
+  }
+})
+
+///|
 let ptoken_fn : Parser[@lex.Token] = ptoken(fn(token) {
   match token {
     @lex.Token::FN => true
