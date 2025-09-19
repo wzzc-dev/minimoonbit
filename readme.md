@@ -1,6 +1,8 @@
 # 环境
-moon 0.1.20250801 (edae1ae 2025-08-01)
+初始化：
 
+moon 0.1.20250801 (edae1ae 2025-08-01)
+```shell
 git submodule update --init --recursive
 
 cd riscv_rt
@@ -11,6 +13,7 @@ cd ./libriscv/emulator
 
 cd ../..
 cp ./libriscv/emulator/rvlinux ./
+```
 
 # 流程
 
@@ -30,8 +33,22 @@ flowchart LR
   parserAST -->|"typing"| TypedAST
   TypedAST -->|"A-Normalization"| knfIr
   knfIr -->|"Closure Conversion"| closureIr
-  TypedAST -->|"SSA Construction"| ssa
+  TypedAST -->|"SSA Construction(TODO)"| ssa("TODO")
   closureIr -->|"emit"| Assembly
   ssa -->|"emit"| Assembly
   closureIr -->|"emit"| javascript
+```
+
+# 命令
+
+生成 riscv 汇编并编译运行 
+
+```shell
+./single_run.sh contest-2025-data/test_cases/mbt/conv_pool.mbt
+```
+
+测试全部
+
+```shell
+./new_run_test.sh
 ```

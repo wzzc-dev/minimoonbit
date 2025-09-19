@@ -29,7 +29,7 @@ fn emit_args(
       }
     } else {
       let offset = env.vars.get(arg.to_string()).unwrap().0
-      let stack_offset = -(i - reg_arg_list.length() + 1) * 8
+      let stack_offset = (i - reg_arg_list.length()) * 8
       // 超出寄存器数量的参数存入栈
       match env.find_type(arg.to_string()) {
         Double => {

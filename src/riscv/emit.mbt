@@ -104,6 +104,7 @@ fn emit_fun(
 
   // 更新帧指针
   body.push(Addi(Fp, Sp, aligned_framesize))
+
   let mut env = {
     // 保存参数
     vars: @immut/hashmap.new(),
@@ -144,16 +145,17 @@ fn emit_fun(
       // 如果参数超过8个，则需要从调用者栈帧中读取
       let offset = env.current_offset
       // 修正：溢出参数位于调用者栈帧中，在当前帧指针之上
-      let stack_offset = (i - reg_arg_list.length()) * 8
+      let stack_offset = aligned_framesize + (i - reg_arg_list.length()) * 8
+      
       match arg.1 {
         Double => {
           // 浮点参数使用浮点寄存器和指令
-          body.push(Fld(Ft0, { base: Fp, offset: stack_offset }))
+          body.push(Fld(Ft0, { base: Sp, offset: stack_offset }))
           body.push(Fsd(Ft0, { base: Fp, offset }))
         }
         _ => {
           // 其他类型使用通用寄存器和指令
-          body.push(Ld(T0, { base: Fp, offset: stack_offset }))
+          body.push(Ld(T0, { base: Sp, offset: stack_offset }))
           body.push(Sd(T0, { base: Fp, offset }))
         }
       }
