@@ -9,7 +9,7 @@ pub fn to_ssa(input : @closure.Program) -> Ssa {
   
   // 转换每个函数定义
   for fundef in input.fundefs {
-    if not(@util.extenv.contains(fundef.old_name.to_string())) {
+    if not(@typing.extenv.contains(fundef.old_name.to_string())) {
       let ssa_func = convert_function(fundef)
       functions.push(ssa_func)
     }

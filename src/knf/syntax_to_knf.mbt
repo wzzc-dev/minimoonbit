@@ -314,10 +314,6 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     Prim(lsyn, rsyn, op, kind~) => {
       let (l_name, _, l) = KnfEnv::get_knf(self, lsyn)
       let (r_name, _, r) = KnfEnv::get_knf(self, rsyn)
-      // println("l_name = " + l_name.to_string())
-      // println("r_name = " + r_name.to_string())
-      // println("lsyn = " + lsyn.to_string())
-      // println("rsyn = " + rsyn.to_string())
       let mut opty : Knf = Unit
       match kind {
         Some(Int) => {
@@ -421,7 +417,6 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       LetRec({ name: fun_name, ty, args: fun_args, body: fun_body }, rest)
     }
     App(syn, args_syns) => {
-      // @util.logger("app: syn = " + syn.to_string() + "; args_syns= " + args_syns.to_string())
       fn let_app(
         self : KnfEnv,
         f : Name,
@@ -429,28 +424,14 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         s : Array[@types.Syntax],
       ) -> Knf raise KnfErr {
         let ss = s.pop()
-        // @util.logger("let_app: ss = " + ss.to_string())
         match ss {
           None =>
-            // println(f)
-            // println(f.name)
-            // println(f.name.to_string())
-            if not(f.name.is_empty()) && @util.extenv.contains(f.name.unwrap()) {
-              // @util.logger("@types: " + @typing.extenv.to_string())
-              // @util.logger("let_app: ExternalFunctionApplication(f, args_names) f = " + f.name.to_string())
-              if @typing.extenv.contains(f.name.unwrap()) {
-                // @util.logger("let_app: ExternalFunctionApplication(f, args_names) f = " + f.name.to_string())
-                ExternalFunctionApplication(
-                  "minimbt_" + f.name.unwrap(),
-                  args_names,
-                )
-              } else {
-                // @util.logger("let_app: FunctionApplication(f, args_names) f = " + f.to_string())
-                Apply(f, args_names)
-              }
+            if f.name is Some(_) && @typing.extenv.contains(f.name.unwrap()) {
+              ExternalFunctionApplication(
+                "minimbt_" + f.name.unwrap(),
+                args_names,
+              )
             } else {
-              // println("app")
-              // @util.logger("let_app: Apply(f, args_names) f = " + f.name.to_string())
               Apply(f, args_names)
             }
           Some(ss) => {
@@ -672,10 +653,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         env_fun = env_fun.add(name, UserDefineType(name, { val: variants }))
       }
       // @util.logger("Enum name: " + name.to_string())
-      KnfEnv::to_knf(
-        { counter: self.counter, externals: env_fun },
-        cont,
-      )
+      KnfEnv::to_knf({ counter: self.counter, externals: env_fun }, cont)
     }
     EnumConstruct(name, variant) => {
       // @util.logger("env: " + self.counter.to_string())
@@ -823,9 +801,10 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
             Double(d) => Double(d)
             Neg(Double(d), ..) => Double(-d)
             Neg(Int(d), ..) => Int(-d)
-
-            ArrayData(label, data) => KnfEnv::to_knf(self, ArrayData(label+"_"+i.to_string(), data))
-            ArrayExpr(data) => KnfEnv::to_knf(self, ArrayData(label+"_"+i.to_string(), data))
+            ArrayData(label, data) =>
+              KnfEnv::to_knf(self, ArrayData(label + "_" + i.to_string(), data))
+            ArrayExpr(data) =>
+              KnfEnv::to_knf(self, ArrayData(label + "_" + i.to_string(), data))
             _ =>
               raise KnfErr("not supported syntax ArrayData: " + d.to_string())
           }
@@ -860,7 +839,7 @@ fn make_tuple(env : KnfEnv, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
 }
 
 ///|
-pub(all) suberror KnfErr String derive(ToJson(style="flat"))
+pub(all) suberror KnfErr String derive(ToJson)
 
 ///|
 test {
