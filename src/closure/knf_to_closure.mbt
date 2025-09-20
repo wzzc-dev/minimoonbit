@@ -192,7 +192,7 @@ fn knf_to_closure(
     Get(name, name1) => ArrayGet(name, name1)
     ExternalArray(name) => ExternalArray(name)
     ExternalFunctionApplication(name, arr_name) =>
-      ExternalFunctionApplication(name, arr_name)
+      CallDirect(name, arr_name)
     While(cond, body) =>
       While(
         knf_to_closure(env, static_arrays, cond),
@@ -289,8 +289,6 @@ impl Hash for FreeVarWithType with hash_combine(_self, _state) {
   fn _hash_combine(self : FreeVarWithType, state : Hasher) -> Unit {
     self.name.hash_combine(state)
   }
-
-
 }
 
 ///|

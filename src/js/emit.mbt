@@ -177,13 +177,6 @@ fn emit_expr(expr : @closure.Expr) -> String {
       e1.to_string() + "[" + e2.to_string() + "] = " + e3.to_string() + ";"
     }
     ExternalArray(e) => e.0.to_string()
-    ExternalFunctionApplication(l, xs) => {
-      let args = []
-      for x in xs {
-        args.push(x.to_string())
-      }
-      l.0 + "(" + Array::join(args, ", ") + ")"
-    }
     While(cond, body) =>
       "while (" +
       cond.to_string() +
@@ -194,7 +187,6 @@ fn emit_expr(expr : @closure.Expr) -> String {
     Unit => "undefined"
     TupleGet(tuple, _, index) => tuple.to_string() + "[" + index.to_string() + "]"
     StaticArrayRef(Label(_)) => "undefined"
-    EnumConstructor(_) => "undefined"
   }
 }
 

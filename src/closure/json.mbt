@@ -46,13 +46,8 @@ pub fn Expr::to_json(self : Expr) -> Json {
     Expr::Assign(n1, n2) => ["Assign", n1.to_json(), n2.to_json()]
     IfLt(n1, n2, e1, e2) =>
       ["IfLt", n1.to_json(), n2.to_json(), e1.to_json(), e2.to_json()]
-    Expr::ExternalFunctionApplication(l, ns) =>
-      ["ExternalFunctionApplication", l.inner().to_json(), ns.to_json()]
     Expr::TupleGet(tuple, ty, index) =>
       ["TupleGet", tuple.to_json(), ty.to_json(), index.to_json()]
-    Expr::EnumConstructor(name, index, variant) => {
-      ["EnumConstructor", name.to_json(), index.to_json(), variant.to_json()]
-    }
     Expr::StaticArrayRef(Label(l)) => ["StaticArrayRef", l.to_json()]
   }
 }

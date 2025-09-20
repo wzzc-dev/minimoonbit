@@ -292,7 +292,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
   let mut env = env
   let instrs = []
   match expr {
-    EnumConstructor(_) => @util.die("compile_expr not supported")
     Unit => instrs.clear()
     Int(i) => instrs.push(Li(reg_ret, i.to_string()))
     Int64(i) => instrs.push(Li(reg_ret, i.to_string()))
@@ -443,10 +442,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       emit_array_put(array, index, value, instrs, env)
     ExternalArray(label) => instrs.push(La(reg_ret, label.0))
     StaticArrayRef(label) => instrs.push(La(reg_ret, label.0))
-    ExternalFunctionApplication(label, xs) => {
-      emit_args(xs, env, instrs)
-      instrs.push(Call(Label(label.0)))
-    }
     Assign(x, y) => {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, y) }))
       instrs.push(Sd(T0, { base: Fp, offset: Env::varOffset(env, x) }))

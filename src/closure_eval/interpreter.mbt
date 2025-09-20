@@ -73,7 +73,6 @@ pub fn ClosureInterpreter::eval(
   env : InterpreterLocalVars,
   expr : @closure.Expr,
 ) -> Value raise Failure {
-  // println("eval: " + expr.to_string())
   match expr {
     Unit => Unit
     Int(i) => Int(i)
@@ -197,12 +196,15 @@ pub fn ClosureInterpreter::eval(
       let x = find(env, x)
       let y = find(env, y)
       match (x, y) {
-        (Int(x), Int(y)) =>
+        (Int(x), Int(y)) => {
+          println("ifle: " + x.to_string() + " <= " + y.to_string())
           if x <= y {
+            println("ifle e1: " + e1.to_string())
             self.eval(env, e1)
           } else {
             self.eval(env, e2)
           }
+        }
         (Double(x), Double(y)) =>
           if x <= y {
             self.eval(env, e1)
@@ -328,16 +330,17 @@ pub fn ClosureInterpreter::eval(
       Unit
     }
     ExternalArray(_) => fail("ExternalArray is not supported")
-    ExternalFunctionApplication(l, xs) => {
-      let args = []
-      for x in xs {
-        args.push(find(env, x))
-      }
-      match self.extern_fns.get(l.0) {
-        Some(f) => f(args)
-        None => fail("ExternalFunctionApplication: function not found")
-      }
-    }
+    // ExternalFunctionApplication(l, xs) => {
+    //   println("ExternalFunctionApplication: " + l.0 + " " + xs.to_string())
+    //   let args = []
+    //   for x in xs {
+    //     args.push(find(env, x))
+    //   }
+    //   match self.extern_fns.get(l.0) {
+    //     Some(f) => f(args)
+    //     None => fail("ExternalFunctionApplication: function not found")
+    //   }
+    // }
     While(cond, body) => {
       while true {
         match cond {
@@ -363,7 +366,7 @@ pub fn ClosureInterpreter::eval(
         _ => fail("type mismatch, tupleget expects Tuple and Int")
       }
     }
-    _ => fail("unimplemented")
+    _ => fail("unimplemented: " + expr.to_string())
   }
 }
 
