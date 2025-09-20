@@ -200,6 +200,8 @@ fn knf_to_closure(
       )
     Assign(x, y) => Assign(x, y)
     FieldAccess(x, ty, y) => TupleGet(x, ty_to_low_type(ty, false), y)
+    EnumConstructor(_) =>
+      @util.die("EnumConstructor not supported")
     ArrayData(label, datas) => {
       let name = Label(label)
       fn gen_static_array_data(datas : Array[@knf.Knf]) -> Array[LowTypeValue] {
@@ -386,6 +388,7 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
     While(_, body) => fv(body)
     Assign(_x, _y) => @hashset.new()
     FieldAccess(_, _, _) => @hashset.new()
+    EnumConstructor(_, _, _) => @hashset.new()
     ArrayData(_) => @hashset.new()
   }
 }

@@ -292,6 +292,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
   let mut env = env
   let instrs = []
   match expr {
+    EnumConstructor(_) => @util.die("compile_expr not supported")
     Unit => instrs.clear()
     Int(i) => instrs.push(Li(reg_ret, i.to_string()))
     Int64(i) => instrs.push(Li(reg_ret, i.to_string()))

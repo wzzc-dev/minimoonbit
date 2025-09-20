@@ -194,6 +194,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
     Unit => "undefined"
     TupleGet(tuple, _, index) => tuple.to_string() + "[" + index.to_string() + "]"
     StaticArrayRef(Label(_)) => "undefined"
+    EnumConstructor(_) => "undefined"
   }
 }
 

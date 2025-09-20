@@ -32,7 +32,8 @@ pub(all) enum Knf {
   Tuple(Array[Name])
   LetTuple(Array[(Name, Type)], Name, Knf)
   FieldAccess(Name, Type, Int)
-  
+  EnumConstructor(String, Int, Array[Name])
+
   Get(Name, Name)
   Put(Name, Name, Name)
   ExternalArray(String)
