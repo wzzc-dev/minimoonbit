@@ -12,11 +12,11 @@ pub fn emit(input : @closure.Program) -> String {
   // 生成所有函数
   for func in input.fundefs {
     let name = func.name
-    if extenv.contains(func.name.inner()) {
+    if extenv.contains(func.name.0) {
       continue
     }
     if func.is_closure {
-      output += "function \{name.inner().to_string()}(env, "
+      output += "function \{name.0.to_string()}(env, "
 
       // 添加函数参数
       output += Array::join(
@@ -33,7 +33,7 @@ pub fn emit(input : @closure.Program) -> String {
       output += emit_expr(func.body)
       output += "\n}\n\n"
     } else {
-      output += "function \{name.inner().to_string()}("
+      output += "function \{name.0.to_string()}("
       output += Array::join(
         func.args.map(fn(arg) { arg.0.to_string() }),
         ",",
@@ -136,7 +136,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
       result
     }
     CallDirect(func, args) => {
-      let mut result = func.inner() + "("
+      let mut result = func.0 + "("
       for i, arg in args {
         if i > 0 {
           result += ", "
@@ -176,13 +176,13 @@ fn emit_expr(expr : @closure.Expr) -> String {
   
       e1.to_string() + "[" + e2.to_string() + "] = " + e3.to_string() + ";"
     }
-    ExternalArray(e) => e.inner().to_string()
+    ExternalArray(e) => e.0.to_string()
     ExternalFunctionApplication(l, xs) => {
       let args = []
       for x in xs {
         args.push(x.to_string())
       }
-      l.inner() + "(" + Array::join(args, ", ") + ")"
+      l.0 + "(" + Array::join(args, ", ") + ")"
     }
     While(cond, body) =>
       "while (" +
@@ -193,9 +193,6 @@ fn emit_expr(expr : @closure.Expr) -> String {
     Assign(x, y) => x.to_string() + " = " + y.to_string()
     Unit => "undefined"
     TupleGet(tuple, _, index) => tuple.to_string() + "[" + index.to_string() + "]"
-    EnumConstructor(name, index, variant) => {
-      name.to_string() + "[" + index.to_string() + "]" + "(" + variant.to_string() + ")"
-    }
     StaticArrayRef(Label(_)) => "undefined"
   }
 }

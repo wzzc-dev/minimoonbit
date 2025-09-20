@@ -26,13 +26,13 @@ fn Stages::from_string(s : String) -> Stages? {
 }
 
 ///|
-fn Stages::next(self : Stages) -> Stages {
+fn Stages::next(self : Stages, ssa : Bool) -> Stages {
   match self {
     Stages::Parse => Stages::Typecheck
     Stages::Typecheck => Stages::Knf
     Stages::Knf => Stages::KnfOpt
     Stages::KnfOpt => Stages::Closure
-    Stages::Closure => Stages::Asm
+    Stages::Closure => if ssa { Stages::Ssa } else { Stages::Asm }
     Stages::Ssa => Stages::Asm
     Stages::Asm => Stages::Finished
     Stages::Finished => Stages::Finished
@@ -98,7 +98,7 @@ fn CompileStatus::initialize(
 }
 
 ///| Run the next stage of compilation. Returns true if the compilation is finished.
-fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
+fn CompileStatus::step(self : CompileStatus, backend : Backend, ssa : Bool) -> Bool {
   if self.curr_stage >= self.end_stage {
     return true
   }
@@ -116,7 +116,6 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
           @util.die("type check error: " + e.to_json().to_string())
         }
       }
-      
     }
     Knf => {
       let pre = @knf.KnfEnv::syntax_preprocess(
@@ -162,13 +161,18 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
           self.llvmir = Some(llvmir)
         }
         RISCV => {
-          let real_asm = @riscv.emit(self.closure_ir.unwrap())
-          self.riscv_asm = Some(real_asm)
+          if self.ssa.is_empty() {
+            let real_asm = @riscv.emit(self.closure_ir.unwrap())
+            self.riscv_asm = Some(real_asm)
+          } else {
+            let real_asm = @riscv.ssa_emit_riscv(self.ssa.unwrap())
+            self.riscv_asm = Some(real_asm)
+          }
         }
       }
     Finished => ()
   }
-  self.curr_stage = self.curr_stage.next()
+  self.curr_stage = self.curr_stage.next(ssa)
   self.curr_stage >= self.end_stage
 }
 
@@ -177,6 +181,7 @@ fn CompileStatus::output(
   self : CompileStatus,
   json : Bool,
   outTy : Backend,
+  ssa : Bool,
 ) -> String {
   if json {
     match self.curr_stage {
@@ -186,7 +191,13 @@ fn CompileStatus::output(
       KnfOpt => Json::stringify(self.knf.unwrap().to_json())
       Closure => Json::stringify(self.opt_knf.unwrap().to_json())
       Ssa => Json::stringify(self.closure_ir.unwrap().to_json())
-      Asm => Json::stringify(self.closure_ir.unwrap().to_json())
+      Asm => {
+        if ssa {
+          Json::stringify(self.ssa.unwrap().to_json())
+        } else {
+           Json::stringify(self.closure_ir.unwrap().to_json())
+        }
+      }
       Finished => @riscv.print_functions(self.riscv_asm.unwrap())
     }
   } else {
@@ -197,7 +208,13 @@ fn CompileStatus::output(
       KnfOpt => self.knf.unwrap().to_string()
       Closure => self.opt_knf.unwrap().to_string()
       Ssa => self.closure_ir.unwrap().to_string()
-      Asm => self.closure_ir.unwrap().to_string()
+      Asm => {
+        if ssa {
+          self.ssa.unwrap().to_string()
+        } else {
+          self.closure_ir.unwrap().to_string()
+        }
+      }
       Finished =>
         match outTy {
           JS => self.js.unwrap()
@@ -229,6 +246,7 @@ fn main {
   let js = Ref::new(false)
   let wasm = Ref::new(false)
   let llvmir = Ref::new(false)
+  let ssa = Ref::new(false)
   // 
   @ArgParser.parse(
     [
@@ -314,6 +332,7 @@ fn main {
       ("--js", "", @ArgParser.Set(js), "Generate JavaScript code"),
       ("--wasm", "", @ArgParser.Set(wasm), "Generate WebAssembly code"),
       ("--llvmir", "", @ArgParser.Set(llvmir), "Generate llvmir"),
+      ("--ssa", "", @ArgParser.Set(ssa), "by ssa Generate riscv"),
     ],
     fn(s) {
       // if not(file.is_empty()) {
@@ -351,10 +370,9 @@ fn main {
     file.unwrap()
   }
   let contents = try? @fs.read_file_to_string(file)
-
-  let ompileStatus = try? CompileStatus::initialize(start_stage.val, end_stage.val.next(), contents.unwrap());
+  let compileStatus = try? CompileStatus::initialize(start_stage.val, end_stage.val.next(ssa.val), contents.unwrap());
   // Compilation
-  let status = match ompileStatus {
+  let status = match compileStatus {
     Ok(status) => status
     Err(e) => {
       println(e)
@@ -363,7 +381,7 @@ fn main {
   }
   // Run stages
   while true {
-    let stg = status.curr_stage
+    let stage = status.curr_stage
     let ty = if js.val {
       JS
     } else if wasm.val {
@@ -373,16 +391,15 @@ fn main {
     } else {
       RISCV
     }
-    let stop = status.step(ty)
-    if stages_to_print.contains(stg) {
-      println("Stage: \{stg}")
-      println(status.output(json.val, ty))
+    let stop = status.step(ty, ssa.val || ssa_interpreter.val)
+    if stages_to_print.contains(stage) {
+      println("Stage: \{stage}")
+      println(status.output(json.val, ty, ssa.val))
     }
     if stop {
       break
     }
   }
-
   // Output
   if knf_interpreter.val {
     let knfi = @knf_eval.KnfInterpreter::new()
@@ -407,7 +424,7 @@ fn main {
       }
     }
   } else if ssa_interpreter.val {
-    println(status.ssa.unwrap())
+    println(status.ssa.to_string())
   } else {
     let ty = if js.val {
       JS
@@ -418,9 +435,9 @@ fn main {
     } else {
       RISCV
     }
-    let out_string = status.output(json.val, ty)
+    let out_string = status.output(json.val, ty, ssa.val)
     if out_file.val == "-" {
-      // println(out_string)
+      println(out_string)
     } else {
       let _ = try? @fs.write_string_to_file(out_file.val, out_string)
     }

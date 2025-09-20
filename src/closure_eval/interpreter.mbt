@@ -61,7 +61,7 @@ pub fn ClosureInterpreter::eval_full(
   expr : @closure.Program,
 ) -> Value raise Failure {
   for f in expr.fundefs {
-    self.functions.set(f.name.inner(), f)
+    self.functions.set(f.name.0, f)
   }
   let env = @immut/hashmap.new()
   self.eval(env, expr.body)
@@ -238,7 +238,7 @@ pub fn ClosureInterpreter::eval(
     }
     MakeClosure((n, _), c, e) => {
       let closure = self.functions
-        .get(c.name.inner())
+        .get(c.name.0)
         .or_error(Failure("closure not found: " + n.to_string()))
       let fv = []
       for x in c.actual_free_vars {
@@ -252,11 +252,11 @@ pub fn ClosureInterpreter::eval(
       for x in xs {
         args.push(find(env, x))
       }
-      match self.functions.get(l.inner()) {
+      match self.functions.get(l.0) {
         Some(f) => self.eval_fn(f, args, [])
         None => {
           let ext_fn = self.extern_fns
-            .get(l.inner())
+            .get(l.0)
             .or_error(
               Failure(
                 "Given function \{l} is not found in both internal and external functions",
@@ -333,7 +333,7 @@ pub fn ClosureInterpreter::eval(
       for x in xs {
         args.push(find(env, x))
       }
-      match self.extern_fns.get(l.inner()) {
+      match self.extern_fns.get(l.0) {
         Some(f) => f(args)
         None => fail("ExternalFunctionApplication: function not found")
       }

@@ -5,6 +5,7 @@
       "path": "moonbitlang/minimbt",
       "alias": "typing"
     },
-    "moonbitlang/minimbt/util"
+    "moonbitlang/minimbt/util",
+    "moonbitlang/minimbt/ssa"
   ]
 }

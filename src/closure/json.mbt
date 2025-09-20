@@ -50,9 +50,6 @@ pub fn Expr::to_json(self : Expr) -> Json {
       ["ExternalFunctionApplication", l.inner().to_json(), ns.to_json()]
     Expr::TupleGet(tuple, ty, index) =>
       ["TupleGet", tuple.to_json(), ty.to_json(), index.to_json()]
-    Expr::EnumConstructor(name, index, variant) => {
-      ["EnumConstructor", name.to_json(), index.to_json(), variant.to_json()]
-    }
     Expr::StaticArrayRef(Label(l)) => ["StaticArrayRef", l.to_json()]
   }
 }
