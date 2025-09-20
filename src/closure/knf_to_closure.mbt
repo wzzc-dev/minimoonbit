@@ -289,6 +289,7 @@ impl Hash for FreeVarWithType with hash_combine(_self, _state) {
   fn _hash_combine(self : FreeVarWithType, state : Hasher) -> Unit {
     self.name.hash_combine(state)
   }
+
 }
 
 ///|

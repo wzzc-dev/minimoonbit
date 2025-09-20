@@ -1,4 +1,5 @@
-///| The stage to be run next.
+///|
+/// The stage to be run next.
 enum Stages {
   Parse
   Typecheck
@@ -32,11 +33,7 @@ fn Stages::next(self : Stages, simple : Bool) -> Stages {
     Stages::Typecheck => Stages::Knf
     Stages::Knf => Stages::KnfOpt
     Stages::KnfOpt => Stages::Closure
-    Stages::Closure => if simple {
-      Stages::Ssa
-    } else {
-      Stages::Asm
-    }
+    Stages::Closure => if simple { Stages::Asm } else { Stages::Ssa }
     Stages::Ssa => Stages::Asm
     Stages::Asm => Stages::Finished
     Stages::Finished => Stages::Finished
@@ -101,8 +98,13 @@ fn CompileStatus::initialize(
   v
 }
 
-///| Run the next stage of compilation. Returns true if the compilation is finished.
-fn CompileStatus::step(self : CompileStatus, backend : Backend, simple : Bool) -> Bool {
+///|
+/// Run the next stage of compilation. Returns true if the compilation is finished.
+fn CompileStatus::step(
+  self : CompileStatus,
+  backend : Backend,
+  simple : Bool,
+) -> Bool {
   if self.curr_stage >= self.end_stage {
     return true
   }
@@ -116,11 +118,8 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend, simple : Bool) -
       let typechecked = try? @typing.typing(self.ast.unwrap())
       match typechecked {
         Ok(_) => self.typechecked = Some(typechecked.unwrap())
-        Err(e) => {
-          @util.die("type check error: " + e.to_json().to_string())
-        }
+        Err(e) => @util.die("type check error: " + e.to_json().to_string())
       }
-      
     }
     Knf => {
       let pre = @knf.KnfEnv::syntax_preprocess(
@@ -130,9 +129,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend, simple : Bool) -
       let knf = try? self.knf_env.to_knf(pre)
       match knf {
         Ok(_) => self.knf = Some(knf.unwrap())
-        Err(e) => {
-          @util.die(e.to_json().to_string())
-        }
+        Err(e) => @util.die(e.to_json().to_string())
       }
     }
     KnfOpt => {
@@ -165,7 +162,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend, simple : Bool) -
           let llvmir = @llvmir.to_llvmir(self.closure_ir.unwrap())
           self.llvmir = Some(llvmir)
         }
-        RISCV => {
+        RISCV =>
           if simple {
             let real_asm = @riscv.emit(self.closure_ir.unwrap())
             self.riscv_asm = Some(real_asm)
@@ -173,7 +170,6 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend, simple : Bool) -
             let real_asm = @riscv.ssa_emit_riscv(self.ssa.unwrap())
             self.riscv_asm = Some(real_asm)
           }
-        }
       }
     Finished => ()
   }
@@ -196,11 +192,12 @@ fn CompileStatus::output(
       KnfOpt => Json::stringify(self.knf.unwrap().to_json())
       Closure => Json::stringify(self.opt_knf.unwrap().to_json())
       Ssa => Json::stringify(self.closure_ir.unwrap().to_json())
-      Asm => if simple {
-        Json::stringify(self.closure_ir.unwrap().to_json())
-      } else {
-        Json::stringify(self.ssa.unwrap().to_json())
-      }
+      Asm =>
+        if simple {
+          Json::stringify(self.closure_ir.unwrap().to_json())
+        } else {
+          Json::stringify(self.ssa.unwrap().to_json())
+        }
       Finished => @riscv.print_functions(self.riscv_asm.unwrap())
     }
   } else {
@@ -211,11 +208,12 @@ fn CompileStatus::output(
       KnfOpt => self.knf.unwrap().to_string()
       Closure => self.opt_knf.unwrap().to_string()
       Ssa => self.closure_ir.unwrap().to_string()
-      Asm => if simple {
-        self.closure_ir.unwrap().to_string()
-      } else {
-        self.ssa.unwrap().to_string()
-      }
+      Asm =>
+        if simple {
+          self.closure_ir.unwrap().to_string()
+        } else {
+          self.ssa.unwrap().to_string()
+        }
       Finished =>
         match outTy {
           JS => self.js.unwrap()
@@ -247,7 +245,7 @@ fn main {
   let js = Ref::new(false)
   let wasm = Ref::new(false)
   let llvmir = Ref::new(false)
-  let simple = Ref::new(true)
+  let simple = Ref::new(false)
   // 
   @ArgParser.parse(
     [
@@ -335,12 +333,7 @@ fn main {
       ("--llvmir", "", @ArgParser.Set(llvmir), "Generate llvmir"),
       ("--simple", "", @ArgParser.Set(simple), "Simple backend"),
     ],
-    fn(s) {
-      // if not(file.is_empty()) {
-      //   @util.die("multiple files are given")
-      // }
-      file = Some(s)
-    },
+    fn(s) { file = Some(s) },
     "",
     argv.to_array(),
   )
@@ -371,15 +364,15 @@ fn main {
     file.unwrap()
   }
   let contents = try? @fs.read_file_to_string(file)
-
-  let compileStatus = try? CompileStatus::initialize(start_stage.val, end_stage.val.next(simple.val), contents.unwrap());
+  let compileStatus = try? CompileStatus::initialize(
+      start_stage.val,
+      end_stage.val.next(simple.val),
+      contents.unwrap(),
+    )
   // Compilation
   let status = match compileStatus {
     Ok(status) => status
-    Err(e) => {
-      println(e)
-      @util.die("Initialization error")
-    }
+    Err(e) => @util.die("Initialization error: " + e.to_string())
   }
   // Run stages
   while true {
@@ -410,10 +403,7 @@ fn main {
     let result = try? knfi.eval_full(status.knf.unwrap())
     match result {
       Ok(_) => ()
-      Err(_) => {
-        println(result)
-        @util.die("KNF interpreter error")
-      }
+      Err(e) => @util.die("KNF interpreter error: " + e.to_string())
     }
   } else if closure_interpreter.val {
     let clsi = @closure_eval.ClosureInterpreter::new()
@@ -421,10 +411,7 @@ fn main {
     let result = try? clsi.eval_full(status.closure_ir.unwrap())
     match result {
       Ok(_) => ()
-      Err(_) => {
-        println(result)
-        @util.die("Closure interpreter error")
-      }
+      Err(e) => @util.die("Closure interpreter error: " + e.to_string())
     }
   } else if ssa_interpreter.val {
     println(status.ssa.unwrap())
@@ -443,6 +430,7 @@ fn main {
       println(out_string)
     } else {
       let _ = try? @fs.write_string_to_file(out_file.val, out_string)
+
     }
   }
 }

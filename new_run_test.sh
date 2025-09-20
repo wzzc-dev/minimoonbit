@@ -16,7 +16,7 @@ for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
   echo "Processing $MBT_FILE..."
   
   # 运行 moonc 编译器并生成汇编文件
-  moon run -g src/bin/main.mbt -- "$MBT_FILE" -o "$OUTPUT_FILE" &&
+  moon run -g src/bin/main.mbt -- "$MBT_FILE" -o "$OUTPUT_FILE" --simple &&
   zig build-exe -target riscv64-linux -femit-bin=test-exe-file "$OUTPUT_FILE" ./riscv_rt/zig-out/lib/libmincaml.a -O Debug -fno-strip -mcpu=baseline_rv64 &&
   
   # 运行模拟器并将输出提取到临时文件（只取 >>> 前内容）

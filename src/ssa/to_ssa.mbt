@@ -3,6 +3,7 @@
 
 ///| 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
+  // @util.logger("to_ssa: " + input.to_string())
   // 初始化SSA程序
   let functions = []
   
