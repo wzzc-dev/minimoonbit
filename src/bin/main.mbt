@@ -70,7 +70,7 @@ fn CompileStatus::initialize(
     source_code: None,
     ast: None,
     typechecked: None,
-    knf_env: @knf.KnfEnv::new(externals()),
+    knf_env: @knf.KnfEnv::new(@immut/hashmap.HashMap::new()),
     knf: None,
     opt_knf: None,
     closure_ir: None,
@@ -140,7 +140,8 @@ fn CompileStatus::step(
     Closure => {
       let closure_ir = @closure.knf_program_to_closure(
         self.opt_knf.unwrap(),
-        Map::from_iter(externals().iter()),
+        Map::new()
+        // Map::from_iter(externals().iter()),
       )
       self.closure_ir = Some(closure_ir)
     }
@@ -414,7 +415,7 @@ fn main {
       Err(e) => @util.die("Closure interpreter error: " + e.to_string())
     }
   } else if ssa_interpreter.val {
-    println(status.ssa.unwrap())
+    println(status.ssa.unwrap().to_json().stringify())
   } else {
     let ty = if js.val {
       JS

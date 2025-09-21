@@ -6,7 +6,7 @@ pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type],
 ) -> Program {
-  // println("knf ir: " + prog.to_string())
+  // println("knf ir: " + prog.to_json().stringify())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
   let static_arrays : Array[StaticArrayData] = []

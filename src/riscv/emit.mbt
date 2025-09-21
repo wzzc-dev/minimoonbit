@@ -1,14 +1,6 @@
 ///|
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  // for fundef in input.fundefs {
-  //   if extenv.contains(fundef.name.inner()) {
-  //     continue
-  //   }
-  //   // if fundef.name.inner() == "loop2" {
-  //   println("fundef: " + fundef.to_string())
-  //   // }
-  // }
-  // println("minimbt_main: " + input.body.to_json().stringify())
+  // println("emit: " + input.to_json().stringify())
   let functions = []
   for static_array in input.static_arrays {
     
