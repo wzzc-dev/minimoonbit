@@ -3,8 +3,7 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
   // println("emit: " + input.to_json().stringify())
   let functions = []
   for static_array in input.static_arrays {
-    
-    fn get_elems(name: String, arr : Array[@closure.LowTypeValue]) {
+    fn get_elems(name : String, arr : Array[@closure.LowTypeValue]) {
       let body = []
       let elems = []
       for i, elem in arr {
@@ -19,22 +18,12 @@ pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
       }
       if elems.length() > 0 {
         match arr[0] {
-          PtrValue(_) => {
-            body.push(Data(".dword", elems))
-          }
-          IntValue(_) => {
-            body.push(Data(".word", elems))
-          }
-          DoubleValue(_) => {
-            body.push(Data(".double", elems))
-          }
+          PtrValue(_) => body.push(Data(".dword", elems))
+          IntValue(_) => body.push(Data(".word", elems))
+          DoubleValue(_) => body.push(Data(".double", elems))
         }
       }
-      functions.push({
-        name: name,
-        asm_export: false,
-        body,
-      })
+      functions.push({ name, asm_export: false, body })
     }
 
     get_elems(static_array.label.0, static_array.elements)
@@ -96,7 +85,6 @@ fn emit_fun(
 
   // 更新帧指针
   body.push(Addi(Fp, Sp, aligned_framesize))
-
   let mut env = {
     // 保存参数
     vars: @immut/hashmap.new(),
@@ -138,7 +126,6 @@ fn emit_fun(
       let offset = env.current_offset
       // 修正：溢出参数位于调用者栈帧中，在当前帧指针之上
       let stack_offset = aligned_framesize + (i - reg_arg_list.length()) * 8
-      
       match arg.1 {
         Double => {
           // 浮点参数使用浮点寄存器和指令
@@ -231,7 +218,7 @@ pub(all) struct AssemblyFunction {
   name : String
   asm_export : Bool
   body : Array[RvAsm]
-}
+} derive(Show)
 
 ///|
 pub fn AssemblyFunction::output(
@@ -292,7 +279,6 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       instrs.push(Li(T0, bits.to_string()))
       // instrs.push(FcvtDl(freg_ret, T0))
       instrs.push(FmvDX(freg_ret, T0))
-
     }
     Neg(x) => {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, x) }))
@@ -373,26 +359,19 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // Generate labels for loop control
       let label_start = gen_label("while_start")
       let label_end = gen_label("while_end")
-
       // Start of loop
       instrs.push(Label(label_start.inner()))
-
       // Compile condition expression
       instrs.append(compile_expr(cond, env))
-
       // Check if condition is false (assuming condition result is in reg_ret)
       // If reg_ret is 0 (false), jump to end
       instrs.push(Beq(reg_ret, Zero, label_end))
-
       // Compile loop body
       instrs.append(compile_expr(body, env))
-
       // Jump back to start of loop
       instrs.push(J(label_start))
-
       // End of loop label
       instrs.push(Label(label_end.inner()))
-
       // While loops return Unit, so set reg_ret to 0
       instrs.push(Li(reg_ret, "0"))
     }
@@ -412,7 +391,9 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 计算 e2,使用更新后的环境
       instrs.append(compile_expr(e2, env))
     }
-    Var(name) =>
+    Var(name) => {
+      // @util.logger("Var: " + name.to_string())
+      // @util.logger("Env: " + env.vars.to_string())
       // 从环境中查找变量的偏移
       match env.vars.get(name.to_string()) {
         Some((offset, ty)) =>
@@ -420,8 +401,10 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             Double => instrs.push(Fld(freg_ret, { base: Fp, offset }))
             _ => instrs.push(Ld(reg_ret, { base: Fp, offset }))
           }
+        
         None => instrs.push(La(reg_ret, name.to_string()))
       }
+    }
     MakeClosure((name, ty), closure, e) =>
       emit_make_closure(name, ty, closure, e, instrs, env)
     CallClosure(f, args) => emit_call_closure(f, args, instrs, env)
@@ -505,16 +488,10 @@ fn emit_tuple_get(
 ) -> Unit {
   instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, tuple) }))
   match ty {
-    Double => {
-      instrs.push(Fld(freg_ret, { base: T0, offset: index * 8 }))
-    }
-    _ => {
-      instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
-    }
+    Double => instrs.push(Fld(freg_ret, { base: T0, offset: index * 8 }))
+    _ => instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
   }
 }
-
-
 
 ///|
 fn emit_make_closure(
@@ -525,6 +502,9 @@ fn emit_make_closure(
   instrs : Array[RvAsm],
   env : Env,
 ) -> Unit {
+  // @util.logger("emit_make_closure: " + name.to_string())
+  // @util.logger("closure: " + closure.to_string())
+  // @util.logger("env: " + env.vars.to_string())
   let status = env.vars.get(name.to_string()) is Some(_) &&
     closure.actual_free_vars.is_empty()
   if status {
@@ -572,6 +552,7 @@ fn emit_make_closure(
   // 编译剩余表达式
   instrs.append(compile_expr(e, env))
 }
+
 ///|
 fn emit_call_closure(
   f : @typing.Name,
@@ -584,9 +565,7 @@ fn emit_call_closure(
     Some((offset, _)) => instrs.push(Ld(S11, { base: Fp, offset }))
     None =>
       match
-        env.fundefs.search_by(fn(fundef) {
-          fundef.name.0 == f.to_string()
-        }) {
+        env.fundefs.search_by(fn(fundef) { fundef.name.0 == f.to_string() }) {
         Some(_) => ()
         None =>
           @util.logger("Warning: CallClosure: " + f.to_string() + " not found")
@@ -610,12 +589,8 @@ fn emit_array_get(
   instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
   let arr_ty = get_array_element_type(array, env)
   match arr_ty {
-    Int(_) => {
-      instrs.push(Slli(T1, T1, 2))
-    }
-    _ => {
-      instrs.push(Slli(T1, T1, 3))
-    }
+    Int(_) => instrs.push(Slli(T1, T1, 2))
+    _ => instrs.push(Slli(T1, T1, 3))
   }
   // 3. 计算最终地址
   instrs.push(Add(T0, T0, T1))
@@ -635,7 +610,7 @@ fn emit_array_put(
   index : @typing.Name,
   value : @typing.Name,
   instrs : Array[RvAsm],
-  env : Env
+  env : Env,
 ) -> Unit {
   // instrs.push(Comment("emit_array_put:" + array.to_string() + " " + index.to_string() + " " + value.to_string()))
   // - 1. 从栈上加载数组的基地址（这个地址是指向堆上数组的指针）
@@ -645,12 +620,8 @@ fn emit_array_put(
   instrs.push(Ld(T1, { base: Fp, offset: Env::varOffset(env, index) }))
   let arr_ty = get_array_element_type(array, env)
   match arr_ty {
-    Int(_) => {
-      instrs.push(Slli(T1, T1, 2))
-    }
-    _ => {
-      instrs.push(Slli(T1, T1, 3))
-    }
+    Int(_) => instrs.push(Slli(T1, T1, 2))
+    _ => instrs.push(Slli(T1, T1, 3))
   }
   // - 3. 计算元素在堆上的实际地址
   instrs.push(Add(T0, T0, T1))
@@ -674,6 +645,7 @@ fn emit_array_put(
 }
 
 // 添加一个辅助函数来获取数组元素类型
+
 ///|
 fn get_array_element_type(array : @typing.Name, env : Env) -> @closure.LowType {
   match env.find_type(array.to_string()) {
@@ -738,9 +710,9 @@ fn emit_args(
 
 ///|
 pub let extenv = [
-  "read_int", "print_int", "print_float", "read_char", "print_char", "print_newline", "print_endline",
-  "int_of_float", "float_of_int", "truncate", "floor", "abs_float", "sqrt", "sin",
-  "cos", "atan", "create_array", "create_float_array", "create_ptr_array",
+  "read_int", "print_int", "print_float", "read_char", "print_char", "print_newline",
+  "print_endline", "int_of_float", "float_of_int", "truncate", "floor", "abs_float",
+  "sqrt", "sin", "cos", "atan", "create_array", "create_float_array", "create_ptr_array",
 ]
 
 ///|

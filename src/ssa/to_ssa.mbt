@@ -5,7 +5,7 @@
 ///|
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
-  @util.logger("closure ir: " + input.to_json().stringify())
+  // @util.logger("closure ir: " + input.to_json().stringify())
   // 初始化SSA程序
   let functions = []
 
@@ -27,11 +27,19 @@ pub fn to_ssa(input : @closure.Program) -> Ssa {
 ///|
 /// 转换函数定义为SSA形式
 fn convert_function(fundef : @closure.FuncDef) -> Function {
-  // 创建函数参数
-  let params = fundef.args.map(fn(arg) {
-    // 为每个参数创建SSA值
+  // 创建函数参数（包括正常参数和自由变量）
+  let regular_params = fundef.args.map(fn(arg) {
     (Value::{ id: new_value_id() }, convert_type(arg.1))
   })
+  
+  let free_var_params = fundef.formal_free_vars.map(fn(free_var) {
+    (Value::{ id: new_value_id() }, convert_type(free_var.1))
+  })
+  
+  // 合并所有参数
+  let all_params = []
+  all_params.append(regular_params)
+  all_params.append(free_var_params)
 
   // 创建基本块列表
   let blocks = []
@@ -49,14 +57,14 @@ fn convert_function(fundef : @closure.FuncDef) -> Function {
   let mut var_env = @immut/hashmap.new()
   for i, arg in fundef.args {
     let param_name = arg.0
-    let param_value = params[i].0
+    let param_value = regular_params[i].0
     var_env = var_env.add(param_name, param_value)
   }
   
   // 添加自由变量到环境中
-  for free_var in fundef.formal_free_vars {
+  for i, free_var in fundef.formal_free_vars {
     let free_var_name = free_var.0
-    let free_var_value = Value::{ id: new_value_id() }
+    let free_var_value = free_var_params[i].0
     var_env = var_env.add(free_var_name, free_var_value)
   }
   
@@ -89,7 +97,7 @@ fn convert_function(fundef : @closure.FuncDef) -> Function {
   
   {
     name: fundef.name.0.to_string(),
-    params,
+    params: all_params,
     return_type: convert_type(fundef.ty),
     blocks: updated_blocks,
   }

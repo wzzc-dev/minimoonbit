@@ -8,7 +8,7 @@ struct SsaInterpreter {
   // 值存储：Value ID -> 实际值
   values : @immut/hashmap.HashMap[Int, SsaValue]
   // 函数定义映射
-  functions : @immut/hashmap.HashMap[String, @ssa.Function]
+  mut functions : @immut/hashmap.HashMap[String, @ssa.Function]
 }
 
 ///|
@@ -34,14 +34,20 @@ pub fn SsaInterpreter::eval_full(
 ) -> Result[SsaValue, String]{
   // 注册所有函数
   for func in program.program.functions {
-    let _ = self.functions.add(func.name, func)
-
+    self.functions = self.functions.add(func.name, func)
+    // @util.logger("Registered function: " + func.name)
   }
 
   // 查找主函数并执行
   match self.functions.get("minimbt_main") {
     Some(main_func) => self.eval_function(main_func, [])
-    None => Err("Main function not found")
+    None => {
+      // 尝试查找其他可能的主函数名
+      match self.functions.get("main") {
+        Some(main_func) => self.eval_function(main_func, [])
+        None => Err("Main function not found (tried 'minimbt_main' and 'main')")
+      }
+    }
   }
 }
 
@@ -126,6 +132,25 @@ fn SsaInterpreter::eval_instruction(self : SsaInterpreter, instr : @ssa.Instruct
         (SsaValue::IntVal(a), SsaValue::IntVal(b)) => SsaValue::BoolVal(a < b)
         (SsaValue::FloatVal(a), SsaValue::FloatVal(b)) => SsaValue::BoolVal(a < b)
         _ => return Err("Type error in Lt")
+      }
+    }
+    
+    @ssa.Opcode::Call(name, args) => {
+      // 简化的函数调用处理 - 对于print_int直接打印
+      if name == "minimbt_print_int" && args.length() == 1 {
+        let arg_val = match self.get_value(args[0]) {
+          Ok(val) => val
+          Err(e) => return Err(e)
+        }
+        match arg_val {
+          SsaValue::IntVal(i) => {
+            println(i.to_string())
+            SsaValue::UnitVal
+          }
+          _ => return Err("Type error in print_int")
+        }
+      } else {
+        return Err("Unimplemented function call: " + name)
       }
     }
     
