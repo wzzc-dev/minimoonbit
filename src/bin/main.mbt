@@ -168,6 +168,7 @@ fn CompileStatus::step(
             let real_asm = @riscv.emit(self.closure_ir.unwrap())
             self.riscv_asm = Some(real_asm)
           } else {
+            @util.logger("ssa ir: \n" + self.ssa.unwrap().to_json().stringify())
             let real_asm = @riscv.ssa_emit_riscv(self.ssa.unwrap())
             self.riscv_asm = Some(real_asm)
           }
@@ -415,7 +416,13 @@ fn main {
       Err(e) => @util.die("Closure interpreter error: " + e.to_string())
     }
   } else if ssa_interpreter.val {
-    println(status.ssa.unwrap().to_json().stringify())
+    @util.logger("ssa ir: \n" + status.ssa.unwrap().to_json().stringify())
+    let ssa_interp = @ssa_eval.SsaInterpreter::new()
+    let result = ssa_interp.eval_full(status.ssa.unwrap())
+    match result {
+      Ok(val) => println("SSA Result: " + val.to_string())
+      Err(e) => @util.die("SSA interpreter error: " + e.to_string())
+    }
   } else {
     let ty = if js.val {
       JS

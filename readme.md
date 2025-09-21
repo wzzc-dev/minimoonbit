@@ -71,5 +71,5 @@ moon run src/bin/main.mbt -- --ssa-interpreter contest-2025-data/test_cases/mbt/
 
 生成 RISC-V 汇编代码并保存到 out.s：
 ```shell
-moon run -g src/bin/main.mbt -- contest-2025-data/test_cases/mbt/ack.mbt -o out.s --ssa
+moon run -g src/bin/main.mbt -- contest-2025-data/test_cases/mbt/ack.mbt -o out.s
 ```

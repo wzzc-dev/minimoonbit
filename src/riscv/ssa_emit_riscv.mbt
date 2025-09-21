@@ -63,11 +63,10 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
     }
     @ssa.Opcode::ConstFloat(value) => {
       // 加载常量浮点数到寄存器
-      // TODO: 实现浮点常量加载
+      let float_reg = get_float_register_for_value(instr.result)
       let bits = value.reinterpret_as_int64()
       result.push(Li(T0, bits.to_string()))
-      // instrs.push(FcvtDl(freg_ret, T0))
-      result.push(FmvDX(freg_ret, T0))
+      result.push(FmvDX(float_reg, T0))
     }
     @ssa.Opcode::Add(lhs, rhs) => {
       // 加法运算
@@ -83,9 +82,164 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
       let rs2 = get_register_for_value(rhs)
       result.push(Sub(rd, rs1, rs2))
     }
-    // TODO: 实现其他指令的代码生成
+    @ssa.Opcode::Mul(lhs, rhs) => {
+      // 乘法运算
+      let rd = get_register_for_value(instr.result)
+      let rs1 = get_register_for_value(lhs)
+      let rs2 = get_register_for_value(rhs)
+      result.push(Mul(rd, rs1, rs2))
+    }
+    @ssa.Opcode::Div(lhs, rhs) => {
+      // 除法运算
+      let rd = get_register_for_value(instr.result)
+      let rs1 = get_register_for_value(lhs)
+      let rs2 = get_register_for_value(rhs)
+      result.push(Div(rd, rs1, rs2))
+    }
+    @ssa.Opcode::Mod(lhs, rhs) => {
+      // 取模运算
+      let rd = get_register_for_value(instr.result)
+      let rs1 = get_register_for_value(lhs)
+      let rs2 = get_register_for_value(rhs)
+      result.push(Rem(rd, rs1, rs2))
+    }
+    @ssa.Opcode::FAdd(lhs, rhs) => {
+      // 浮点加法
+      let rd = get_float_register_for_value(instr.result)
+      let rs1 = get_float_register_for_value(lhs)
+      let rs2 = get_float_register_for_value(rhs)
+      result.push(FaddD(rd, rs1, rs2))
+    }
+    @ssa.Opcode::FSub(lhs, rhs) => {
+      // 浮点减法
+      let rd = get_float_register_for_value(instr.result)
+      let rs1 = get_float_register_for_value(lhs)
+      let rs2 = get_float_register_for_value(rhs)
+      result.push(FsubD(rd, rs1, rs2))
+    }
+    @ssa.Opcode::FMul(lhs, rhs) => {
+      // 浮点乘法
+      let rd = get_float_register_for_value(instr.result)
+      let rs1 = get_float_register_for_value(lhs)
+      let rs2 = get_float_register_for_value(rhs)
+      result.push(FmulD(rd, rs1, rs2))
+    }
+    @ssa.Opcode::FDiv(lhs, rhs) => {
+      // 浮点除法
+      let rd = get_float_register_for_value(instr.result)
+      let rs1 = get_float_register_for_value(lhs)
+      let rs2 = get_float_register_for_value(rhs)
+      result.push(FdivD(rd, rs1, rs2))
+    }
+    @ssa.Opcode::Eq(lhs, rhs) => {
+      // 相等比较
+      let rd = get_register_for_value(instr.result)
+      let rs1 = get_register_for_value(lhs)
+      let rs2 = get_register_for_value(rhs)
+      result.append([
+        Sub(rd, rs1, rs2),  // rd = rs1 - rs2
+        Sltiu(rd, rd, 1)       // rd = (rd == 0) ? 1 : 0
+      ])
+    }
+    @ssa.Opcode::Ne(lhs, rhs) => {
+      // 不等比较
+      let rd = get_register_for_value(instr.result)
+      let rs1 = get_register_for_value(lhs)
+      let rs2 = get_register_for_value(rhs)
+      result.append([
+        Sub(rd, rs1, rs2),  // rd = rs1 - rs2
+        Sltu(rd, Zero, rd)       // rd = (rd != 0) ? 1 : 0
+      ])
+    }
+    @ssa.Opcode::Lt(lhs, rhs) => {
+      // 小于比较
+      let rd = get_register_for_value(instr.result)
+      let rs1 = get_register_for_value(lhs)
+      let rs2 = get_register_for_value(rhs)
+      result.push(Slt(rd, rs1, rs2))
+    }
+    @ssa.Opcode::Le(lhs, rhs) => {
+      // 小于等于比较 (!(rs2 < rs1))
+      let rd = get_register_for_value(instr.result)
+      let rs1 = get_register_for_value(lhs)
+      let rs2 = get_register_for_value(rhs)
+      result.append([
+        Slt(rd, rs2, rs1),   // rd = rs2 < rs1
+        Xori(rd, rd, 1)      // rd = !rd
+      ])
+    }
+    @ssa.Opcode::Gt(lhs, rhs) => {
+      // 大于比较 (rs2 < rs1)
+      let rd = get_register_for_value(instr.result)
+      let rs1 = get_register_for_value(lhs)
+      let rs2 = get_register_for_value(rhs)
+      result.push(Slt(rd, rs2, rs1))
+    }
+    @ssa.Opcode::Ge(lhs, rhs) => {
+      // 大于等于比较 (!(rs1 < rs2))
+      let rd = get_register_for_value(instr.result)
+      let rs1 = get_register_for_value(lhs)
+      let rs2 = get_register_for_value(rhs)
+      result.append([
+        Slt(rd, rs1, rs2),   // rd = rs1 < rs2
+        Xori(rd, rd, 1)      // rd = !rd
+      ])
+    }
+    @ssa.Opcode::Call(name, args) => {
+      // 函数调用
+      // 将参数放入参数寄存器
+      for i, arg in args {
+        let arg_reg = get_register_for_value(arg)
+        let param_reg = match i {
+          0 => A0
+          1 => A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          7 => A7
+          _ => A0  // 超过8个参数需要通过栈传递
+        }
+        if arg_reg != param_reg {
+          result.push(Mv(param_reg, arg_reg))
+        }
+      }
+      // 调用函数
+      result.push(Call(name))
+      // 将返回值移动到结果寄存器
+      let result_reg = get_register_for_value(instr.result)
+      if result_reg != A0 {
+        result.push(Mv(result_reg, A0))
+      }
+    }
+    @ssa.Opcode::Load(addr) => {
+      // 内存加载
+      let rd = get_register_for_value(instr.result)
+      let addr_reg = get_register_for_value(addr)
+      result.push(Ld(rd, { base: addr_reg, offset: 0 }))
+    }
+    @ssa.Opcode::Store(addr, value) => {
+      // 内存存储
+      let addr_reg = get_register_for_value(addr)
+      let value_reg = get_register_for_value(value)
+      result.push(Sd(value_reg, { base: addr_reg, offset: 0 }))
+    }
+    @ssa.Opcode::Tuple(_values) => {
+      // 元组创建 - 简化实现，实际需要分配内存
+      let result_reg = get_register_for_value(instr.result)
+      result.push(Comment("TODO: implement tuple creation"))
+      result.push(Li(result_reg, "0")) // 临时实现
+    }
+    @ssa.Opcode::GetElement(tuple, _index) => {
+      // 元组元素访问
+      let rd = get_register_for_value(instr.result)
+      let tuple_reg = get_register_for_value(tuple)
+      result.push(Comment("TODO: implement tuple element access"))
+      result.push(Mv(rd, tuple_reg)) // 临时实现
+    }
     _ => {
-      // 默认情况下，可以添加注释指令来标识未实现的指令
+      // 默认情况下，添加注释指令来标识未实现的指令
       result.push(Comment("TODO: implement " + instr.opcode.to_string()))
     }
   }
@@ -151,7 +305,7 @@ fn emit_terminator(terminator : @ssa.Terminator) -> Array[RvAsm] {
   result
 }
 
-///| 获取值对应的寄存器
+///| 获取值对应的整数寄存器
 fn get_register_for_value(value : @ssa.Value) -> Reg {
   // 简单的寄存器分配策略
   // 实际实现中需要更复杂的寄存器分配算法
@@ -163,6 +317,21 @@ fn get_register_for_value(value : @ssa.Value) -> Reg {
     4 => T4
     5 => T5
     _ => T6
+  }
+}
+
+///| 获取值对应的浮点寄存器
+fn get_float_register_for_value(value : @ssa.Value) -> FReg {
+  // 简单的浮点寄存器分配策略
+  match value.id % 8 {
+    0 => Ft0
+    1 => Ft1
+    2 => Ft2
+    3 => Ft3
+    4 => Ft4
+    5 => Ft5
+    6 => Ft6
+    _ => Ft7
   }
 }
 

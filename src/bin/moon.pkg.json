@@ -16,6 +16,7 @@
     "moonbitlang/minimbt/riscv",
     "moonbitlang/minimbt/util",
     "moonbitlang/minimbt/closure_eval",
+    "moonbitlang/minimbt/ssa_eval",
     "moonbitlang/minimbt/js",
     "moonbitlang/minimbt/wasm",
     "moonbitlang/minimbt/ssa",

@@ -5,7 +5,7 @@
 ///|
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
-  @util.logger("to_ssa: " + input.to_json().stringify())
+  @util.logger("closure ir: " + input.to_json().stringify())
   // 初始化SSA程序
   let functions = []
 
@@ -44,15 +44,49 @@ fn convert_function(fundef : @closure.FuncDef) -> Function {
     terminator: Terminator::Return(None), // 默认返回
   }
   blocks.push(entry_block)
+  
+  // 创建变量环境，将函数参数添加到环境中
+  let mut var_env = @immut/hashmap.new()
+  for i, arg in fundef.args {
+    let param_name = arg.0
+    let param_value = params[i].0
+    var_env = var_env.add(param_name, param_value)
+  }
+  
+  // 添加自由变量到环境中
+  for free_var in fundef.formal_free_vars {
+    let free_var_name = free_var.0
+    let free_var_value = Value::{ id: new_value_id() }
+    var_env = var_env.add(free_var_name, free_var_value)
+  }
+  
   let context = {
     current_block: entry_block,
     blocks,
     block_map: @immut/hashmap.new(), // 块映射，用于控制流
-    var_env: @immut/hashmap.new(), // 变量环境
+    var_env: var_env, // 包含参数和自由变量的环境
   }
   let result = convert_expr(context, fundef.body)
+  
+  // 更新最后一个块的终止指令，使其返回表达式的结果
+  let final_context = result.context
+  let return_value = result.value
+  let updated_final_block = BasicBlock::{
+    id: final_context.current_block.id,
+    params: final_context.current_block.params,
+    instructions: final_context.current_block.instructions,
+    terminator: Terminator::Return(return_value),
+  }
+  
   // 使用转换后的上下文更新块列表
-  let updated_blocks = result.context.blocks
+  let updated_blocks = final_context.blocks.map(fn(b) {
+    if b.id == updated_final_block.id {
+      updated_final_block
+    } else {
+      b
+    }
+  })
+  
   {
     name: fundef.name.0.to_string(),
     params,
@@ -89,8 +123,25 @@ fn convert_main_function(body : @closure.Expr) -> Function {
   // 转换表达式
   let result = convert_expr(context, body)
 
+  // 更新最后一个块的终止指令
+  let final_context = result.context
+  let return_value = result.value
+  let updated_final_block = BasicBlock::{
+    id: final_context.current_block.id,
+    params: final_context.current_block.params,
+    instructions: final_context.current_block.instructions,
+    terminator: Terminator::Return(return_value), // 主函数通常返回Unit，但可能有值
+  }
+  
   // 更新块列表
-  let updated_blocks = result.context.blocks
+  let updated_blocks = final_context.blocks.map(fn(b) {
+    if b.id == updated_final_block.id {
+      updated_final_block
+    } else {
+      b
+    }
+  })
+  
   {
     name: "minimbt_main",
     params,
@@ -120,16 +171,66 @@ priv struct ExprResult {
 /// 转换闭包IR表达式为SSA指令
 fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
   match expr {
-    Unit
-    | LetTuple(_, _, _)
-    | MakeTuple(_)
+    Unit => {
+      // Unit值，不产生实际值
+      ExprResult::{ value: None, context }
+    }
+    MakeTuple(elements) => {
+      // 元组创建
+      let mut current_context = context
+      let element_values = []
+      
+      // 转换所有元素
+      for elem in elements {
+        let elem_result = convert_expr(current_context, @closure.Expr::Var(elem))
+        current_context = elem_result.context
+        match elem_result.value {
+          Some(val) => element_values.push(val)
+          None => () // 跳过Unit元素
+        }
+      }
+      
+      // 创建元组值
+      let result_value = Value::{ id: new_value_id() }
+      let instruction = Instruction::{
+        result: result_value,
+        opcode: Opcode::Tuple(element_values),
+      }
+      
+      // 更新当前块
+      current_context.current_block.instructions.push(instruction)
+      let updated_block = BasicBlock::{
+        id: current_context.current_block.id,
+        params: current_context.current_block.params,
+        instructions: current_context.current_block.instructions,
+        terminator: current_context.current_block.terminator,
+      }
+      
+      let updated_blocks = current_context.blocks.map(fn(b) {
+        if b.id == updated_block.id { updated_block } else { b }
+      })
+      
+      let updated_context = Context::{
+        current_block: updated_block,
+        blocks: updated_blocks,
+        block_map: current_context.block_map,
+        var_env: current_context.var_env,
+      }
+      
+      ExprResult::{ value: Some(result_value), context: updated_context }
+    }
+    // 其他未实现的表达式暂时返回None
+    LetTuple(_, _, _)
     | TupleGet(_, _, _)
     | ArrayPut(_, _, _)
     | ArrayGet(_, _)
     | ExternalArray(Label(_))
     | Assign(_, _)
     | While(_, _)
-    | StaticArrayRef(Label(_)) => ExprResult::{ value: None, context }
+    | StaticArrayRef(Label(_)) => {
+      @util.logger("Warning: Unimplemented expression type in SSA conversion: " + expr.to_string())
+      ExprResult::{ value: None, context }
+    }
     Int(i) => {
       let value = Value::{ id: new_value_id() }
       let instruction = Instruction::{
@@ -194,17 +295,99 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
       ExprResult::{ value: Some(value), context: updated_context }
     }
-    Neg(x) | FNeg(x) => {
+    Neg(x) => {
       // 转换操作数
       let result = convert_expr(context, @closure.Expr::Var(x))
       let context1 = result.context
-      let value = result.value.unwrap()
-      @util.die(
-        "Neg: " +
-        value.to_string() +
-        "\n context: " +
-        context1.blocks.to_string(),
-      )
+      let operand_value = result.value.unwrap()
+
+      // 创建结果值和指令 (整数取负: 0 - x)
+      let result_value = Value::{ id: new_value_id() }
+      let zero_value = Value::{ id: new_value_id() }
+      
+      // 先创建常量0
+      let zero_instruction = Instruction::{
+        result: zero_value,
+        opcode: Opcode::ConstInt(0),
+      }
+      
+      // 然后执行减法 (0 - operand)
+      let neg_instruction = Instruction::{
+        result: result_value,
+        opcode: Opcode::Sub(zero_value, operand_value),
+      }
+
+      // 更新当前块的指令列表
+      context1.current_block.instructions.append([zero_instruction, neg_instruction])
+      let updated_block = BasicBlock::{
+        id: context1.current_block.id,
+        params: context1.current_block.params,
+        instructions: context1.current_block.instructions,
+        terminator: context1.current_block.terminator,
+      }
+
+      // 更新上下文
+      let updated_blocks = context1.blocks.map(fn(b) {
+        if b.id == updated_block.id {
+          updated_block
+        } else {
+          b
+        }
+      })
+      let updated_context = Context::{
+        current_block: updated_block,
+        blocks: updated_blocks,
+        block_map: context1.block_map,
+        var_env: context1.var_env,
+      }
+      ExprResult::{ value: Some(result_value), context: updated_context }
+    }
+    FNeg(x) => {
+      // 转换操作数
+      let result = convert_expr(context, @closure.Expr::Var(x))
+      let context1 = result.context
+      let operand_value = result.value.unwrap()
+
+      // 创建结果值和指令 (浮点取负: 0.0 - x)
+      let result_value = Value::{ id: new_value_id() }
+      let zero_value = Value::{ id: new_value_id() }
+      
+      // 先创建浮点常量0.0
+      let zero_instruction = Instruction::{
+        result: zero_value,
+        opcode: Opcode::ConstFloat(0.0),
+      }
+      
+      // 然后执行浮点减法 (0.0 - operand)
+      let neg_instruction = Instruction::{
+        result: result_value,
+        opcode: Opcode::FSub(zero_value, operand_value),
+      }
+
+      // 更新当前块的指令列表
+      context1.current_block.instructions.append([zero_instruction, neg_instruction])
+      let updated_block = BasicBlock::{
+        id: context1.current_block.id,
+        params: context1.current_block.params,
+        instructions: context1.current_block.instructions,
+        terminator: context1.current_block.terminator,
+      }
+
+      // 更新上下文
+      let updated_blocks = context1.blocks.map(fn(b) {
+        if b.id == updated_block.id {
+          updated_block
+        } else {
+          b
+        }
+      })
+      let updated_context = Context::{
+        current_block: updated_block,
+        blocks: updated_blocks,
+        block_map: context1.block_map,
+        var_env: context1.var_env,
+      }
+      ExprResult::{ value: Some(result_value), context: updated_context }
     }
     Double(d) => {
       let value = Value::{ id: new_value_id() }
@@ -304,7 +487,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
     IfEq(x, y, e1, e2) | IfLe(x, y, e1, e2) | IfLt(x, y, e1, e2) => {
-      // 先转换条件表达式
+      // 先转换条件表达式的左操作数
       let result1 = convert_expr(context, @closure.Expr::Var(x))
       let context1 = result1.context
       // 转换右操作数
@@ -313,7 +496,22 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       
       // 获取两个操作数的值
       let value1 = result1.value.unwrap()
-      let _value2 = result2.value.unwrap()
+      let value2 = result2.value.unwrap()
+
+      // 创建比较指令的结果值
+      let cmp_result = Value::{ id: new_value_id() }
+      let cmp_instruction = Instruction::{
+        result: cmp_result,
+        opcode: match expr {
+          IfEq(_, _, _, _) => Opcode::Eq(value1, value2)
+          IfLe(_, _, _, _) => Opcode::Le(value1, value2)  
+          IfLt(_, _, _, _) => Opcode::Lt(value1, value2)
+          _ => @util.die("unexpected expression type")
+        }
+      }
+
+      // 将比较指令添加到当前块
+      context2.current_block.instructions.push(cmp_instruction)
 
       // 创建两个分支的块
       let then_block_id = new_block_id()
@@ -336,21 +534,16 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         terminator: Terminator::Jump(merge_block_id, []),
       }
 
-      // 创建合并块
+      // 创建合并块 - 修复无限循环问题，应该返回到调用者
       let merge_block = BasicBlock::{
         id: merge_block_id,
         params: [],
         instructions: [],
-        terminator: Terminator::Jump(merge_block_id, []),
+        terminator: Terminator::Return(None), // 临时设置，后续会被正确的终止指令替换
       }
 
-      // 更新当前块的终止指令
-      let terminator = match expr {
-        IfEq(_, _, _, _) => Terminator::Branch(value1, then_block_id, else_block_id)
-        IfLe(_, _, _, _) => Terminator::Branch(value1, then_block_id, else_block_id)
-        IfLt(_, _, _, _) => Terminator::Branch(value1, then_block_id, else_block_id)
-        _ => @util.die("unexpected expression type")
-      }
+      // 更新当前块的终止指令 - 使用比较结果作为分支条件
+      let terminator = Terminator::Branch(cmp_result, then_block_id, else_block_id)
 
 
       let updated_current_block = BasicBlock::{
@@ -380,13 +573,18 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 转换then分支
       let then_result = convert_expr(context_with_blocks, e1)
       let then_context = then_result.context
+      let then_value = then_result.value
 
-      // 更新then块的终止指令，跳转到合并块
+      // 更新then块的终止指令，跳转到合并块并传递值
+      let then_args = match then_value {
+        Some(v) => [v]
+        None => []
+      }
       let updated_then_block = BasicBlock::{
         id: then_context.current_block.id,
         params: then_context.current_block.params,
         instructions: then_context.current_block.instructions,
-        terminator: Terminator::Jump(merge_block_id, []),
+        terminator: Terminator::Jump(merge_block_id, then_args),
       }
 
       // 更新上下文，切换到else块
@@ -399,39 +597,66 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
 
       // 转换else分支
       let else_result = convert_expr(else_context, e2)
-      let else_context = else_result.context
+      let final_else_context = else_result.context
+      let else_value = else_result.value
 
-      // 更新else块的终止指令，跳转到合并块
+      // 更新else块的终止指令，跳转到合并块并传递值
+      let else_args = match else_value {
+        Some(v) => [v]
+        None => []
+      }
       let updated_else_block = BasicBlock::{
-        id: else_context.current_block.id,
-        params: else_context.current_block.params,
-        instructions: else_context.current_block.instructions,
-        terminator: Terminator::Jump(merge_block_id, []),
+        id: final_else_context.current_block.id,
+        params: final_else_context.current_block.params,
+        instructions: final_else_context.current_block.instructions,
+        terminator: Terminator::Jump(merge_block_id, else_args),
+      }
+
+      // 创建合并块的参数（用于接收then/else分支的值）
+      let merge_param = match (then_value, else_value) {
+        (Some(_), Some(_)) => {
+          let param_value = Value::{ id: new_value_id() }
+          [(param_value, Type::Int)] // 假设类型为Int，实际应该根据表达式类型推断
+        }
+        _ => []
+      }
+
+      // 更新合并块设置参数
+      let updated_merge_block = BasicBlock::{
+        id: merge_block_id,
+        params: merge_param,
+        instructions: [],
+        terminator: Terminator::Return(None), // 临时设置
       }
 
       // 更新块列表
-      let final_blocks = else_context.blocks.map(fn(b) {
+      let final_blocks = final_else_context.blocks.map(fn(b) {
         if b.id == updated_then_block.id {
           updated_then_block
         } else if b.id == updated_else_block.id {
           updated_else_block
+        } else if b.id == merge_block_id {
+          updated_merge_block
         } else {
           b
         }
       })
 
-      // 创建结果值（Phi节点）
-      let result_value = Value::{ id: new_value_id() }
+      // 获取合并后的结果值
+      let result_value = match merge_param {
+        [(param_val, _)] => Some(param_val)
+        _ => None
+      }
       
       // 更新上下文
       let final_context = Context::{
-        current_block: merge_block,
+        current_block: updated_merge_block,
         blocks: final_blocks,
-        block_map: else_context.block_map,
+        block_map: final_else_context.block_map,
         var_env: context2.var_env  // 保持变量环境
       }
       
-      ExprResult::{ value: Some(result_value), context: final_context }
+      ExprResult::{ value: result_value, context: final_context }
     }
     Var(name) => {
       // 变量引用，从环境中查找对应的Value
@@ -439,10 +664,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         Some(value) => 
           ExprResult::{ value: Some(value), context }
         None => {
-          
-          // 如果在环境中找不到，创建一个新的Value（这种情况不应该发生）
-          let value = Value::{ id: new_value_id() }
-          ExprResult::{ value: Some(value), context }
+          // 如果在环境中找不到变量，这是一个错误
+          @util.die("Undefined variable in SSA conversion: " + name.to_string())
         }
       }
     }
@@ -474,10 +697,22 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         }
       }
     }
-    CallDirect(label, _args) => {
+    CallDirect(label, args) => {
       // 直接函数调用
       // 先转换所有参数
-      let arg_values = [] // 实际应该转换参数
+      let mut current_context = context
+      let arg_values = []
+      
+      // 依次转换每个参数
+      for arg in args {
+        let arg_result = convert_expr(current_context, @closure.Expr::Var(arg))
+        current_context = arg_result.context
+        match arg_result.value {
+          Some(val) => arg_values.push(val)
+          None => () // 参数可能为Unit类型
+        }
+      }
+      
       let result_value = Value::{ id: new_value_id() }
       let instruction = Instruction::{
         result: result_value,
@@ -485,16 +720,16 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
 
       // 更新当前块的指令列表
-      context.current_block.instructions.push(instruction)
+      current_context.current_block.instructions.push(instruction)
       let updated_block = BasicBlock::{
-        id: context.current_block.id,
-        params: context.current_block.params,
-        instructions: context.current_block.instructions,
-        terminator: context.current_block.terminator,
+        id: current_context.current_block.id,
+        params: current_context.current_block.params,
+        instructions: current_context.current_block.instructions,
+        terminator: current_context.current_block.terminator,
       }
 
       // 更新上下文
-      let updated_blocks = context.blocks.map(fn(b) {
+      let updated_blocks = current_context.blocks.map(fn(b) {
         if b.id == updated_block.id {
           updated_block
         } else {
@@ -504,17 +739,13 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let updated_context = Context::{
         current_block: updated_block,
         blocks: updated_blocks,
-        block_map: context.block_map,
-        var_env: context.var_env, // 变量环境
+        block_map: current_context.block_map,
+        var_env: current_context.var_env, // 变量环境
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
     MakeClosure((name, _ty), c, e) => {
       // 闭包创建
-      // 先转换闭包体
-      let result = convert_expr(context, e)
-      let updated_context = result.context
-
       // 创建闭包值
       let closure_value = Value::{ id: new_value_id() }
 
@@ -529,46 +760,56 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
 
       // 更新当前块的指令列表
-      updated_context.current_block.instructions.push(instruction)
+      context.current_block.instructions.push(instruction)
       let updated_block = BasicBlock::{
-        id: updated_context.current_block.id,
-        params: updated_context.current_block.params,
-        instructions: updated_context.current_block.instructions,
-        terminator: updated_context.current_block.terminator,
+        id: context.current_block.id,
+        params: context.current_block.params,
+        instructions: context.current_block.instructions,
+        terminator: context.current_block.terminator,
       }
 
-      // 更新上下文
-      let updated_blocks = updated_context.blocks.map(fn(b) {
+      // 更新块列表
+      let updated_blocks = context.blocks.map(fn(b) {
         if b.id == updated_block.id {
           updated_block
         } else {
           b
         }
       })
-      let final_context = Context::{
+
+      // 将闭包值绑定到name变量
+      let updated_var_env = context.var_env.add(name, closure_value)
+
+      let intermediate_context = Context::{
         current_block: updated_block,
         blocks: updated_blocks,
-        block_map: updated_context.block_map,
-        var_env: updated_context.var_env, // 变量环境
+        block_map: context.block_map,
+        var_env: updated_var_env, // 包含新绑定的变量环境
       }
-      ExprResult::{ value: Some(closure_value), context: final_context }
+
+      // 转换闭包体表达式
+      let result = convert_expr(intermediate_context, e)
+      ExprResult::{ value: result.value, context: result.context }
     }
     CallClosure(n, xs) => {
       // 闭包调用
       // 先转换闭包引用
       let closure_result = convert_expr(context, @closure.Expr::Var(n))
-      let context1 = closure_result.context
+      let mut current_context = closure_result.context
 
-      // 转换所有参数
-      let arg_results = xs.map(fn(x) {
-        convert_expr(context1, @closure.Expr::Var(x))
-      })
+      // 转换所有参数，正确链式传递上下文
+      let arg_values = []
+      for x in xs {
+        let arg_result = convert_expr(current_context, @closure.Expr::Var(x))
+        current_context = arg_result.context
+        match arg_result.value {
+          Some(val) => arg_values.push(val)
+          None => () // 参数可能为Unit类型
+        }
+      }
 
       // 获取闭包值
       let closure_value = closure_result.value.unwrap()
-
-      // 获取参数值
-      let arg_values = arg_results.map(fn(result) { result.value.unwrap() })
 
       // 创建结果值和指令
       let result_value = Value::{ id: new_value_id() }
@@ -578,16 +819,16 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
 
       // 更新当前块的指令列表
-      context1.current_block.instructions.push(instruction)
+      current_context.current_block.instructions.push(instruction)
       let updated_block = BasicBlock::{
-        id: context1.current_block.id,
-        params: context1.current_block.params,
-        instructions: context1.current_block.instructions,
-        terminator: context1.current_block.terminator,
+        id: current_context.current_block.id,
+        params: current_context.current_block.params,
+        instructions: current_context.current_block.instructions,
+        terminator: current_context.current_block.terminator,
       }
 
       // 更新上下文
-      let updated_blocks = context1.blocks.map(fn(b) {
+      let updated_blocks = current_context.blocks.map(fn(b) {
         if b.id == updated_block.id {
           updated_block
         } else {
@@ -597,8 +838,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let updated_context = Context::{
         current_block: updated_block,
         blocks: updated_blocks,
-        block_map: context1.block_map,
-        var_env: context1.var_env, // 变量环境
+        block_map: current_context.block_map,
+        var_env: current_context.var_env, // 变量环境
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
