@@ -78,7 +78,6 @@ pub fn knf_max_counter(knf : Knf) -> Int {
       @cmp.maximum(knf_max_counter(cond), knf_max_counter(body))
     Assign(x, y) => @cmp.maximum(x.slot, y.slot)
     FieldAccess(x, _t, y) => @cmp.maximum(x.slot, y)
-    EnumConstructor(_, index, variant) => @cmp.maximum(index, variant.map(fn(x) { x.slot }).fold(init=0, fn(a, b) { @cmp.maximum(a, b) }))
     ArrayData(_) => 0
   }
 }
