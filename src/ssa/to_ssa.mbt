@@ -134,6 +134,7 @@ fn convert_main_function(body : @closure.Expr) -> Function {
   // 更新最后一个块的终止指令
   let final_context = result.context
   let return_value = result.value
+
   let updated_final_block = BasicBlock::{
     id: final_context.current_block.id,
     params: final_context.current_block.params,
@@ -166,18 +167,19 @@ priv struct Context {
   block_map : @immut/hashmap.HashMap[Int, BasicBlock]
   // 添加变量环境：Name到Value的映射
   var_env : @immut/hashmap.HashMap[@types.Name, Value]
-}
+} derive(Show)
 
 ///|
 /// 表达式转换结果
 priv struct ExprResult {
   value : Value?
   context : Context
-}
+} derive(Show)
 
 ///|
 /// 转换闭包IR表达式为SSA指令
 fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
+  // @util.logger("convert_expr: " + expr.to_string())
   match expr {
     Unit => {
       // Unit值，不产生实际值
@@ -706,21 +708,24 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
     }
     CallDirect(label, args) => {
+      // @util.logger("CallDirect: " + label.0)
       // 直接函数调用
       // 先转换所有参数
       let mut current_context = context
       let arg_values = []
-      
+
       // 依次转换每个参数
       for arg in args {
         let arg_result = convert_expr(current_context, @closure.Expr::Var(arg))
         current_context = arg_result.context
+        let _debug = arg_result.to_string()
+        // @util.logger("CallDirect arg: " + _debug)
         match arg_result.value {
           Some(val) => arg_values.push(val)
           None => () // 参数可能为Unit类型
         }
       }
-      
+
       let result_value = Value::{ id: new_value_id() }
       let instruction = Instruction::{
         result: result_value,
@@ -729,6 +734,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
 
       // 更新当前块的指令列表
       current_context.current_block.instructions.push(instruction)
+
       let updated_block = BasicBlock::{
         id: current_context.current_block.id,
         params: current_context.current_block.params,

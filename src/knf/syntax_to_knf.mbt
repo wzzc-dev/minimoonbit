@@ -596,7 +596,6 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     }
     While(e1, e2) =>
       // Process the array of syntax elements into a single KNF expression
-
       While(KnfEnv::to_knf(self, e1), KnfEnv::to_knf(self, e2))
     Assign(e1, e2) => {
       let (name1, e1_ty, knf1) = KnfEnv::get_knf(self, e1)

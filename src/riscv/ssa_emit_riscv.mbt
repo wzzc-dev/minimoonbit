@@ -5,11 +5,24 @@
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
   // println("emit riscv for ssa program: " + input.to_string())
+  
   // 遍历所有SSA函数
   for func in input.program.functions {
     let asm_func = emit_function(func)
     functions.push(asm_func)
   }
+  
+  // 添加全局数据段用于存储闭包自由变量（添加到最后）
+  let global_data_func = {
+    name: "_global_data",
+    asm_export: false,
+    body: [
+      Comment("# Global storage for closure free variables"),
+      Label("closure_free_var_storage"),
+      Comment(".quad 0  # 8字节的存储空间")
+    ]
+  }
+  functions.push(global_data_func)
   
   functions
 }
@@ -26,6 +39,25 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   asm_instructions.push(Sd(Ra, { base: Sp, offset: framesize - 8 })) // 保存返回地址
   asm_instructions.push(Sd(Fp, { base: Sp, offset: framesize - 16 })) // 保存帧指针
   asm_instructions.push(Addi(Fp, Sp, framesize)) // 设置帧指针
+  
+  // 设置函数参数到对应的寄存器
+  for i, param in func.params {
+    let param_reg = get_register_for_value(param.0)
+    let input_reg = match i {
+      0 => A0
+      1 => A1
+      2 => A2
+      3 => A3
+      4 => A4
+      5 => A5
+      6 => A6
+      7 => A7
+      _ => A0  // 超过8个参数的情况
+    }
+    if param_reg != input_reg {
+      asm_instructions.push(Mv(param_reg, input_reg))
+    }
+  }
   
   // 生成基本块代码
   for block in func.blocks {
@@ -237,6 +269,69 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
       let tuple_reg = get_register_for_value(tuple)
       result.push(Comment("TODO: implement tuple element access"))
       result.push(Mv(rd, tuple_reg)) // 临时实现
+    }
+    @ssa.Opcode::MakeClosure(var_name, func_name, free_vars) => {
+      // 闭包创建 - 简化实现：将函数指针和自由变量存储在栈上
+      let result_reg = get_register_for_value(instr.result)
+      result.push(Comment("MakeClosure: " + var_name + " -> " + func_name))
+      
+      // 简化实现：为了演示，我们假设只有一个自由变量
+      // 实际实现需要动态分配闭包对象
+      if free_vars.length() > 0 {
+        // 极简实现：使用全局变量存储自由变量
+        result.push(Comment("Store free variable globally (simplified)"))
+        
+        // 使用全局标签存储自由变量
+        result.push(La(T0, "closure_free_var_storage"))
+        result.push(Sd(A0, { base: T0, offset: 0 }))
+        
+        // 返回函数指针
+        result.push(La(result_reg, func_name))
+      } else {
+        // 没有自由变量，直接返回函数指针
+        result.push(La(result_reg, func_name))
+      }
+    }
+    @ssa.Opcode::CallClosure(closure, args) => {
+      // 闭包调用 - 从闭包对象中提取函数指针和自由变量
+      let closure_reg = get_register_for_value(closure)
+      
+      result.push(Comment("CallClosure: setting up function call"))
+      
+      // 闭包寄存器现在直接包含函数地址
+      
+      // 将显式参数放入参数寄存器，从a0开始
+      for i, arg in args {
+        let arg_reg = get_register_for_value(arg)
+        let param_reg = match i {
+          0 => A0  // 第一个显式参数 (y)
+          1 => A2  // 第二个显式参数
+          2 => A3
+          3 => A4
+          4 => A5
+          5 => A6
+          6 => A7
+          _ => A0  // 超过参数寄存器数量
+        }
+        if arg_reg != param_reg {
+          result.push(Mv(param_reg, arg_reg))
+        }
+      }
+      
+      // 从全局存储加载自由变量
+      result.push(Comment("Load free variable from global storage"))
+      result.push(La(T0, "closure_free_var_storage"))
+      result.push(Ld(A1, { base: T0, offset: 0 }))
+      
+      // 调用函数
+      result.push(Comment("CallClosure: calling function"))
+      result.push(Jalr(closure_reg))
+      
+      // 将返回值移动到结果寄存器
+      let result_reg = get_register_for_value(instr.result)
+      if result_reg != A0 {
+        result.push(Mv(result_reg, A0))
+      }
     }
     _ => {
       // 默认情况下，添加注释指令来标识未实现的指令
