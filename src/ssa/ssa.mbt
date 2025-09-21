@@ -57,7 +57,7 @@ pub(all) enum Opcode {
   Call(String, Array[Value])
 
   // 闭包操作
-  MakeClosure(String, String, Array[@types.Name]) // 创建闭包：变量名，函数名，自由变量列表
+  MakeClosure(String, Array[@types.Name]) // 创建闭包：变量名，函数名，自由变量列表
   CallClosure(Value, Array[Value]) // 调用闭包：闭包值，参数列表
 
   // 参数访问（用于基本块参数）

@@ -89,9 +89,9 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
     Opcode::ArrayGet(v1, v2) => ["ArrayGet", v1.to_json(), v2.to_json()]
     Opcode::ArrayPut(v1, v2, v3) =>
       ["ArrayPut", v1.to_json(), v2.to_json(), v3.to_json()]
-    Opcode::MakeClosure(var_name, func_name, free_vars) => {
+    Opcode::MakeClosure(func_name, free_vars) => {
       let free_vars_json = free_vars.map(fn(name) { name.to_string() })
-      ["MakeClosure", var_name, func_name, free_vars_json]
+      ["MakeClosure", func_name, free_vars_json]
     }
     Opcode::CallClosure(closure, args) => {
       let args_json = args.map(Value::to_json)
@@ -169,12 +169,12 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
         Value::from_json(v2),
         Value::from_json(v3),
       )
-    ["MakeClosure", String(var_name), String(func_name), Array(free_vars)] => {
+    ["MakeClosure", String(func_name), Array(free_vars)] => {
       let free_vars_res = []
       for fv in free_vars {
         free_vars_res.push(@types.Name::from_string(fv.as_string().unwrap()))
       }
-      Opcode::MakeClosure(var_name, func_name, free_vars_res)
+      Opcode::MakeClosure(func_name, free_vars_res)
     }
     ["CallClosure", closure, Array(args)] => {
       let args_res = []

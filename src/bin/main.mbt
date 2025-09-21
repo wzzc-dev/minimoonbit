@@ -168,7 +168,7 @@ fn CompileStatus::step(
             let real_asm = @riscv.emit(self.closure_ir.unwrap())
             self.riscv_asm = Some(real_asm)
           } else {
-            @util.logger("ssa ir: \n" + self.ssa.unwrap().to_json().stringify())
+            // @util.logger("ssa ir: \n" + self.ssa.unwrap().to_json().stringify())
             let real_asm = @riscv.ssa_emit_riscv(self.ssa.unwrap())
             self.riscv_asm = Some(real_asm)
           }

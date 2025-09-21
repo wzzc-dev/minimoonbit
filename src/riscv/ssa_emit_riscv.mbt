@@ -270,10 +270,10 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
       result.push(Comment("TODO: implement tuple element access"))
       result.push(Mv(rd, tuple_reg)) // 临时实现
     }
-    @ssa.Opcode::MakeClosure(var_name, func_name, free_vars) => {
+    @ssa.Opcode::MakeClosure(func_name, free_vars) => {
       // 闭包创建 - 简化实现：将函数指针和自由变量存储在栈上
       let result_reg = get_register_for_value(instr.result)
-      result.push(Comment("MakeClosure: " + var_name + " -> " + func_name))
+      result.push(Comment("MakeClosure: " + func_name))
       
       // 简化实现：为了演示，我们假设只有一个自由变量
       // 实际实现需要动态分配闭包对象
