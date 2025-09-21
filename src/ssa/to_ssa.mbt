@@ -133,13 +133,13 @@ fn convert_main_function(body : @closure.Expr) -> Function {
 
   // 更新最后一个块的终止指令
   let final_context = result.context
-  let return_value = result.value
+  // let return_value = result.value
 
   let updated_final_block = BasicBlock::{
     id: final_context.current_block.id,
     params: final_context.current_block.params,
     instructions: final_context.current_block.instructions,
-    terminator: Terminator::Return(return_value), // 主函数通常返回Unit，但可能有值
+    terminator: Terminator::Return(None), // 主函数通常返回Unit，但可能有值
   }
   
   // 更新块列表

@@ -6,7 +6,7 @@
 /// SSA解释器状态
 struct SsaInterpreter {
   // 值存储：Value ID -> 实际值
-  values : @immut/hashmap.HashMap[Int, SsaValue]
+  mut values : @immut/hashmap.HashMap[Int, SsaValue]
   // 函数定义映射
   mut functions : @immut/hashmap.HashMap[String, @ssa.Function]
 }
@@ -57,8 +57,7 @@ fn SsaInterpreter::eval_function(self : SsaInterpreter, func : @ssa.Function, ar
   // 设置函数参数
   for i, param_value_type in func.params {
     let arg_val = if i < args.length() { args[i] } else { SsaValue::UnitVal }
-    let _ = self.values.add(param_value_type.0.id, arg_val)
-    
+    self.values = self.values.add(param_value_type.0.id, arg_val)
   }
   
   // 执行第一个基本块
@@ -160,7 +159,7 @@ fn SsaInterpreter::eval_instruction(self : SsaInterpreter, instr : @ssa.Instruct
   }
   
   // 存储结果值
-  let _ = self.values.add(instr.result.id, result_value)
+  self.values = self.values.add(instr.result.id, result_value)
   Ok(())
 }
 

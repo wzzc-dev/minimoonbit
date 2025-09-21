@@ -362,8 +362,6 @@ fn emit_terminator(terminator : @ssa.Terminator) -> Array[RvAsm] {
           result.push(Li(A0, "0"))
         }
       }
-      // 跳转到函数尾声
-      result.push(Jalr(Zero))
     }
     @ssa.Terminator::Jump(target, args) => {
       // 无条件跳转
