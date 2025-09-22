@@ -12,14 +12,8 @@ pub fn knf_program_to_closure(
   let static_arrays : Array[StaticArrayData] = []
   extern_env.each(fn(name, ty) {
     let mut low_type : LowType = Unit
-    let args_low_ty = []
     match ty {
-      Fun(args_ty, ty) => {
-        low_type = ty_to_low_type(ty, false)
-        for ty in args_ty {
-          args_low_ty.push(ty_to_low_type(ty, false))
-        }
-      }
+      Fun(_, ty) => low_type = ty_to_low_type(ty)
       _ => @util.die("LetRec: " + ty.to_string())
     }
     fundefs.push({
@@ -32,23 +26,22 @@ pub fn knf_program_to_closure(
       body: Unit,
     })
   })
-  let body : Expr = knf_to_closure(fundefs, static_arrays, prog)
-  // println("==========================")
-  // println("closure ir:")
-  // for i in fundefs {
-  //   if not(extern_env.contains(i.old_name.to_string())) {
-  //     println("fundef: " + i.to_string())
-  //   }
-  // }
-  // println("body: " + body.to_string())
-  // println("==========================")
-  // println("static_arrays: " + static_arrays.to_string())
+  let body : Expr = knf_to_closure(
+    fundefs,
+    LocalEnv::new(),
+    static_arrays,
+    prog,
+  )
+  // println(
+  //   "closure ir: " + { fundefs, static_arrays, body }.to_json().stringify(),
+  // )
   { fundefs, static_arrays, body }
 }
 
 ///|
 fn knf_to_closure(
-  env : Array[FuncDef],
+  funcdefs : Array[FuncDef],
+  env : LocalEnv,
   static_arrays : Array[StaticArrayData],
   e : @knf.Knf,
 ) -> Expr {
@@ -74,132 +67,119 @@ fn knf_to_closure(
       IfEq(
         a,
         b,
-        knf_to_closure(env, static_arrays, ka),
-        knf_to_closure(env, static_arrays, kb),
+        knf_to_closure(funcdefs, env, static_arrays, ka),
+        knf_to_closure(funcdefs, env, static_arrays, kb),
       )
     IfLe(a, b, ka, kb) =>
       IfLe(
         a,
         b,
-        knf_to_closure(env, static_arrays, ka),
-        knf_to_closure(env, static_arrays, kb),
+        knf_to_closure(funcdefs, env, static_arrays, ka),
+        knf_to_closure(funcdefs, env, static_arrays, kb),
       )
     IfLt(a, b, ka, kb) =>
       IfLt(
         a,
         b,
-        knf_to_closure(env, static_arrays, ka),
-        knf_to_closure(env, static_arrays, kb),
+        knf_to_closure(funcdefs, env, static_arrays, ka),
+        knf_to_closure(funcdefs, env, static_arrays, kb),
       )
-    Let((x, ty), e, cont) =>
-      Let(
-        (x, ty_to_low_type(ty, false)),
-        knf_to_closure(env, static_arrays, e),
-        knf_to_closure(env, static_arrays, cont),
-      )
+    Let((x, ty), e, cont) => {
+      let body = knf_to_closure(funcdefs, env, static_arrays, e)
+      let ty = match ty {
+        Fun(_, ty) => gen_body_ret_type(ty, funcdefs, body)
+        _ => ty_to_low_type(ty)
+      }
+      let env = env.add(x, ty)
+      Let((x, ty), body, knf_to_closure(funcdefs, env, static_arrays, cont))
+    }
     LetRec({ name, ty, args, body }, cont) => {
       let free_vars = fv(body).difference(
-        @hashset.from_array(env.map(fn(def) { new_fv(def.old_name, Unit) })),
+        @hashset.from_array(
+          funcdefs.map(fn(def) { new_fv(def.old_name, Unit) }),
+        ),
       )
       for arg in args {
         free_vars.remove(new_fv(arg.0, Unit))
       }
       free_vars.remove(new_fv(name, Unit))
       let is_closure = not(free_vars.is_empty())
-      let make_def = fn(body : Expr) -> FuncDef {
-        {
-          name: name.to_string(),
-          old_name: name,
-          is_closure,
-          ty: ty_to_low_type(ty, is_closure),
-          args: args.map(name_ty => (
-            name_ty.0,
-            ty_to_low_type(name_ty.1, false),
-          )),
-          formal_free_vars: fv_to_array(free_vars),
-          body,
-        }
-      }
-      env.push(make_def(Unit))
-
+      let body = knf_to_closure(funcdefs, env, static_arrays, body)
       // 处理函数体
-      let def = make_def(knf_to_closure(env, static_arrays, body))
-      let index = env.search_by(fn(def) { def.old_name == name }).unwrap()
-      let _ = env.remove(index)
-      env.push(def)
-      let closure : Closure = {
+      let def = {
         name: name.to_string(),
-        actual_free_vars: fv_to_array(free_vars).map(fv => fv.0),
+        old_name: name,
+        is_closure,
+        ty: gen_func_type(ty, is_closure, funcdefs, body),
+        args: args.map(name_ty => (name_ty.0, ty_to_low_type(name_ty.1))),
+        formal_free_vars: fv_to_array(free_vars),
+        body,
       }
-      MakeClosure(
-        (name, ty_to_low_type(ty, is_closure)),
-        closure,
-        knf_to_closure(env, static_arrays, cont),
-      )
+      funcdefs.push(def)
+      match is_closure {
+        true => {
+          let closure : Closure = {
+            name: name.to_string(),
+            actual_free_vars: fv_to_array(free_vars).map(fv => fv.0),
+          }
+          MakeClosure(
+            (name, gen_func_type(ty, is_closure, funcdefs, body)),
+            closure,
+            knf_to_closure(funcdefs, env, static_arrays, cont),
+          )
+        }
+        false => knf_to_closure(funcdefs, env, static_arrays, cont)
+      }
     }
     Apply(name, arr_name) => {
-      // 参数是函数类型
-      let is_capture = match
-        env.filter(fn(def) {
-          // println("def: " + def.to_string())
-          match def.args.search_by(fn(var_ty) { var_ty.0 == name }) {
-            Some(_) => true
-            None => false
-          }
-        }) {
-        [] => false
-        _ => true
-      }
       // 检查是否是函数定义中的函数
-      let closure = match env.search_by(fn(def) { def.old_name == name }) {
-        None => true
+      let is_closure_func = match
+        funcdefs.search_by(fn(def) { def.old_name == name }) {
+        None => false // 外部函数默认不是闭包
         Some(index) =>
-          match env.get(index) {
+          match funcdefs.get(index) {
             Some(def) => def.is_closure
             None => false
           }
       }
-      // 检查是否是闭包调用
-      // println("closure: " + closure.to_string())
-      // println("is_capture: " + is_capture.to_string())
-      match closure || is_capture {
+      let is_closure_var = match env.get(name) {
+        Some(ty) =>
+          match ty {
+            ClosureFn(_) => true
+            DirectFn(_) => false
+            _ => false
+          }
+        None => false
+      }
+      match is_closure_func || is_closure_var {
         true => CallClosure(name, arr_name)
         false => CallDirect(name.to_string(), arr_name)
       }
     }
-    Var(n) =>
-      match env.search_by(fn(def) { def.old_name == n }) {
-        Some(index) => {
-          let def = env.get(index).unwrap()
-          let closure : Closure = {
-            name: def.name,
-            actual_free_vars: def.formal_free_vars.map(fv => fv.0),
-          }
-          MakeClosure((def.old_name, def.ty), closure, Var(n))
-        }
-        None => Var(n) // 如果在环境中找不到，直接返回变量引用
-      }
-    // Var(n) => Var(n)
+    Var(n) => Var(n)
     Tuple(arr_name) => MakeTuple(arr_name)
     LetTuple(arr_name_ty, name, cont) => {
       let arr_name = arr_name_ty.map(name_ty => (
         name_ty.0,
-        ty_to_low_type(name_ty.1, false),
+        ty_to_low_type(name_ty.1),
       ))
-      LetTuple(arr_name, name, knf_to_closure(env, static_arrays, cont))
+      LetTuple(
+        arr_name,
+        name,
+        knf_to_closure(funcdefs, env, static_arrays, cont),
+      )
     }
     Put(name, name1, name2) => ArrayPut(name, name1, name2)
     Get(name, name1) => ArrayGet(name, name1)
     ExternalArray(name) => ExternalArray(name)
-    ExternalFunctionApplication(name, arr_name) =>
-      CallDirect(name, arr_name)
+    ExternalFunctionApplication(name, arr_name) => CallDirect(name, arr_name)
     While(cond, body) =>
       While(
-        knf_to_closure(env, static_arrays, cond),
-        knf_to_closure(env, static_arrays, body),
+        knf_to_closure(funcdefs, env, static_arrays, cond),
+        knf_to_closure(funcdefs, env, static_arrays, body),
       )
     Assign(x, y) => Assign(x, y)
-    FieldAccess(x, ty, y) => TupleGet(x, ty_to_low_type(ty, false), y)
+    FieldAccess(x, ty, y) => TupleGet(x, ty_to_low_type(ty), y)
     ArrayData(label, datas) => {
       let name = Label(label)
       fn gen_static_array_data(datas : Array[@knf.Knf]) -> Array[LowTypeValue] {
@@ -208,7 +188,8 @@ fn knf_to_closure(
           match data {
             Int(i) => result.push(IntValue(i))
             Double(d) => result.push(DoubleValue(d))
-            ArrayData(_, arr) => result.push(PtrValue(gen_static_array_data(arr)))
+            ArrayData(_, arr) =>
+              result.push(PtrValue(gen_static_array_data(arr)))
             _ => @util.die("gen_static_array_data: " + data.to_string())
           }
         }
@@ -231,52 +212,6 @@ fn fv_to_array(
 }
 
 ///|
-fn ty_to_low_type(ty : Type, is_closure : Bool) -> LowType {
-  match ty {
-    None => Unit
-    Unit => Unit
-    Bool => Bool
-    Int => Int
-    Double => Double
-    Fun(arr_ty, ty) => {
-      let arr_low_ty = arr_ty.map(ty => ty_to_low_type(ty, is_closure))
-      match is_closure {
-        true => ClosureFn(arr_low_ty, ty_to_low_type(ty, is_closure))
-        false => DirectFn(arr_low_ty, ty_to_low_type(ty, is_closure))
-      }
-    }
-    Tuple(arr_ty) => Tuple(arr_ty.map(ty => ty_to_low_type(ty, is_closure)))
-    Array(ty) => Array(ty_to_low_type(ty, is_closure))
-    Var(ty) =>
-      match ty.val {
-        Some(UserDefineType(_, fields)) => {
-          let fields_ty = fields.val.map(field => ty_to_low_type(
-            field.1,
-            is_closure,
-          ))
-          Tuple(fields_ty)
-        }
-        Some(ty) =>
-          // println("ty: " + ty.to_string())
-          // println("ty_to_low_type(ty, is_closure): " + ty_to_low_type(ty, is_closure).to_string())
-          ty_to_low_type(ty, is_closure)
-        _ => @util.die("ty_to_low_type: Var" + ty.to_string())
-      }
-    Ptr => Ptr
-    Enum(_name, _) | Struct(_name, _) =>
-      @util.die("ty_to_low_type: Enum or Struct" + ty.to_string())
-    UserDefineType(_, fields) => {
-      let fields_ty = fields.val.map(field => ty_to_low_type(
-        field.1,
-        is_closure,
-      ))
-      Tuple(fields_ty)
-    }
-    ArrayData(_) => @util.die("ty_to_low_type: ArrayData" + ty.to_string())
-  }
-}
-
-///|
 pub(all) struct FreeVarWithType {
   name : @types.Name
   ty : LowType
@@ -287,6 +222,7 @@ impl Hash for FreeVarWithType with hash_combine(_self, _state) {
   fn _hash_combine(self : FreeVarWithType, state : Hasher) -> Unit {
     self.name.hash_combine(state)
   }
+
 
 }
 

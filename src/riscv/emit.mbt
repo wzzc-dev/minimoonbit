@@ -391,7 +391,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // 计算 e2,使用更新后的环境
       instrs.append(compile_expr(e2, env))
     }
-    Var(name) => {
+    Var(name) =>
       // @util.logger("Var: " + name.to_string())
       // @util.logger("Env: " + env.vars.to_string())
       // 从环境中查找变量的偏移
@@ -401,10 +401,8 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
             Double => instrs.push(Fld(freg_ret, { base: Fp, offset }))
             _ => instrs.push(Ld(reg_ret, { base: Fp, offset }))
           }
-        
         None => instrs.push(La(reg_ret, name.to_string()))
       }
-    }
     MakeClosure((name, ty), closure, e) =>
       emit_make_closure(name, ty, closure, e, instrs, env)
     CallClosure(f, args) => emit_call_closure(f, args, instrs, env)
@@ -433,7 +431,40 @@ fn emit_call_direct(
   env : Env,
 ) -> Unit {
   emit_args(args, env, instrs)
-  instrs.push(Call(Label(label.0)))
+  match env.vars.get(label.0) {
+    Some((offset, ty)) => {
+      match ty {
+        ClosureFn(_) => {
+          instrs.push(Ld(S11, { base: Fp, offset }))
+          instrs.push(Ld(T1, { base: S11, offset: 0 }))
+          instrs.push(Jalr(T1))
+        }
+        DirectFn(_) => {
+          instrs.push(Ld(T1, { base: Fp, offset }))
+          instrs.push(Jalr(T1))
+        }
+        _ => {
+          // instrs.push(Ld(S11, { base: Fp, offset }))
+          // instrs.push(Ld(T1, { base: S11, offset: 0 }))
+          // instrs.push(Jalr(T1))
+          instrs.push(Ld(T1, { base: Fp, offset }))
+          instrs.push(Jalr(T1))
+        }
+      }
+    }
+    None => instrs.push(Call(Label(label.0)))
+  }
+
+
+  // match env.vars.get(label.0) {
+  //   Some((offset, _)) => {
+  //     instrs.push(Ld(S11, { base: Fp, offset }))
+  //     instrs.push(Ld(T1, { base: S11, offset: 0 }))
+  //     instrs.push(Jalr(T1))
+  //   }
+  //   None => instrs.push(Call(Label(label.0)))
+  // }
+  
 }
 
 ///|
@@ -563,13 +594,7 @@ fn emit_call_closure(
   emit_args(args, env, instrs)
   match env.vars.get(f.to_string()) {
     Some((offset, _)) => instrs.push(Ld(S11, { base: Fp, offset }))
-    None =>
-      match
-        env.fundefs.search_by(fn(fundef) { fundef.name.0 == f.to_string() }) {
-        Some(_) => ()
-        None =>
-          @util.logger("Warning: CallClosure: " + f.to_string() + " not found")
-      }
+    None => ()
   }
   instrs.push(Ld(T1, { base: S11, offset: 0 }))
   instrs.push(Jalr(T1))

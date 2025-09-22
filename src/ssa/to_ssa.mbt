@@ -5,7 +5,7 @@
 ///|
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
-  // @util.logger("closure ir: " + input.to_json().stringify())
+  @util.logger("closure ir: " + input.to_json().stringify())
   // 初始化SSA程序
   let functions = []
 
@@ -804,50 +804,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         var_env: updated_var_env, // 包含新绑定的变量环境
       }
 
-      // 检查表达式e是否是冗余的嵌套MakeClosure
-      match e {
-        @closure.Expr::Var(var_name) => {
-          if var_name == name {
-            // 如果e只是对刚创建的闭包的引用，直接返回闭包值
-            ExprResult::{ value: Some(closure_value), context: intermediate_context }
-          } else {
-            // 转换闭包体表达式
-            let result = convert_expr(intermediate_context, e)
-            ExprResult::{ value: result.value, context: result.context }
-          }
-        }
-        @closure.Expr::MakeClosure((inner_name, _), inner_c, inner_e) => {
-          // 检查是否是相同的闭包创建
-          if inner_name == name && inner_c.name.0 == c.name.0 {
-            match inner_e {
-              @closure.Expr::Var(var_name) => {
-                if var_name == name {
-                  // 这是冗余的嵌套MakeClosure，直接返回外层闭包
-                  ExprResult::{ value: Some(closure_value), context: intermediate_context }
-                } else {
-                  // 转换内层闭包体表达式
-                  let result = convert_expr(intermediate_context, inner_e)
-                  ExprResult::{ value: result.value, context: result.context }
-                }  
-              }
-              _ => {
-                // 转换内层闭包体表达式
-                let result = convert_expr(intermediate_context, inner_e)
-                ExprResult::{ value: result.value, context: result.context }
-              }
-            }
-          } else {
-            // 转换闭包体表达式
-            let result = convert_expr(intermediate_context, e)
-            ExprResult::{ value: result.value, context: result.context }
-          }
-        }
-        _ => {
-          // 转换闭包体表达式
-          let result = convert_expr(intermediate_context, e)
-          ExprResult::{ value: result.value, context: result.context }
-        }
-      }
+      let result = convert_expr(intermediate_context, e)
+      ExprResult::{ value: result.value, context: result.context }
     }
     CallClosure(n, xs) => {
       // 闭包调用
