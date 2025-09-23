@@ -6,7 +6,7 @@ pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type],
 ) -> Program {
-  // println("knf ir: " + prog.to_json().stringify())
+  println("knf ir: " + prog.to_json().stringify())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
   let static_arrays : Array[StaticArrayData] = []
@@ -86,35 +86,46 @@ fn knf_to_closure(
       )
     Let((x, ty), e, cont) => {
       let body = knf_to_closure(funcdefs, env, static_arrays, e)
+      // @util.logger("name: " + (x, ty).to_string())
       let ty = match ty {
-        Fun(_, ty) => gen_body_ret_type(ty, funcdefs, body)
+        Fun(args_ty, ret_ty) => ClosureFn(args_ty.map(ty_to_low_type), ty_to_low_type(ret_ty))
+        //  Fun(_, ty) => gen_body_ret_type(ty, funcdefs, body)
         _ => ty_to_low_type(ty)
       }
       let env = env.add(x, ty)
       Let((x, ty), body, knf_to_closure(funcdefs, env, static_arrays, cont))
     }
     LetRec({ name, ty, args, body }, cont) => {
-      let free_vars = fv(body).difference(
+      let free_vars = fv(env, body).difference(
         @hashset.from_array(
-          funcdefs.map(fn(def) { new_fv(def.old_name, Unit) }),
+          funcdefs.map(fn(def) { new_fv(def.old_name, def.ty) }),
         ),
       )
+      let mut env = env
       for arg in args {
         free_vars.remove(new_fv(arg.0, Unit))
+        env = env.add(arg.0, ty_to_low_type(arg.1))
       }
       free_vars.remove(new_fv(name, Unit))
       let is_closure = not(free_vars.is_empty())
-      let body = knf_to_closure(funcdefs, env, static_arrays, body)
+      // @util.logger("letrec: " + name.to_string() + " env: " + env.to_string())
       // 处理函数体
-      let def = {
-        name: name.to_string(),
-        old_name: name,
-        is_closure,
-        ty: gen_func_type(ty, is_closure, funcdefs, body),
-        args: args.map(name_ty => (name_ty.0, ty_to_low_type(name_ty.1))),
-        formal_free_vars: fv_to_array(free_vars),
-        body,
+      let make_def = fn(body : Expr) -> FuncDef {
+        {
+          name: name.to_string(),
+          old_name: name,
+          is_closure,
+          ty: gen_func_type(ty, is_closure, funcdefs, body),
+          args: args.map(name_ty => (name_ty.0, arr_ty_to_low_type(name_ty.1))),
+          formal_free_vars: fv_to_array(free_vars),
+          body,
+        }
       }
+      funcdefs.push(make_def(Unit))
+      let body = knf_to_closure(funcdefs, env, static_arrays, body)
+      let def = make_def(body)
+      let index = funcdefs.search_by(fn(def) { def.old_name == name }).unwrap()
+      let _ = funcdefs.remove(index)
       funcdefs.push(def)
       match is_closure {
         true => {
@@ -132,6 +143,11 @@ fn knf_to_closure(
       }
     }
     Apply(name, arr_name) => {
+      // @util.logger("apply: " + name.to_string())
+      // @util.logger("apply: " + arr_name.to_string())
+      // @util.logger("env: " + env.to_string())
+      // @util.logger("funcdefs: " + funcdefs.to_string())
+
       // 检查是否是函数定义中的函数
       let is_closure_func = match
         funcdefs.search_by(fn(def) { def.old_name == name }) {
@@ -143,12 +159,7 @@ fn knf_to_closure(
           }
       }
       let is_closure_var = match env.get(name) {
-        Some(ty) =>
-          match ty {
-            ClosureFn(_) => true
-            DirectFn(_) => false
-            _ => false
-          }
+        Some(_) => true
         None => false
       }
       match is_closure_func || is_closure_var {
@@ -252,7 +263,7 @@ fn new_fv(name : @types.Name, ty : LowType) -> FreeVarWithType {
 }
 
 ///|
-fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
+fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
   match e {
     Unit => @hashset.new()
     Int(_) => @hashset.new()
@@ -272,41 +283,47 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
     FMod(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
     IfEq(a, b, ka, kb) =>
       @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
-      .union(fv(ka))
-      .union(fv(kb))
+      .union(fv(env, ka))
+      .union(fv(env, kb))
     IfLe(a, b, ka, kb) =>
       @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
-      .union(fv(ka))
-      .union(fv(kb))
+      .union(fv(env, ka))
+      .union(fv(env, kb))
     IfLt(a, b, ka, kb) =>
       @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
-      .union(fv(ka))
-      .union(fv(kb))
+      .union(fv(env, ka))
+      .union(fv(env, kb))
     Let((x, _), e, cont) => {
-      let r = fv(cont)
+      let r = fv(env, cont)
       r.remove(new_fv(x, Unit))
-      let fve = fv(e)
+      let fve = fv(env, e)
       // fve.remove(new_fv(x, Unit))
       fve.union(r)
     }
     Var(x) => @hashset.of([new_fv(x, Unit)])
     LetRec({ name, ty: _, args, body }, cont) => {
-      let x = fv(body)
+      let x = fv(env, body)
       for i in args {
         x.remove(new_fv(i.0, Unit))
       }
-      let result = fv(cont).union(x)
+      let result = fv(env, cont).union(x)
       result.remove(new_fv(name, Unit))
       result
     }
-    Apply(f, a) =>
-      @hashset.of([new_fv(f, DirectFn([], Unit))]).union(
+    Apply(f, a) => {
+      let ty = match env.get(f) {
+        Some(ty) => ty
+        None => Unit
+      }
+      @hashset.of([new_fv(f, ty)]).union(
         @hashset.from_array(a.map(name => new_fv(name, Unit))),
       )
+    }
+
     Tuple(arr_name) =>
       @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
     LetTuple(arr_name_ty, name, cont) => {
-      let result = fv(cont)
+      let result = fv(env, cont)
       for _, name_ty in arr_name_ty {
         result.remove(new_fv(name_ty.0, Ptr))
       }
@@ -318,7 +335,7 @@ fn fv(e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
     ExternalArray(_) => @hashset.new()
     ExternalFunctionApplication(_, arr_name) =>
       @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
-    While(_, body) => fv(body)
+    While(_, body) => fv(env, body)
     Assign(_x, _y) => @hashset.new()
     FieldAccess(_, _, _) => @hashset.new()
     ArrayData(_) => @hashset.new()

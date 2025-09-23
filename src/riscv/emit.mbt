@@ -1,6 +1,6 @@
 ///|
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  // println("emit: " + input.to_json().stringify())
+  println("emit: " + input.to_json().stringify())
   let functions = []
   for static_array in input.static_arrays {
     fn get_elems(name : String, arr : Array[@closure.LowTypeValue]) {
@@ -444,11 +444,13 @@ fn emit_call_direct(
           instrs.push(Jalr(T1))
         }
         _ => {
+          @util.die("emit_call_direct: unknown " + label.0 + " type: " + ty.to_string())
           // instrs.push(Ld(S11, { base: Fp, offset }))
           // instrs.push(Ld(T1, { base: S11, offset: 0 }))
           // instrs.push(Jalr(T1))
-          instrs.push(Ld(T1, { base: Fp, offset }))
-          instrs.push(Jalr(T1))
+
+          // instrs.push(Ld(S11, { base: Fp, offset }))
+          // instrs.push(Jalr(S11))
         }
       }
     }
@@ -623,7 +625,7 @@ fn emit_array_get(
   match get_array_element_type(array, env) {
     Double => instrs.push(Fld(freg_ret, { base: T0, offset: 0 }))
     Int => instrs.push(Lw(reg_ret, { base: T0, offset: 0 }))
-    DirectFn(_, _) | ClosureFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Mv
+    // DirectFn(_, _) | ClosureFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Mv
     _ => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Ld
   }
   // @util.logger("emit_array_get end")

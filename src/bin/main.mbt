@@ -122,11 +122,14 @@ fn CompileStatus::step(
       }
     }
     Knf => {
+      // @util.logger("typechecked ast: " + self.typechecked.unwrap().to_json().stringify())
       let pre = @knf.KnfEnv::syntax_preprocess(
         self.knf_env,
         self.typechecked.unwrap(),
       )
+      // @util.logger("preprocessed ast: " + pre.to_json().stringify())
       let knf = try? self.knf_env.to_knf(pre)
+      // @util.logger("knf ir: " + knf.unwrap().to_json().stringify())
       match knf {
         Ok(_) => self.knf = Some(knf.unwrap())
         Err(e) => @util.die(e.to_json().to_string())

@@ -263,9 +263,10 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       // }
       // println("infer var: " + x)
       match ctx.inner().get(x) {
-        Some(t) =>
+        Some(t) => {
           // println("infer: " + x + " is " + t.to_string())
           t.repr()
+        }
         None =>
           match extenv.get(x) {
             Some(t) => t.repr()
@@ -537,6 +538,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       for p in params {
         env_with_f = env_with_f.add(p.0, p.1)
       }
+      // @util.logger("env_with_f:" + env_with_f.to_json().stringify())
       let body_ty = infer(env_with_f, body)
       unify(t, Fun(params_ty, body_ty))
       infer(env_with_f, rest)
@@ -840,6 +842,7 @@ pub let extenv : Map[String, @types.Type] = {
 
 ///|
 pub fn typing(e : @types.Syntax) -> @types.Syntax raise TyErr {
+  // @util.logger("before typing: " + e.to_json().stringify())
   unify(Unit, infer(@immut/sorted_map.new(), e))
   // println("type check ok")
   // println("extenv: " + extenv.to_string())
