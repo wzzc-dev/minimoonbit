@@ -576,23 +576,28 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         }
       }
 
-      match e1 {
-        Var(_) =>
-          match e2 {
-            Var(_) => genArray(name1, name2)
-            _ => Let((name2, e2_ty), knf2, genArray(name1, name2))
-          }
-        _ =>
-          match e2 {
-            Var(_) => Let((name1, e1_ty), knf1, genArray(name1, name2))
-            _ =>
-              Let(
-                (name1, e1_ty),
-                knf1,
-                Let((name2, e2_ty), knf2, genArray(name1, name2)),
-              )
-          }
-      }
+      // match e1 {
+      //   Var(_) =>
+      //     match e2 {
+      //       Var(_) => genArray(name1, name2)
+      //       _ => Let((name2, e2_ty), knf2, genArray(name1, name2))
+      //     }
+      //   _ =>
+      //     match e2 {
+      //       Var(_) => Let((name1, e1_ty), knf1, genArray(name1, name2))
+      //       _ =>
+      //         Let(
+      //           (name1, e1_ty),
+      //           knf1,
+      //           Let((name2, e2_ty), knf2, genArray(name1, name2)),
+      //         )
+      //     }
+      // }
+      Let(
+        (name1, e1_ty),
+        knf1,
+        Let((name2, e2_ty), knf2, genArray(name1, name2)),
+      )
     }
     While(e1, e2) =>
       // Process the array of syntax elements into a single KNF expression

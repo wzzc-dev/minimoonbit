@@ -1,6 +1,6 @@
 ///|
 pub fn emit(input : @closure.Program) -> Array[AssemblyFunction] {
-  println("emit: " + input.to_json().stringify())
+  // println("closure ir: " + input.to_json().stringify())
   let functions = []
   for static_array in input.static_arrays {
     fn get_elems(name : String, arr : Array[@closure.LowTypeValue]) {

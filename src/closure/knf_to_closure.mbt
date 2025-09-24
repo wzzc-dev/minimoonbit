@@ -6,7 +6,7 @@ pub fn knf_program_to_closure(
   prog : @knf.Knf,
   extern_env : Map[String, Type],
 ) -> Program {
-  println("knf ir: " + prog.to_json().stringify())
+  // println("knf ir: " + prog.to_json().stringify())
   // println("extern_env: " + extern_env.to_string())
   let fundefs : Array[FuncDef] = []
   let static_arrays : Array[StaticArrayData] = []
@@ -88,11 +88,29 @@ fn knf_to_closure(
       let body = knf_to_closure(funcdefs, env, static_arrays, e)
       // @util.logger("name: " + (x, ty).to_string())
       let ty = match ty {
-        Fun(args_ty, ret_ty) => ClosureFn(args_ty.map(ty_to_low_type), ty_to_low_type(ret_ty))
+        Fun(args_ty, ret_ty) =>
+          ClosureFn(args_ty.map(ty_to_low_type), ty_to_low_type(ret_ty))
         //  Fun(_, ty) => gen_body_ret_type(ty, funcdefs, body)
         _ => ty_to_low_type(ty)
       }
       let env = env.add(x, ty)
+      let body = match body {
+        Var(n) => match funcdefs.search_by(fn(def) { def.old_name == n }) {
+          Some(index) => {
+            let def = funcdefs.get(index).unwrap()
+            MakeClosure(
+              (def.old_name, gen_cls_func_type(def.ty)),
+              {
+                name: def.old_name.to_string(),
+                actual_free_vars: def.formal_free_vars.map(fv => fv.0),
+              },
+              Var(n),
+            )
+          }
+          None => body
+        }
+        _ => body
+      }
       Let((x, ty), body, knf_to_closure(funcdefs, env, static_arrays, cont))
     }
     LetRec({ name, ty, args, body }, cont) => {
@@ -115,18 +133,35 @@ fn knf_to_closure(
           name: name.to_string(),
           old_name: name,
           is_closure,
-          ty: gen_func_type(ty, is_closure, funcdefs, body),
+          ty: gen_func_type(ty, is_closure, funcdefs, env, body),
           args: args.map(name_ty => (name_ty.0, arr_ty_to_low_type(name_ty.1))),
           formal_free_vars: fv_to_array(free_vars),
           body,
         }
       }
       funcdefs.push(make_def(Unit))
-      let body = knf_to_closure(funcdefs, env, static_arrays, body)
+      let body = match body {
+        Var(n) => match funcdefs.search_by(fn(def) { def.old_name == n }) {
+          Some(index) => {
+            let def = funcdefs.get(index).unwrap()
+            MakeClosure(
+              (def.old_name, gen_cls_func_type(def.ty)),
+              {
+                name: def.old_name.to_string(),
+                actual_free_vars: def.formal_free_vars.map(fv => fv.0),
+              },
+              Var(n),
+            )
+          }
+          None => Var(n)
+        }
+        _ => knf_to_closure(funcdefs, env, static_arrays, body)
+      }
       let def = make_def(body)
       let index = funcdefs.search_by(fn(def) { def.old_name == name }).unwrap()
       let _ = funcdefs.remove(index)
       funcdefs.push(def)
+
       match is_closure {
         true => {
           let closure : Closure = {
@@ -134,15 +169,16 @@ fn knf_to_closure(
             actual_free_vars: fv_to_array(free_vars).map(fv => fv.0),
           }
           MakeClosure(
-            (name, gen_func_type(ty, is_closure, funcdefs, body)),
+            (name, gen_func_type(ty, is_closure, funcdefs,env, body)),
             closure,
             knf_to_closure(funcdefs, env, static_arrays, cont),
           )
         }
-        false => knf_to_closure(funcdefs, env, static_arrays, cont)
+        false =>  knf_to_closure(funcdefs, env, static_arrays, cont)
+        
       }
     }
-    Apply(name, arr_name) => {
+    Apply(name, args_name) => {
       // @util.logger("apply: " + name.to_string())
       // @util.logger("apply: " + arr_name.to_string())
       // @util.logger("env: " + env.to_string())
@@ -162,10 +198,27 @@ fn knf_to_closure(
         Some(_) => true
         None => false
       }
-      match is_closure_func || is_closure_var {
-        true => CallClosure(name, arr_name)
-        false => CallDirect(name.to_string(), arr_name)
+      let result = match is_closure_func || is_closure_var {
+        true => CallClosure(name, args_name)
+        false => CallDirect(name.to_string(), args_name)
       }
+      args_name.rev_fold(init=result, fn(acc, arg) {
+        let func = funcdefs.search_by(fn(def) { def.old_name == arg })
+        match func {
+          Some(index) => {
+            let def = funcdefs.get(index).unwrap()
+            MakeClosure(
+              (arg, def.ty),
+              {
+                name: arg.to_string(),
+                actual_free_vars: def.formal_free_vars.map(fv => fv.0),
+              },
+              acc,
+            )
+          }
+          None => acc
+        }
+      })
     }
     Var(n) => Var(n)
     Tuple(arr_name) => MakeTuple(arr_name)
@@ -319,7 +372,6 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
         @hashset.from_array(a.map(name => new_fv(name, Unit))),
       )
     }
-
     Tuple(arr_name) =>
       @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
     LetTuple(arr_name_ty, name, cont) => {
