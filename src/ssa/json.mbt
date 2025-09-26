@@ -14,14 +14,14 @@ pub fn Ssa::from_json(json : Json) -> Ssa raise {
 ///|
 /// Value结构体的JSON序列化
 pub fn Value::to_json(self : Value) -> Json {
-  { "id": self.id }
+  { "value_id": self.id }
 }
 
 ///|
 /// Value结构体的JSON反序列化
 pub fn Value::from_json(json : Json) -> Value raise {
   match json {
-    { "id": id, .. } => Value::{ id: id.as_number().unwrap().to_int() }
+    { "value_id": id, .. } => Value::{ id: id.as_number().unwrap().to_int() }
     _ => fail("invalid json for Value")
   }
 }
@@ -29,14 +29,14 @@ pub fn Value::from_json(json : Json) -> Value raise {
 ///|
 /// Block结构体的JSON序列化
 pub fn Block::to_json(self : Block) -> Json {
-  { "id": self.id }
+  { "block_id": self.id }
 }
 
 ///|
 /// Block结构体的JSON反序列化
 pub fn Block::from_json(json : Json) -> Block raise {
   match json {
-    { "id": id, .. } => Block::{ id: id.as_number().unwrap().to_int() }
+    { "block_id": id, .. } => Block::{ id: id.as_number().unwrap().to_int() }
     _ => fail("invalid json for Block")
   }
 }

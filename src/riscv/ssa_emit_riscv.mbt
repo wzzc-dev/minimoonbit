@@ -4,7 +4,8 @@
 // 导入所需的模块
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  // println("emit riscv for ssa program: " + input.to_string())
+  println("emit riscv for ssa program: ")
+  println( input.to_json().stringify())
   
   // 遍历所有SSA函数
   for func in input.program.functions {
@@ -17,9 +18,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
     name: "_global_data",
     asm_export: false,
     body: [
-      Comment("# Global storage for closure free variables"),
+      Comment("Global storage for closure free variables"),
       Label("closure_free_var_storage"),
-      Comment(".quad 0  # 8字节的存储空间")
+      Data(".quad", ["0"])
     ]
   }
   functions.push(global_data_func)
@@ -61,8 +62,13 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   
   // 生成基本块代码
   for block in func.blocks {
+    // 为基本块标签添加前缀
+    let block_label = "block_" + block.id.id.to_string()
+    asm_instructions.push(Label(block_label))
+
     // 为基本块参数分配寄存器或栈位置
-    allocate_block_params(block)
+    let param_instrs = allocate_block_params(block)
+    asm_instructions.append(param_instrs)
     
     // 生成指令
     for instr in block.instructions {
@@ -384,14 +390,15 @@ fn emit_terminator(terminator : @ssa.Terminator) -> Array[RvAsm] {
         }
       }
       // 生成跳转指令
-      result.push(J(target.to_string()))
+      result.push(J("block_" + target.id.to_string()))
     }
     @ssa.Terminator::Branch(cond, true_block, _false_block) => {
       // 条件分支
       let cond_reg = get_register_for_value(cond)
       // 如果条件为真，跳转到true_block，否则继续执行false_block
-      result.push(Bne(cond_reg, Zero, true_block.to_string()))
+      result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
       // 默认继续执行下一个块（false_block）
+      result.push(J("block_" + _false_block.id.to_string()))
     }
   }
   
@@ -400,16 +407,23 @@ fn emit_terminator(terminator : @ssa.Terminator) -> Array[RvAsm] {
 
 ///| 获取值对应的整数寄存器
 fn get_register_for_value(value : @ssa.Value) -> Reg {
-  // 简单的寄存器分配策略
-  // 实际实现中需要更复杂的寄存器分配算法
-  match value.id % 7 {
+  // 改进的寄存器分配策略，避免寄存器冲突
+  // 使用更多的临时寄存器，并确保不同的value_id映射到不同的寄存器
+  match value.id % 14 {
     0 => T0
     1 => T1
     2 => T2
     3 => T3
     4 => T4
     5 => T5
-    _ => T6
+    6 => T6
+    7 => S2   // 使用保存寄存器
+    8 => S3
+    9 => S4
+    10 => S5
+    11 => S6
+    12 => S7
+    _ => S8
   }
 }
 
@@ -428,13 +442,25 @@ fn get_float_register_for_value(value : @ssa.Value) -> FReg {
   }
 }
 
-fn allocate_block_params(block : @ssa.BasicBlock) -> Unit{
+fn allocate_block_params(block : @ssa.BasicBlock) -> Array[RvAsm] {
   // 为基本块参数分配寄存器或栈位置
-  for _i, param in block.params {
-    let _reg = get_register_for_value(param.0)
-    // 实际实现中需要将寄存器分配信息记录到SSA IR中
-    // 例如，将寄存器信息存储在param.1中
-    
-
+  let result = []
+  for i, param in block.params {
+    let param_reg = get_register_for_value(param.0)
+    let source_reg = match i {
+      0 => A0
+      1 => A1
+      2 => A2
+      3 => A3
+      4 => A4
+      5 => A5
+      6 => A6
+      _ => A0  // 默认寄存器
+    }
+    // 将参数从调用约定寄存器移动到分配的寄存器
+    if param_reg != source_reg {
+      result.push(Mv(param_reg, source_reg))
+    }
   }
+  result
 }

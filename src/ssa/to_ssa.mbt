@@ -567,8 +567,15 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         terminator: terminator,
       }
 
-      // 更新块列表
-      context2.blocks.append([updated_current_block, then_block, else_block, merge_block])
+      // 更新块列表 - 先更新现有块，再添加新块
+      let updated_blocks = context2.blocks.map(fn(b) {
+        if b.id == updated_current_block.id {
+          updated_current_block
+        } else {
+          b
+        }
+      })
+      updated_blocks.append([then_block, else_block, merge_block])
 
       // 更新块映射
       let updated_block_map = context2.block_map
@@ -579,7 +586,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 更新上下文
       let context_with_blocks = Context::{
         current_block: then_block,
-        blocks: context2.blocks,
+        blocks: updated_blocks,
         block_map: updated_block_map,
         var_env: context2.var_env  // 保持变量环境
       }
