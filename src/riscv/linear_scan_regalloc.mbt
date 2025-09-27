@@ -39,7 +39,7 @@ pub fn compute_live_intervals_for_function(
   for block in func.blocks {
     // 基本块参数在块开始时定义
     for param in block.params {
-      let value_id = param.0.id
+      let value_id = param.id
       let _ = intervals.add(value_id, {
         value_id,
         start: instruction_count,

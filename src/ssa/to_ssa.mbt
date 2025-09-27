@@ -5,7 +5,7 @@
 ///|
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
-  // @util.logger("closure ir: " + input.to_json().stringify())
+  @util.logger("closure ir: " + input.to_json().stringify())
   // 初始化SSA程序
   let functions = []
 
@@ -29,11 +29,11 @@ pub fn to_ssa(input : @closure.Program) -> Ssa {
 fn convert_function(fundef : @closure.FuncDef) -> Function {
   // 创建函数参数（包括正常参数和自由变量）
   let regular_params = fundef.args.map(fn(arg) {
-    (Value::{ id: new_value_id() }, convert_type(arg.1))
+    Value::{ id: new_value_id(), ty: convert_type(arg.1) }
   })
   
   let free_var_params = fundef.formal_free_vars.map(fn(free_var) {
-    (Value::{ id: new_value_id() }, convert_type(free_var.1))
+    Value::{ id: new_value_id(), ty: convert_type(free_var.1) }
   })
   
   // 合并所有参数
@@ -57,14 +57,14 @@ fn convert_function(fundef : @closure.FuncDef) -> Function {
   let mut var_env = @immut/hashmap.new()
   for i, arg in fundef.args {
     let param_name = arg.0
-    let param_value = regular_params[i].0
+    let param_value = regular_params[i]
     var_env = var_env.add(param_name, param_value)
   }
   
   // 添加自由变量到环境中
   for i, free_var in fundef.formal_free_vars {
     let free_var_name = free_var.0
-    let free_var_value = free_var_params[i].0
+    let free_var_value = free_var_params[i]
     var_env = var_env.add(free_var_name, free_var_value)
   }
   
@@ -205,7 +205,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
       
       // 创建元组值
-      let result_value = Value::{ id: new_value_id() }
+      let result_value = Value::{ id: new_value_id(), ty: Type::Tuple(element_values.map(fn(v) { v.ty })) }
       let instruction = Instruction::{
         result: result_value,
         opcode: Opcode::Tuple(element_values),
@@ -246,7 +246,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       ExprResult::{ value: None, context }
     }
     Int(i) => {
-      let value = Value::{ id: new_value_id() }
+      let value = Value::{ id: new_value_id(), ty: Type::Int }
       let instruction = Instruction::{
         result: value,
         opcode: Opcode::ConstInt(i),
@@ -278,7 +278,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       ExprResult::{ value: Some(value), context: updated_context }
     }
     Int64(i) => {
-      let value = Value::{ id: new_value_id() }
+      let value = Value::{ id: new_value_id(), ty: Type::Int }
       let instruction = Instruction::{
         result: value,
         opcode: Opcode::ConstInt(i.to_int()),
@@ -316,8 +316,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let operand_value = result.value.unwrap()
 
       // 创建结果值和指令 (整数取负: 0 - x)
-      let result_value = Value::{ id: new_value_id() }
-      let zero_value = Value::{ id: new_value_id() }
+      let result_value = Value::{ id: new_value_id(), ty: Type::Int }
+      let zero_value = Value::{ id: new_value_id(), ty: Type::Int }
       
       // 先创建常量0
       let zero_instruction = Instruction::{
@@ -363,8 +363,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let operand_value = result.value.unwrap()
 
       // 创建结果值和指令 (浮点取负: 0.0 - x)
-      let result_value = Value::{ id: new_value_id() }
-      let zero_value = Value::{ id: new_value_id() }
+      let result_value = Value::{ id: new_value_id(), ty: Type::Float }
+      let zero_value = Value::{ id: new_value_id(), ty: Type::Float }
       
       // 先创建浮点常量0.0
       let zero_instruction = Instruction::{
@@ -404,7 +404,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
     Double(d) => {
-      let value = Value::{ id: new_value_id() }
+      let value = Value::{ id: new_value_id(), ty: Type::Float }
       let instruction = Instruction::{
         result: value,
         opcode: Opcode::ConstFloat(d),
@@ -445,19 +445,16 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
     | FMul(x, y)
     | FDiv(x, y)
     | FMod(x, y) => {
-      // 先转换左操作数
-      let result1 = convert_expr(context, @closure.Expr::Var(x))
-      let context1 = result1.context
-      // 再转换右操作数
-      let result2 = convert_expr(context1, @closure.Expr::Var(y))
-      let context2 = result2.context
-
       // 获取两个操作数的值
-      let value1 = result1.value.unwrap()
-      let value2 = result2.value.unwrap()
+      let value1 = context.var_env.get(x).unwrap()
+      let value2 = context.var_env.get(y).unwrap()
 
       // 创建结果值和指令
-      let result_value = Value::{ id: new_value_id() }
+      let result_value = Value::{ id: new_value_id(), ty: match expr {
+        Add(_, _) | Sub(_, _) | Mul(_, _) | Div(_, _) | Mod(_, _) => Type::Int
+        FAdd(_, _) | FSub(_, _) | FMul(_, _) | FDiv(_, _) | FMod(_, _) => Type::Float
+        _ => @util.die("unexpected expression type")
+      } }
       let instruction = Instruction::{
         result: result_value,
         opcode: match (expr, value1, value2) {
@@ -476,16 +473,16 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
 
       // 更新当前块的指令列表
-      context2.current_block.instructions.push(instruction)
+      context.current_block.instructions.push(instruction)
       let updated_block = BasicBlock::{
-        id: context2.current_block.id,
-        params: context2.current_block.params,
-        instructions: context2.current_block.instructions,
-        terminator: context2.current_block.terminator,
+        id: context.current_block.id,
+        params: context.current_block.params,
+        instructions: context.current_block.instructions,
+        terminator: context.current_block.terminator,
       }
 
       // 更新上下文
-      let updated_blocks = context2.blocks.map(fn(b) {
+      let updated_blocks = context.blocks.map(fn(b) {
         if b.id == updated_block.id {
           updated_block
         } else {
@@ -495,8 +492,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let updated_context = Context::{
         current_block: updated_block,
         blocks: updated_blocks,
-        block_map: context2.block_map,
-        var_env: context2.var_env, // 变量环境
+        block_map: context.block_map,
+        var_env: context.var_env, // 变量环境
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -513,7 +510,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let value2 = result2.value.unwrap()
 
       // 创建比较指令的结果值
-      let cmp_result = Value::{ id: new_value_id() }
+      let cmp_result = Value::{ id: new_value_id(), ty: Type::Bool }
       let cmp_instruction = Instruction::{
         result: cmp_result,
         opcode: match expr {
@@ -636,8 +633,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 创建合并块的参数（用于接收then/else分支的值）
       let merge_param = match (then_value, else_value) {
         (Some(_), Some(_)) => {
-          let param_value = Value::{ id: new_value_id() }
-          [(param_value, Type::Int)] // 假设类型为Int，实际应该根据表达式类型推断
+          let param_value = Value::{ id: new_value_id(), ty: Type::Int }
+          [(param_value)] // 假设类型为Int，实际应该根据表达式类型推断
         }
         _ => []
       }
@@ -665,7 +662,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
 
       // 获取合并后的结果值
       let result_value = match merge_param {
-        [(param_val, _)] => Some(param_val)
+        [(param_val)] => Some(param_val)
         _ => None
       }
       
@@ -737,7 +734,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         }
       }
 
-      let result_value = Value::{ id: new_value_id() }
+      let result_value = Value::{ id: new_value_id(), ty: Type::Int }
       let instruction = Instruction::{
         result: result_value,
         opcode: Opcode::Call(label.0, arg_values),
@@ -769,17 +766,17 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
-    MakeClosure((name, _ty), c, e) => {
+    MakeClosure((name, ty), c, e) => {
       // 闭包创建
       // 创建闭包值
-      let closure_value = Value::{ id: new_value_id() }
+      let closure_value = Value::{ id: new_value_id(), ty: convert_type(ty) }
 
       // 创建闭包创建指令
       let instruction = Instruction::{
         result: closure_value,
         opcode: Opcode::MakeClosure(
           name.to_string(),
-          c.actual_free_vars,
+          c.actual_free_vars.map(fn(fv) { context.var_env.get(fv).unwrap() }),
         ),
       }
 
@@ -835,7 +832,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let closure_value = closure_result.value.unwrap()
 
       // 创建结果值和指令
-      let result_value = Value::{ id: new_value_id() }
+      let result_value = Value::{ id: new_value_id(), ty: Type::Int }
       let instruction = Instruction::{
         result: result_value,
         opcode: Opcode::CallClosure(closure_value, arg_values),

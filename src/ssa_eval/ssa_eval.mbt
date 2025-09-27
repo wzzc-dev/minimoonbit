@@ -57,7 +57,7 @@ fn SsaInterpreter::eval_function(self : SsaInterpreter, func : @ssa.Function, ar
   // 设置函数参数
   for i, param_value_type in func.params {
     let arg_val = if i < args.length() { args[i] } else { SsaValue::UnitVal }
-    self.values = self.values.add(param_value_type.0.id, arg_val)
+    self.values = self.values.add(param_value_type.id, arg_val)
   }
   
   // 执行第一个基本块

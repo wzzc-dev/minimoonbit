@@ -14,14 +14,14 @@ pub fn Ssa::from_json(json : Json) -> Ssa raise {
 ///|
 /// Value结构体的JSON序列化
 pub fn Value::to_json(self : Value) -> Json {
-  { "value_id": self.id }
+  { "value_id": self.id, "type": self.ty.to_json() }
 }
 
 ///|
 /// Value结构体的JSON反序列化
 pub fn Value::from_json(json : Json) -> Value raise {
   match json {
-    { "value_id": id, .. } => Value::{ id: id.as_number().unwrap().to_int() }
+    { "value_id": id, "type": ty, .. } => Value::{ id: id.as_number().unwrap().to_int(), ty: Type::from_json(ty) }
     _ => fail("invalid json for Value")
   }
 }
@@ -62,17 +62,7 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
     Opcode::Le(v1, v2) => ["Le", v1.to_json(), v2.to_json()]
     Opcode::Gt(v1, v2) => ["Gt", v1.to_json(), v2.to_json()]
     Opcode::Ge(v1, v2) => ["Ge", v1.to_json(), v2.to_json()]
-    Opcode::Jump(block, values) => {
-      let values_json = values.map(Value::to_json)
-      ["Jump", block.to_json(), values_json]
-    }
-    Opcode::Branch(value, block1, block2) =>
-      ["Branch", value.to_json(), block1.to_json(), block2.to_json()]
-    Opcode::Return(value) =>
-      match value {
-        Some(v) => ["Return", v.to_json()]
-        None => ["Return", "None"]
-      }
+  
     Opcode::Alloc(ty) => ["Alloc", ty.to_json()]
     Opcode::Load(value) => ["Load", value.to_json()]
     Opcode::Store(v1, v2) => ["Store", v1.to_json(), v2.to_json()]
@@ -80,7 +70,6 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
       let values_json = values.map(Value::to_json)
       ["Call", name, values_json]
     }
-    Opcode::BlockArg(i) => ["BlockArg", i]
     Opcode::Tuple(values) => {
       let values_json = values.map(Value::to_json)
       ["Tuple", values_json]
@@ -90,7 +79,7 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
     Opcode::ArrayPut(v1, v2, v3) =>
       ["ArrayPut", v1.to_json(), v2.to_json(), v3.to_json()]
     Opcode::MakeClosure(func_name, free_vars) => {
-      let free_vars_json = free_vars.map(fn(name) { name.to_string() })
+      let free_vars_json = free_vars.map(Value::to_json)
       ["MakeClosure", func_name, free_vars_json]
     }
     Opcode::CallClosure(closure, args) => {
@@ -122,21 +111,7 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
     ["Le", v1, v2] => Opcode::Le(Value::from_json(v1), Value::from_json(v2))
     ["Gt", v1, v2] => Opcode::Gt(Value::from_json(v1), Value::from_json(v2))
     ["Ge", v1, v2] => Opcode::Ge(Value::from_json(v1), Value::from_json(v2))
-    ["Jump", block, Array(values)] => {
-      let values_res = []
-      for v in values {
-        values_res.push(Value::from_json(v))
-      }
-      Opcode::Jump(Block::from_json(block), values_res)
-    }
-    ["Branch", value, block1, block2] =>
-      Opcode::Branch(
-        Value::from_json(value),
-        Block::from_json(block1),
-        Block::from_json(block2),
-      )
-    ["Return", "None"] => Opcode::Return(None)
-    ["Return", value] => Opcode::Return(Some(Value::from_json(value)))
+
     ["Alloc", ty] => Opcode::Alloc(Type::from_json(ty))
     ["Load", value] => Opcode::Load(Value::from_json(value))
     ["Store", v1, v2] =>
@@ -148,7 +123,6 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
       }
       Opcode::Call(name, values_res)
     }
-    ["BlockArg", i] => Opcode::BlockArg(i.as_number().unwrap().to_int())
     ["Tuple", Array(values)] => {
       let values_res = []
       for v in values {
@@ -172,7 +146,7 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
     ["MakeClosure", String(func_name), Array(free_vars)] => {
       let free_vars_res = []
       for fv in free_vars {
-        free_vars_res.push(@types.Name::from_string(fv.as_string().unwrap()))
+        free_vars_res.push(Value::from_json(fv))
       }
       Opcode::MakeClosure(func_name, free_vars_res)
     }
@@ -209,7 +183,7 @@ pub fn Instruction::from_json(json : Json) -> Instruction raise {
 pub fn BasicBlock::to_json(self : BasicBlock) -> Json {
   {
     "id": self.id.to_json(),
-    "params": self.params.map(fn(p) { [p.0.to_json(), p.1.to_json()] }),
+    "params": self.params.map(Value::to_json),
     "instructions": self.instructions.map(Instruction::to_json),
     "terminator": self.terminator.to_json(),
   }
@@ -229,9 +203,7 @@ pub fn BasicBlock::from_json(json : Json) -> BasicBlock raise {
       let params_res = []
       for p in params {
         match p {
-          [value, ty] =>
-            params_res.push((Value::from_json(value), Type::from_json(ty)))
-          _ => fail("invalid json for BasicBlock params")
+          value => params_res.push(Value::from_json(value)) 
         }
       }
       let instructions_res = []
@@ -296,7 +268,7 @@ pub fn Terminator::from_json(json : Json) -> Terminator raise {
 pub fn Function::to_json(self : Function) -> Json {
   {
     "name": self.name,
-    "params": self.params.map(fn(p) { [p.0.to_json(), p.1.to_json()] }),
+    "params": self.params.map(Value::to_json),
     "return_type": self.return_type.to_json(),
     "blocks": self.blocks.map(BasicBlock::to_json),
   }
@@ -316,9 +288,8 @@ pub fn Function::from_json(json : Json) -> Function raise {
       let params_res = []
       for p in params {
         match p {
-          [value, ty] =>
-            params_res.push((Value::from_json(value), Type::from_json(ty)))
-          _ => fail("invalid json for Function params")
+          value =>
+            params_res.push((Value::from_json(value)))
         }
       }
       let blocks_res = []

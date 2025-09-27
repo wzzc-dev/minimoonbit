@@ -5,8 +5,8 @@
 // 导入所需的模块
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  // println("emit riscv for ssa program: ")
-  // println(input.to_json().stringify())
+  println("emit riscv for ssa program: ")
+  println(input.to_json().stringify())
   
   // 遍历所有SSA函数
   for func in input.program.functions {
@@ -14,19 +14,6 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
     functions.push(asm_func)
   }
   
-  // 添加全局数据段用于存储闭包自由变量（添加到最后）
-  let global_data_func = {
-    name: "_global_data",
-    asm_export: false,
-    body: [
-      Comment("Global storage for closure free variables"),
-      Data(".section", [".data"]),  // Ensure we're in the data section
-      Data(".align", ["8"]),        // Align to 8 bytes
-      Label("closure_free_var_storage"),
-      Data(".quad", ["0"])
-    ]
-  }
-  functions.push(global_data_func)
   
   functions
 }
@@ -53,7 +40,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   
   // 设置函数参数到对应的寄存器
   for i, param in func.params {
-    let param_reg = get_register_for_value(param.0)
+    let param_reg = get_register_for_value(param)
     let input_reg = match i {
       0 => A0
       1 => A1
@@ -288,66 +275,77 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
       result.push(Mv(rd, tuple_reg)) // 临时实现
     }
     @ssa.Opcode::MakeClosure(func_name, free_vars) => {
-      // 闭包创建 - 简化实现：将函数指针和自由变量存储在栈上
+      // 闭包创建 - 按照emit.mbt的方式实现
       let result_reg = get_register_for_value(instr.result)
       result.push(Comment("MakeClosure: " + func_name))
       
-      // 简化实现：为了演示，我们假设只有一个自由变量
-      // 实际实现需要动态分配闭包对象
       if free_vars.length() > 0 {
-        // 极简实现：使用全局变量存储自由变量
-        result.push(Comment("Store free variable globally (simplified)"))
+        // 有自由变量，创建闭包对象
+        // 1. 计算需要的内存大小 (函数指针 + 自由变量)
+        let size = if free_vars.length() * 8 + 8 < 16 { 16 } else { free_vars.length() * 8 + 8 }
         
-        // 在SSA中，自由变量应该已经在某个寄存器中
-        // 我们需要找到对应的SSA值，但这需要更复杂的实现
-        // 暂时使用第一个函数参数寄存器作为自由变量源
-        // 这假设自由变量就是当前函数的第一个参数
-        result.push(La(T0, Label("closure_free_var_storage")))
-        result.push(Sd(T4, { base: T0, offset: 0 }))  // T4 应该包含make_adder的参数x
+        // 2. 调用 malloc 分配内存
+        result.push(Li(A0, size.to_string()))
+        result.push(Call(Label("minimbt_malloc")))
         
-        // 返回函数指针
-        result.push(La(result_reg, Label(func_name)))
+        // 3. 存储函数指针到闭包对象的偏移0处
+        result.push(La(T0, Label(func_name)))
+        result.push(Sd(T0, { base: A0, offset: 0 }))
+        
+        // 4. 存储捕获的自由变量
+        for i, free_var in free_vars {
+          // 获取自由变量的寄存器
+          let var_reg = get_register_for_value(free_var)
+          // 存储到闭包对象的偏移 (i+1)*8 处
+          result.push(Sd(var_reg, { base: A0, offset: (i + 1) * 8 }))
+        }
+        
+        // 5. 将闭包对象指针移动到结果寄存器
+        if result_reg != A0 {
+          result.push(Mv(result_reg, A0))
+        }
       } else {
         // 没有自由变量，直接返回函数指针
         result.push(La(result_reg, Label(func_name)))
       }
     }
     @ssa.Opcode::CallClosure(closure, args) => {
-      // 闭包调用 - 从闭包对象中提取函数指针和自由变量
+      // 闭包调用 - 按照emit.mbt的方式实现
       let closure_reg = get_register_for_value(closure)
       
       result.push(Comment("CallClosure: setting up function call"))
       
-      // 闭包寄存器现在直接包含函数地址
-      
-      // 将显式参数放入参数寄存器，从a0开始
+      // 1. 将显式参数放入参数寄存器
       for i, arg in args {
         let arg_reg = get_register_for_value(arg)
         let param_reg = match i {
-          0 => A0  // 第一个显式参数 (y)
-          1 => A2  // 第二个显式参数
-          2 => A3
-          3 => A4
-          4 => A5
-          5 => A6
-          6 => A7
-          _ => A0  // 超过参数寄存器数量
+          0 => A0
+          1 => A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          7 => A7
+          _ => A0  // 超过参数寄存器数量的情况
         }
         if arg_reg != param_reg {
           result.push(Mv(param_reg, arg_reg))
         }
       }
       
-      // 从全局存储加载自由变量
-      result.push(Comment("Load free variable from global storage"))
-      result.push(La(T0, Label("closure_free_var_storage")))
-      result.push(Ld(A1, { base: T0, offset: 0 }))
+      // 2. 将闭包对象指针加载到S11寄存器（按照RISC-V调用约定）
+      result.push(Comment("Load closure object to S11"))
+      if closure_reg != S11 {
+        result.push(Mv(S11, closure_reg))
+      }
       
-      // 调用函数
-      result.push(Comment("CallClosure: calling function"))
-      result.push(Jalr(closure_reg))
+      // 3. 从闭包对象提取函数指针并调用
+      result.push(Comment("Extract function pointer and call"))
+      result.push(Ld(T1, { base: S11, offset: 0 }))  // 函数指针在偏移0处
+      result.push(Jalr(T1))
       
-      // 将返回值移动到结果寄存器
+      // 4. 将返回值移动到结果寄存器
       let result_reg = get_register_for_value(instr.result)
       if result_reg != A0 {
         result.push(Mv(result_reg, A0))
@@ -476,7 +474,7 @@ fn get_float_register_for_value(value : @ssa.Value) -> FReg {
 fn allocate_block_params_with_regalloc(block : @ssa.BasicBlock, allocator : RegisterAllocator) -> Array[RvAsm] {
   let result = []
   for i, param in block.params {
-    let (param_reg, load_instrs) = get_register_or_spill_load(param.0.id, allocator)
+    let (param_reg, load_instrs) = get_register_or_spill_load(param.id, allocator)
     let source_reg = match i {
       0 => A0
       1 => A1
@@ -493,7 +491,7 @@ fn allocate_block_params_with_regalloc(block : @ssa.BasicBlock, allocator : Regi
       result.push(Mv(param_reg, source_reg))
     }
     
-    let spill_instrs = generate_spill_store_if_needed(param.0.id, param_reg, allocator)
+    let spill_instrs = generate_spill_store_if_needed(param.id, param_reg, allocator)
     result.append(spill_instrs)
   }
   result

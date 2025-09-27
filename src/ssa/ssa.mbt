@@ -6,6 +6,7 @@
 /// SSA值标识符
 pub(all) struct Value {
   id : Int
+  ty : Type
 } derive(Show, Eq, Hash)
 
 ///|
@@ -43,11 +44,6 @@ pub(all) enum Opcode {
   Gt(Value, Value)
   Ge(Value, Value)
 
-  // 控制流
-  Jump(Block, Array[Value]) // 跳转到基本块，传递参数
-  Branch(Value, Block, Block) // 条件分支
-  Return(Value?) // 返回值
-
   // 内存操作
   Alloc(Type)
   Load(Value)
@@ -57,11 +53,8 @@ pub(all) enum Opcode {
   Call(String, Array[Value])
 
   // 闭包操作
-  MakeClosure(String, Array[@types.Name]) // 创建闭包：变量名，函数名，自由变量列表
+  MakeClosure(String, Array[Value]) // 创建闭包：变量名，函数名，自由变量列表
   CallClosure(Value, Array[Value]) // 调用闭包：闭包值，参数列表
-
-  // 参数访问（用于基本块参数）
-  BlockArg(Int) // 基本块的第n个参数
 
   // 元组操作
   Tuple(Array[Value])
@@ -85,7 +78,7 @@ pub(all) struct Instruction {
 /// 基本块
 pub(all) struct BasicBlock {
   id : Block // 基本块标识符
-  params : Array[(Value, Type)] // 基本块参数（替代phi函数）
+  params : Array[Value] // 基本块参数（替代phi函数）
   instructions : Array[Instruction] // 指令序列
   terminator : Terminator // 终止指令
 } derive(Show)
@@ -105,7 +98,7 @@ pub(all) enum Terminator {
 /// 函数定义
 pub(all) struct Function {
   name : String // 函数名
-  params : Array[(Value, Type)] // 函数参数
+  params : Array[Value] // 函数参数
   return_type : Type // 返回类型
   blocks : Array[BasicBlock] // 基本块列表
 } derive(Show)
@@ -130,7 +123,7 @@ pub(all) enum Type {
   Function(Array[Type], Type)
   Tuple(Array[Type])
   Array(Type)
-} derive(Show, Eq)
+} derive(Show, Eq, Hash)
 
 
 ///|
