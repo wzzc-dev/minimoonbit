@@ -265,7 +265,7 @@ impl Show for RvAsm with output(self, logger) {
       logger.write_string(label.inner())
     }
     Jalr(rs1) => {
-      logger.write_string("jalr ")
+      logger.write_string("jalr ra, ")
       Show::output(rs1, logger)
     }
     Jr(rs1) => {

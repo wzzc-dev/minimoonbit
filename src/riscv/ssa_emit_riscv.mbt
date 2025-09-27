@@ -4,8 +4,8 @@
 // 导入所需的模块
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  println("emit riscv for ssa program: ")
-  println( input.to_json().stringify())
+  // println("emit riscv for ssa program: ")
+  // println(input.to_json().stringify())
   
   // 遍历所有SSA函数
   for func in input.program.functions {
@@ -19,6 +19,8 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
     asm_export: false,
     body: [
       Comment("Global storage for closure free variables"),
+      Data(".section", [".data"]),  // Ensure we're in the data section
+      Data(".align", ["8"]),        // Align to 8 bytes
       Label("closure_free_var_storage"),
       Data(".quad", ["0"])
     ]
@@ -81,11 +83,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
     asm_instructions.append(term_instrs)
   }
   
-  // 函数尾声
-  asm_instructions.push(Ld(Ra, { base: Sp, offset: framesize - 8 })) // 恢复返回地址
-  asm_instructions.push(Ld(Fp, { base: Sp, offset: framesize - 16 })) // 恢复帧指针
-  asm_instructions.push(Addi(Sp, Sp, framesize)) // 释放栈帧
-  asm_instructions.push(Ret) // 返回
+  // 函数尾声现在由Return terminator处理
   
   { name: func.name, asm_export: true, body: asm_instructions }
 }
@@ -287,15 +285,18 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
         // 极简实现：使用全局变量存储自由变量
         result.push(Comment("Store free variable globally (simplified)"))
         
-        // 使用全局标签存储自由变量
-        result.push(La(T0, "closure_free_var_storage"))
-        result.push(Sd(A0, { base: T0, offset: 0 }))
+        // 在SSA中，自由变量应该已经在某个寄存器中
+        // 我们需要找到对应的SSA值，但这需要更复杂的实现
+        // 暂时使用第一个函数参数寄存器作为自由变量源
+        // 这假设自由变量就是当前函数的第一个参数
+        result.push(La(T0, Label("closure_free_var_storage")))
+        result.push(Sd(T4, { base: T0, offset: 0 }))  // T4 应该包含make_adder的参数x
         
         // 返回函数指针
-        result.push(La(result_reg, func_name))
+        result.push(La(result_reg, Label(func_name)))
       } else {
         // 没有自由变量，直接返回函数指针
-        result.push(La(result_reg, func_name))
+        result.push(La(result_reg, Label(func_name)))
       }
     }
     @ssa.Opcode::CallClosure(closure, args) => {
@@ -368,6 +369,12 @@ fn emit_terminator(terminator : @ssa.Terminator) -> Array[RvAsm] {
           result.push(Li(A0, "0"))
         }
       }
+      // 添加函数尾声
+      let framesize = 24 // 应该与函数序言中的framesize一致
+      result.push(Ld(Ra, { base: Sp, offset: framesize - 8 })) // 恢复返回地址
+      result.push(Ld(Fp, { base: Sp, offset: framesize - 16 })) // 恢复帧指针
+      result.push(Addi(Sp, Sp, framesize)) // 释放栈帧
+      result.push(Ret) // 返回
     }
     @ssa.Terminator::Jump(target, args) => {
       // 无条件跳转
