@@ -1,5 +1,6 @@
 ///| 将SSA中间表示转换为RISC-V汇编代码
 ///| 使用基本块参数而非phi函数来实现SSA
+///| 实现线性扫描寄存器分配算法
 
 // 导入所需的模块
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
@@ -30,12 +31,19 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   functions
 }
 
+
+
 ///| 生成函数的RISC-V汇编代码
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
+  // 执行寄存器分配
+  let live_intervals = compute_live_intervals_for_function(func)
+  let allocator = linear_scan_register_allocation(live_intervals)
+  
   let asm_instructions = []
   
-  // 计算栈帧大小
-  let framesize = 24 // 基础栈帧大小
+  // 计算栈帧大小（包括溢出槽）
+  let spill_size = allocator.next_spill_slot
+  let framesize = 24 + spill_size // 基础栈帧大小 + 溢出空间
   
   // 函数序言
   asm_instructions.push(Addi(Sp, Sp, -framesize)) // 分配栈帧
@@ -69,33 +77,58 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
     asm_instructions.push(Label(block_label))
 
     // 为基本块参数分配寄存器或栈位置
-    let param_instrs = allocate_block_params(block)
+    let param_instrs = allocate_block_params_with_regalloc(block, allocator)
     asm_instructions.append(param_instrs)
     
     // 生成指令
     for instr in block.instructions {
-      let asm_instrs = emit_instruction(instr)
+      let asm_instrs = emit_instruction_with_regalloc(instr, allocator)
       asm_instructions.append(asm_instrs)
     }
     
     // 生成终止指令
-    let term_instrs = emit_terminator(block.terminator)
+    let term_instrs = emit_terminator_with_regalloc(block.terminator, allocator)
     asm_instructions.append(term_instrs)
   }
   
   // 函数尾声现在由Return terminator处理
-  
-  { name: func.name, asm_export: true, body: asm_instructions }
+
+  { name: func.name, asm_export: func.name == "minimbt_main", body: asm_instructions } 
 }
 
-///| 生成SSA指令的RISC-V汇编代码
-fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
+///| 生成二元运算指令（使用新的寄存器分配器）
+fn emit_binary_op_with_regalloc(result_val : @ssa.Value, lhs : @ssa.Value, rhs : @ssa.Value, 
+                  op : (Reg, Reg, Reg) -> RvAsm, allocator : RegisterAllocator) -> Array[RvAsm] {
+  let instrs = []
+  
+  let (rs1, load1) = get_register_or_spill_load(lhs.id, allocator)
+  let (rs2, load2) = get_register_or_spill_load(rhs.id, allocator)  
+  let (rd, load_rd) = get_register_or_spill_load(result_val.id, allocator)
+  
+  instrs.append(load1)
+  instrs.append(load2)
+  instrs.append(load_rd)
+  instrs.push(op(rd, rs1, rs2))
+  
+  let spill_instrs = generate_spill_store_if_needed(result_val.id, rd, allocator)
+  instrs.append(spill_instrs)
+  
+  instrs
+}
+
+///| 生成SSA指令的RISC-V汇编代码（使用新的寄存器分配器）
+fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : RegisterAllocator) -> Array[RvAsm] {
   let result = []
   
   match instr.opcode {
     @ssa.Opcode::ConstInt(value) => {
       // 加载常量整数到寄存器
-      result.push(Li(get_register_for_value(instr.result), value.to_string()))
+      let (rd, load_instrs) = get_register_or_spill_load(instr.result.id, allocator)
+      result.append(load_instrs)
+      result.push(Li(rd, value.to_string()))
+      // 如果结果需要溢出，生成存储指令
+      let spill_instrs = generate_spill_store_if_needed(instr.result.id, rd, allocator)
+      result.append(spill_instrs)
     }
     @ssa.Opcode::ConstFloat(value) => {
       // 加载常量浮点数到寄存器
@@ -105,39 +138,19 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
       result.push(FmvDX(float_reg, T0))
     }
     @ssa.Opcode::Add(lhs, rhs) => {
-      // 加法运算
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
-      result.push(Add(rd, rs1, rs2))
+      result.append(emit_binary_op_with_regalloc(instr.result, lhs, rhs, (rd, rs1, rs2) => Add(rd, rs1, rs2), allocator))
     }
     @ssa.Opcode::Sub(lhs, rhs) => {
-      // 减法运算
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
-      result.push(Sub(rd, rs1, rs2))
+      result.append(emit_binary_op_with_regalloc(instr.result, lhs, rhs, (rd, rs1, rs2) => Sub(rd, rs1, rs2), allocator))
     }
     @ssa.Opcode::Mul(lhs, rhs) => {
-      // 乘法运算
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
-      result.push(Mul(rd, rs1, rs2))
+      result.append(emit_binary_op_with_regalloc(instr.result, lhs, rhs, (rd, rs1, rs2) => Mul(rd, rs1, rs2), allocator))
     }
     @ssa.Opcode::Div(lhs, rhs) => {
-      // 除法运算
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
-      result.push(Div(rd, rs1, rs2))
+      result.append(emit_binary_op_with_regalloc(instr.result, lhs, rhs, (rd, rs1, rs2) => Div(rd, rs1, rs2), allocator))
     }
     @ssa.Opcode::Mod(lhs, rhs) => {
-      // 取模运算
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
-      result.push(Rem(rd, rs1, rs2))
+      result.append(emit_binary_op_with_regalloc(instr.result, lhs, rhs, (rd, rs1, rs2) => Rem(rd, rs1, rs2), allocator))
     }
     @ssa.Opcode::FAdd(lhs, rhs) => {
       // 浮点加法
@@ -173,8 +186,8 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
       let rs1 = get_register_for_value(lhs)
       let rs2 = get_register_for_value(rhs)
       result.append([
-        Sub(rd, rs1, rs2),  // rd = rs1 - rs2
-        Sltiu(rd, rd, 1)       // rd = (rd == 0) ? 1 : 0
+        Sub(rd, rs1, rs2),   // rd = rs1 - rs2
+        Sltiu(rd, rd, 1)   // rd = (rd == 0) ? 1 : 0
       ])
     }
     @ssa.Opcode::Ne(lhs, rhs) => {
@@ -183,8 +196,8 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
       let rs1 = get_register_for_value(lhs)
       let rs2 = get_register_for_value(rhs)
       result.append([
-        Sub(rd, rs1, rs2),  // rd = rs1 - rs2
-        Sltu(rd, Zero, rd)       // rd = (rd != 0) ? 1 : 0
+        Sub(rd, rs1, rs2),   // rd = rs1 - rs2
+        Sltu(rd, Zero, rd)   // rd = (rd != 0) ? 1 : 0
       ])
     }
     @ssa.Opcode::Lt(lhs, rhs) => {
@@ -195,12 +208,12 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
       result.push(Slt(rd, rs1, rs2))
     }
     @ssa.Opcode::Le(lhs, rhs) => {
-      // 小于等于比较 (!(rs2 < rs1))
+      // 小于等于比较 (lhs <= rhs 等价于 !(rhs < lhs))
       let rd = get_register_for_value(instr.result)
       let rs1 = get_register_for_value(lhs)
       let rs2 = get_register_for_value(rhs)
       result.append([
-        Slt(rd, rs2, rs1),   // rd = rs2 < rs1
+        Slt(rd, rs2, rs1),     // rd = rhs < lhs
         Xori(rd, rd, 1)      // rd = !rd
       ])
     }
@@ -212,12 +225,12 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
       result.push(Slt(rd, rs2, rs1))
     }
     @ssa.Opcode::Ge(lhs, rhs) => {
-      // 大于等于比较 (!(rs1 < rs2))
+      // 大于等于比较 (lhs >= rhs 等价于 !(lhs < rhs))
       let rd = get_register_for_value(instr.result)
       let rs1 = get_register_for_value(lhs)
       let rs2 = get_register_for_value(rhs)
       result.append([
-        Slt(rd, rs1, rs2),   // rd = rs1 < rs2
+        Slt(rd, rs1, rs2),     // rd = lhs < rhs
         Xori(rd, rd, 1)      // rd = !rd
       ])
     }
@@ -327,7 +340,7 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
       
       // 从全局存储加载自由变量
       result.push(Comment("Load free variable from global storage"))
-      result.push(La(T0, "closure_free_var_storage"))
+      result.push(La(T0, Label("closure_free_var_storage")))
       result.push(Ld(A1, { base: T0, offset: 0 }))
       
       // 调用函数
@@ -341,82 +354,81 @@ fn emit_instruction(instr : @ssa.Instruction) -> Array[RvAsm] {
       }
     }
     _ => {
-      // 默认情况下，添加注释指令来标识未实现的指令
-      result.push(Comment("TODO: implement " + instr.opcode.to_string()))
+      // 默认情况下，使用简单的寄存器分配策略
+      result.push(Comment("TODO: implement " + instr.opcode.to_string() + " with regalloc"))
     }
   }
   
   result
 }
 
-///| 生成终止指令的RISC-V汇编代码
-fn emit_terminator(terminator : @ssa.Terminator) -> Array[RvAsm] {
-  let result = []
+// ///| 生成终止指令的RISC-V汇编代码
+// fn emit_terminator(terminator : @ssa.Terminator) -> Array[RvAsm] {
+//   let result = []
   
-  match terminator {
-    @ssa.Terminator::Return(value) => {
-      // 返回指令
-      match value {
-        Some(val) => {
-          // 将返回值移动到a0寄存器
-          let src_reg = get_register_for_value(val)
-          if src_reg != A0 {
-            result.push(Mv(A0, src_reg))
-          }
-        }
-        None => {
-          // 无返回值，确保a0为0
-          result.push(Li(A0, "0"))
-        }
-      }
-      // 添加函数尾声
-      let framesize = 24 // 应该与函数序言中的framesize一致
-      result.push(Ld(Ra, { base: Sp, offset: framesize - 8 })) // 恢复返回地址
-      result.push(Ld(Fp, { base: Sp, offset: framesize - 16 })) // 恢复帧指针
-      result.push(Addi(Sp, Sp, framesize)) // 释放栈帧
-      result.push(Ret) // 返回
-    }
-    @ssa.Terminator::Jump(target, args) => {
-      // 无条件跳转
-      // 跳转参数需要在目标基本块中作为参数使用
-      // 将参数值移动到目标基本块参数对应的寄存器
-      for i, arg in args {
-        let src_reg = get_register_for_value(arg)
-        let dest_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          _ => A0  // 默认寄存器
-        }
-        if src_reg != dest_reg {
-          result.push(Mv(dest_reg, src_reg))
-        }
-      }
-      // 生成跳转指令
-      result.push(J("block_" + target.id.to_string()))
-    }
-    @ssa.Terminator::Branch(cond, true_block, _false_block) => {
-      // 条件分支
-      let cond_reg = get_register_for_value(cond)
-      // 如果条件为真，跳转到true_block，否则继续执行false_block
-      result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
-      // 默认继续执行下一个块（false_block）
-      result.push(J("block_" + _false_block.id.to_string()))
-    }
-  }
+//   match terminator {
+//     @ssa.Terminator::Return(value) => {
+//       // 返回指令
+//       match value {
+//         Some(val) => {
+//           // 将返回值移动到a0寄存器
+//           let src_reg = get_register_for_value(val)
+//           if src_reg != A0 {
+//             result.push(Mv(A0, src_reg))
+//           }
+//         }
+//         None => {
+//           // 无返回值，确保a0为0
+//           result.push(Li(A0, "0"))
+//         }
+//       }
+//       // 添加函数尾声
+//       let framesize = 24 // 应该与函数序言中的framesize一致
+//       result.push(Ld(Ra, { base: Sp, offset: framesize - 8 })) // 恢复返回地址
+//       result.push(Ld(Fp, { base: Sp, offset: framesize - 16 })) // 恢复帧指针
+//       result.push(Addi(Sp, Sp, framesize)) // 释放栈帧
+//       result.push(Ret) // 返回
+//     }
+//     @ssa.Terminator::Jump(target, args) => {
+//       // 无条件跳转
+//       // 跳转参数需要在目标基本块中作为参数使用
+//       // 将参数值移动到目标基本块参数对应的寄存器
+//       for i, arg in args {
+//         let src_reg = get_register_for_value(arg)
+//         let dest_reg = match i {
+//           0 => A0
+//           1 => A1
+//           2 => A2
+//           3 => A3
+//           4 => A4
+//           5 => A5
+//           6 => A6
+//           _ => A0  // 默认寄存器
+//         }
+//         if src_reg != dest_reg {
+//           result.push(Mv(dest_reg, src_reg))
+//         }
+//       }
+//       // 生成跳转指令
+//       result.push(J("block_" + target.id.to_string()))
+//     }
+//     @ssa.Terminator::Branch(cond, true_block, _false_block) => {
+//       // 条件分支
+//       let cond_reg = get_register_for_value(cond)
+//       // 如果条件为真，跳转到true_block，否则继续执行false_block
+//       result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
+//       // 默认继续执行下一个块（false_block）
+//       result.push(J("block_" + _false_block.id.to_string()))
+//     }
+//   }
   
-  result
-}
+//   result
+// }
 
-///| 获取值对应的整数寄存器
-fn get_register_for_value(value : @ssa.Value) -> Reg {
-  // 改进的寄存器分配策略，避免寄存器冲突
-  // 使用更多的临时寄存器，并确保不同的value_id映射到不同的寄存器
-  match value.id % 14 {
+
+///| 回退的寄存器分配策略
+fn get_register_for_value_fallback(value : @ssa.Value) -> Reg {
+  match value.id % 20 {
     0 => T0
     1 => T1
     2 => T2
@@ -424,14 +436,25 @@ fn get_register_for_value(value : @ssa.Value) -> Reg {
     4 => T4
     5 => T5
     6 => T6
-    7 => S2   // 使用保存寄存器
+    7 => S2
     8 => S3
     9 => S4
     10 => S5
     11 => S6
     12 => S7
-    _ => S8
+    13 => S8
+    14 => S9
+    15 => S10
+    16 => A2
+    17 => A3
+    18 => A4
+    _ => A5
   }
+}
+
+///| 获取值对应的整数寄存器（保持向后兼容）
+fn get_register_for_value(value : @ssa.Value) -> Reg {
+  get_register_for_value_fallback(value)
 }
 
 ///| 获取值对应的浮点寄存器
@@ -449,11 +472,11 @@ fn get_float_register_for_value(value : @ssa.Value) -> FReg {
   }
 }
 
-fn allocate_block_params(block : @ssa.BasicBlock) -> Array[RvAsm] {
-  // 为基本块参数分配寄存器或栈位置
+///| 使用寄存器分配器为基本块参数分配寄存器
+fn allocate_block_params_with_regalloc(block : @ssa.BasicBlock, allocator : RegisterAllocator) -> Array[RvAsm] {
   let result = []
   for i, param in block.params {
-    let param_reg = get_register_for_value(param.0)
+    let (param_reg, load_instrs) = get_register_or_spill_load(param.0.id, allocator)
     let source_reg = match i {
       0 => A0
       1 => A1
@@ -462,12 +485,94 @@ fn allocate_block_params(block : @ssa.BasicBlock) -> Array[RvAsm] {
       4 => A4
       5 => A5
       6 => A6
-      _ => A0  // 默认寄存器
+      _ => A0
     }
-    // 将参数从调用约定寄存器移动到分配的寄存器
+    
+    result.append(load_instrs)
     if param_reg != source_reg {
       result.push(Mv(param_reg, source_reg))
     }
+    
+    let spill_instrs = generate_spill_store_if_needed(param.0.id, param_reg, allocator)
+    result.append(spill_instrs)
   }
   result
 }
+
+///| 使用寄存器分配器生成终止指令
+fn emit_terminator_with_regalloc(terminator : @ssa.Terminator, allocator : RegisterAllocator) -> Array[RvAsm] {
+  let result = []
+  
+  match terminator {
+    @ssa.Terminator::Return(value) => {
+      match value {
+        Some(val) => {
+          let (src_reg, load_instrs) = get_register_or_spill_load(val.id, allocator)
+          result.append(load_instrs)
+          if src_reg != A0 {
+            result.push(Mv(A0, src_reg))
+          }
+        }
+        None => {
+          result.push(Li(A0, "0"))
+        }
+      }
+      let framesize = 24 + allocator.next_spill_slot
+      result.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
+      result.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
+      result.push(Addi(Sp, Sp, framesize))
+      result.push(Ret)
+    }
+    @ssa.Terminator::Jump(target, args) => {
+      for i, arg in args {
+        let (src_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
+        let dest_reg = match i {
+          0 => A0
+          1 => A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          _ => A0
+        }
+        result.append(load_instrs)
+        if src_reg != dest_reg {
+          result.push(Mv(dest_reg, src_reg))
+        }
+      }
+      result.push(J("block_" + target.id.to_string()))
+    }
+    @ssa.Terminator::Branch(cond, true_block, false_block) => {
+      let (cond_reg, load_instrs) = get_register_or_spill_load(cond.id, allocator)
+      result.append(load_instrs)
+      result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
+      result.push(J("block_" + false_block.id.to_string()))
+    }
+  }
+  
+  result
+}
+
+// fn allocate_block_params(block : @ssa.BasicBlock) -> Array[RvAsm] {
+//   // 为基本块参数分配寄存器或栈位置
+//   let result = []
+//   for i, param in block.params {
+//     let param_reg = get_register_for_value(param.0)
+//     let source_reg = match i {
+//       0 => A0
+//       1 => A1
+//       2 => A2
+//       3 => A3
+//       4 => A4
+//       5 => A5
+//       6 => A6
+//       _ => A0  // 默认寄存器
+//     }
+//     // 将参数从调用约定寄存器移动到分配的寄存器
+//     if param_reg != source_reg {
+//       result.push(Mv(param_reg, source_reg))
+//     }
+//   }
+//   result
+// }
