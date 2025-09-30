@@ -251,6 +251,7 @@ fn main {
   let wasm = Ref::new(false)
   let llvmir = Ref::new(false)
   let simple = Ref::new(true)
+  let ssa = Ref::new(false)
   // 
   @ArgParser.parse(
     [
@@ -337,11 +338,15 @@ fn main {
       ("--wasm", "", @ArgParser.Set(wasm), "Generate WebAssembly code"),
       ("--llvmir", "", @ArgParser.Set(llvmir), "Generate llvmir"),
       ("--simple", "", @ArgParser.Set(simple), "Simple backend"),
+      ("--ssa", "", @ArgParser.Set(ssa), "Use SSA"),
     ],
     fn(s) { file = Some(s) },
     "",
     argv.to_array(),
   )
+  if ssa.val {
+    simple.val = false
+  }
 
   // println(end_stage)
 
