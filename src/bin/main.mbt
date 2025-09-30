@@ -250,7 +250,7 @@ fn main {
   let js = Ref::new(false)
   let wasm = Ref::new(false)
   let llvmir = Ref::new(false)
-  let simple = Ref::new(false)
+  let simple = Ref::new(true)
   // 
   @ArgParser.parse(
     [
