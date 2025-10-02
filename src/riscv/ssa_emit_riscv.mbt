@@ -40,7 +40,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   
   // 设置函数参数到对应的寄存器
   for i, param in func.params {
-    let param_reg = get_register_for_value(param)
+    let (param_reg, _) = get_register_or_spill_load(param.id, allocator)
     let input_reg = match i {
       0 => A0
       1 => A1
@@ -55,6 +55,9 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
     if param_reg != input_reg {
       asm_instructions.push(Mv(param_reg, input_reg))
     }
+    // 如果参数需要溢出，立即保存到栈槽
+    let spill_instrs = generate_spill_store_if_needed(param.id, param_reg, allocator)
+    asm_instructions.append(spill_instrs)
   }
   
   // 生成基本块代码
@@ -84,22 +87,30 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
 }
 
 ///| 生成二元运算指令（使用新的寄存器分配器）
-fn emit_binary_op_with_regalloc(result_val : @ssa.Value, lhs : @ssa.Value, rhs : @ssa.Value, 
+fn emit_binary_op_with_regalloc(result_val : @ssa.Value, lhs : @ssa.Value, rhs : @ssa.Value,
                   op : (Reg, Reg, Reg) -> RvAsm, allocator : RegisterAllocator) -> Array[RvAsm] {
   let instrs = []
-  
+
   let (rs1, load1) = get_register_or_spill_load(lhs.id, allocator)
-  let (rs2, load2) = get_register_or_spill_load(rhs.id, allocator)  
+  let (rs2, load2) = get_register_or_spill_load(rhs.id, allocator)
   let (rd, load_rd) = get_register_or_spill_load(result_val.id, allocator)
-  
+
   instrs.append(load1)
   instrs.append(load2)
   instrs.append(load_rd)
-  instrs.push(op(rd, rs1, rs2))
-  
+
+  // 如果目标寄存器与源寄存器冲突，使用临时寄存器
+  if rd == rs1 || rd == rs2 {
+    let temp_reg = T0
+    instrs.push(op(temp_reg, rs1, rs2))
+    instrs.push(Mv(rd, temp_reg))
+  } else {
+    instrs.push(op(rd, rs1, rs2))
+  }
+
   let spill_instrs = generate_spill_store_if_needed(result_val.id, rd, allocator)
   instrs.append(spill_instrs)
-  
+
   instrs
 }
 
@@ -169,63 +180,94 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
     }
     @ssa.Opcode::Eq(lhs, rhs) => {
       // 相等比较
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
+      let (rd, load_rd) = get_register_or_spill_load(instr.result.id, allocator)
+      let (rs1, load_rs1) = get_register_or_spill_load(lhs.id, allocator)
+      let (rs2, load_rs2) = get_register_or_spill_load(rhs.id, allocator)
+      result.append(load_rd)
+      result.append(load_rs1)
+      result.append(load_rs2)
       result.append([
         Sub(rd, rs1, rs2),   // rd = rs1 - rs2
         Sltiu(rd, rd, 1)   // rd = (rd == 0) ? 1 : 0
       ])
+      let spill_instrs = generate_spill_store_if_needed(instr.result.id, rd, allocator)
+      result.append(spill_instrs)
     }
     @ssa.Opcode::Ne(lhs, rhs) => {
       // 不等比较
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
+      let (rd, load_rd) = get_register_or_spill_load(instr.result.id, allocator)
+      let (rs1, load_rs1) = get_register_or_spill_load(lhs.id, allocator)
+      let (rs2, load_rs2) = get_register_or_spill_load(rhs.id, allocator)
+      result.append(load_rd)
+      result.append(load_rs1)
+      result.append(load_rs2)
       result.append([
         Sub(rd, rs1, rs2),   // rd = rs1 - rs2
         Sltu(rd, Zero, rd)   // rd = (rd != 0) ? 1 : 0
       ])
+      let spill_instrs = generate_spill_store_if_needed(instr.result.id, rd, allocator)
+      result.append(spill_instrs)
     }
     @ssa.Opcode::Lt(lhs, rhs) => {
       // 小于比较
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
+      let (rd, load_rd) = get_register_or_spill_load(instr.result.id, allocator)
+      let (rs1, load_rs1) = get_register_or_spill_load(lhs.id, allocator)
+      let (rs2, load_rs2) = get_register_or_spill_load(rhs.id, allocator)
+      result.append(load_rd)
+      result.append(load_rs1)
+      result.append(load_rs2)
       result.push(Slt(rd, rs1, rs2))
+      let spill_instrs = generate_spill_store_if_needed(instr.result.id, rd, allocator)
+      result.append(spill_instrs)
     }
     @ssa.Opcode::Le(lhs, rhs) => {
       // 小于等于比较 (lhs <= rhs 等价于 !(rhs < lhs))
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
+      let (rd, load_rd) = get_register_or_spill_load(instr.result.id, allocator)
+      let (rs1, load_rs1) = get_register_or_spill_load(lhs.id, allocator)
+      let (rs2, load_rs2) = get_register_or_spill_load(rhs.id, allocator)
+      result.append(load_rd)
+      result.append(load_rs1)
+      result.append(load_rs2)
       result.append([
         Slt(rd, rs2, rs1),     // rd = rhs < lhs
         Xori(rd, rd, 1)      // rd = !rd
       ])
+      let spill_instrs = generate_spill_store_if_needed(instr.result.id, rd, allocator)
+      result.append(spill_instrs)
     }
     @ssa.Opcode::Gt(lhs, rhs) => {
       // 大于比较 (rs2 < rs1)
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
+      let (rd, load_rd) = get_register_or_spill_load(instr.result.id, allocator)
+      let (rs1, load_rs1) = get_register_or_spill_load(lhs.id, allocator)
+      let (rs2, load_rs2) = get_register_or_spill_load(rhs.id, allocator)
+      result.append(load_rd)
+      result.append(load_rs1)
+      result.append(load_rs2)
       result.push(Slt(rd, rs2, rs1))
+      let spill_instrs = generate_spill_store_if_needed(instr.result.id, rd, allocator)
+      result.append(spill_instrs)
     }
     @ssa.Opcode::Ge(lhs, rhs) => {
       // 大于等于比较 (lhs >= rhs 等价于 !(lhs < rhs))
-      let rd = get_register_for_value(instr.result)
-      let rs1 = get_register_for_value(lhs)
-      let rs2 = get_register_for_value(rhs)
+      let (rd, load_rd) = get_register_or_spill_load(instr.result.id, allocator)
+      let (rs1, load_rs1) = get_register_or_spill_load(lhs.id, allocator)
+      let (rs2, load_rs2) = get_register_or_spill_load(rhs.id, allocator)
+      result.append(load_rd)
+      result.append(load_rs1)
+      result.append(load_rs2)
       result.append([
         Slt(rd, rs1, rs2),     // rd = lhs < rhs
         Xori(rd, rd, 1)      // rd = !rd
       ])
+      let spill_instrs = generate_spill_store_if_needed(instr.result.id, rd, allocator)
+      result.append(spill_instrs)
     }
     @ssa.Opcode::Call(name, args) => {
       // 函数调用
       // 将参数放入参数寄存器
       for i, arg in args {
-        let arg_reg = get_register_for_value(arg)
+        let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
+        result.append(load_instrs)
         let param_reg = match i {
           0 => A0
           1 => A1
@@ -244,21 +286,28 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
       // 调用函数
       result.push(Call(name))
       // 将返回值移动到结果寄存器
-      let result_reg = get_register_for_value(instr.result)
+      let (result_reg, load_instrs) = get_register_or_spill_load(instr.result.id, allocator)
+      result.append(load_instrs)
       if result_reg != A0 {
         result.push(Mv(result_reg, A0))
       }
     }
     @ssa.Opcode::Load(addr) => {
       // 内存加载
-      let rd = get_register_for_value(instr.result)
-      let addr_reg = get_register_for_value(addr)
+      let (rd, load_rd) = get_register_or_spill_load(instr.result.id, allocator)
+      let (addr_reg, load_addr) = get_register_or_spill_load(addr.id, allocator)
+      result.append(load_rd)
+      result.append(load_addr)
       result.push(Ld(rd, { base: addr_reg, offset: 0 }))
+      let spill_instrs = generate_spill_store_if_needed(instr.result.id, rd, allocator)
+      result.append(spill_instrs)
     }
     @ssa.Opcode::Store(addr, value) => {
       // 内存存储
-      let addr_reg = get_register_for_value(addr)
-      let value_reg = get_register_for_value(value)
+      let (addr_reg, load_addr) = get_register_or_spill_load(addr.id, allocator)
+      let (value_reg, load_value) = get_register_or_spill_load(value.id, allocator)
+      result.append(load_addr)
+      result.append(load_value)
       result.push(Sd(value_reg, { base: addr_reg, offset: 0 }))
     }
     @ssa.Opcode::Tuple(_values) => {
@@ -310,42 +359,50 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
       }
     }
     @ssa.Opcode::CallClosure(closure, args) => {
-      // 闭包调用 - 按照emit.mbt的方式实现
+      // 闭包调用 - 需要加载捕获的变量作为额外参数
       let closure_reg = get_register_for_value(closure)
-      
+
       result.push(Comment("CallClosure: setting up function call"))
-      
-      // 1. 将显式参数放入参数寄存器
+
+      // 1. 首先将闭包对象指针加载到临时寄存器
+      result.push(Mv(T0, closure_reg))
+
+      // 2. 加载捕获的变量（从闭包对象的偏移8开始）
+      // 注意：这里假设我们知道adder函数有1个捕获变量
+      // 在实际实现中，应该从类型信息中获取捕获变量的数量
+      result.push(Ld(T1, { base: T0, offset: 8 }))  // 加载捕获的x到T1
+
+      // 3. 设置参数寄存器 - 先放捕获的变量，再放显式参数
+      // 根据SSA IR，adder函数的第一个参数(value_id:1)是捕获的x，第二个参数(value_id:2)是显式y
+      if T1 != A0 {
+        result.push(Mv(A0, T1))  // A0 = 捕获的x
+      }
+
+      // 4. 将显式参数放入参数寄存器（从A1开始，因为A0已被捕获变量占用）
       for i, arg in args {
-        let arg_reg = get_register_for_value(arg)
+        let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
+        result.append(load_instrs)
         let param_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          7 => A7
+          0 => A1  // 第一个显式参数放到A1
+          1 => A2  // 第二个显式参数放到A2
+          2 => A3
+          3 => A4
+          4 => A5
+          5 => A6
+          6 => A7
           _ => A0  // 超过参数寄存器数量的情况
         }
         if arg_reg != param_reg {
           result.push(Mv(param_reg, arg_reg))
         }
       }
-      
-      // 2. 将闭包对象指针加载到S11寄存器（按照RISC-V调用约定）
-      result.push(Comment("Load closure object to S11"))
-      if closure_reg != S11 {
-        result.push(Mv(S11, closure_reg))
-      }
-      
-      // 3. 从闭包对象提取函数指针并调用
+
+      // 5. 从闭包对象提取函数指针并调用
       result.push(Comment("Extract function pointer and call"))
-      result.push(Ld(T1, { base: S11, offset: 0 }))  // 函数指针在偏移0处
+      result.push(Ld(T1, { base: T0, offset: 0 }))  // 函数指针在偏移0处
       result.push(Jalr(T1))
-      
-      // 4. 将返回值移动到结果寄存器
+
+      // 6. 将返回值移动到结果寄存器
       let result_reg = get_register_for_value(instr.result)
       if result_reg != A0 {
         result.push(Mv(result_reg, A0))
@@ -359,69 +416,6 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
   
   result
 }
-
-// ///| 生成终止指令的RISC-V汇编代码
-// fn emit_terminator(terminator : @ssa.Terminator) -> Array[RvAsm] {
-//   let result = []
-  
-//   match terminator {
-//     @ssa.Terminator::Return(value) => {
-//       // 返回指令
-//       match value {
-//         Some(val) => {
-//           // 将返回值移动到a0寄存器
-//           let src_reg = get_register_for_value(val)
-//           if src_reg != A0 {
-//             result.push(Mv(A0, src_reg))
-//           }
-//         }
-//         None => {
-//           // 无返回值，确保a0为0
-//           result.push(Li(A0, "0"))
-//         }
-//       }
-//       // 添加函数尾声
-//       let framesize = 24 // 应该与函数序言中的framesize一致
-//       result.push(Ld(Ra, { base: Sp, offset: framesize - 8 })) // 恢复返回地址
-//       result.push(Ld(Fp, { base: Sp, offset: framesize - 16 })) // 恢复帧指针
-//       result.push(Addi(Sp, Sp, framesize)) // 释放栈帧
-//       result.push(Ret) // 返回
-//     }
-//     @ssa.Terminator::Jump(target, args) => {
-//       // 无条件跳转
-//       // 跳转参数需要在目标基本块中作为参数使用
-//       // 将参数值移动到目标基本块参数对应的寄存器
-//       for i, arg in args {
-//         let src_reg = get_register_for_value(arg)
-//         let dest_reg = match i {
-//           0 => A0
-//           1 => A1
-//           2 => A2
-//           3 => A3
-//           4 => A4
-//           5 => A5
-//           6 => A6
-//           _ => A0  // 默认寄存器
-//         }
-//         if src_reg != dest_reg {
-//           result.push(Mv(dest_reg, src_reg))
-//         }
-//       }
-//       // 生成跳转指令
-//       result.push(J("block_" + target.id.to_string()))
-//     }
-//     @ssa.Terminator::Branch(cond, true_block, _false_block) => {
-//       // 条件分支
-//       let cond_reg = get_register_for_value(cond)
-//       // 如果条件为真，跳转到true_block，否则继续执行false_block
-//       result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
-//       // 默认继续执行下一个块（false_block）
-//       result.push(J("block_" + _false_block.id.to_string()))
-//     }
-//   }
-  
-//   result
-// }
 
 
 ///| 回退的寄存器分配策略

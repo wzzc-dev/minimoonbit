@@ -262,7 +262,7 @@ pub fn linear_scan_register_allocation(
 
   // 按开始位置排序区间
   let sorted_intervals = intervals.copy()
-  // sorted_intervals.sort(fn(a, b) { a.start - b.start })
+  sorted_intervals.sort_by(fn(a, b) { a.start - b.start })
 
   // 为每个区间分配寄存器
   for interval in sorted_intervals {

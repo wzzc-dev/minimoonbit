@@ -1,7 +1,5 @@
 ///| 静态单赋值（SSA）中间表示
 
-///| 使用基本块参数而非phi函数来实现SSA
-
 ///|
 /// SSA值标识符
 pub(all) struct Value {
@@ -78,7 +76,7 @@ pub(all) struct Instruction {
 /// 基本块
 pub(all) struct BasicBlock {
   id : Block // 基本块标识符
-  params : Array[Value] // 基本块参数（替代phi函数）
+  params : Array[Value] // 基本块参数
   instructions : Array[Instruction] // 指令序列
   terminator : Terminator // 终止指令
 } derive(Show)
