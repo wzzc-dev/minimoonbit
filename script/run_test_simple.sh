@@ -3,8 +3,9 @@
 # 定义输出文件的前缀
 OUT_PREFIX="out"
 
-# 初始化通过测试计数器
+# 初始化通过测试计数器和成功测试列表
 PASSED_COUNT=0
+PASSED_TESTS=()
 
 # 找到所有 .mbt 结尾的文件并循环处理
 for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
@@ -29,6 +30,8 @@ for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
       echo "Test $MBT_FILE passed: Output matches $ANS_FILE"
       # 增加通过测试计数器
       ((PASSED_COUNT++))
+      # 添加到成功测试列表
+      PASSED_TESTS+=("$BASE_NAME")
     else
       echo "Test $MBT_FILE failed: Output differs from $ANS_FILE"
       echo "Differences:"
@@ -44,3 +47,13 @@ done
 
 # 输出通过测试的总数
 echo "All files processed. Total passed tests: $PASSED_COUNT"
+
+# 输出所有成功的测试用例
+if [ $PASSED_COUNT -gt 0 ]; then
+  echo "Successful test cases:"
+  for test in "${PASSED_TESTS[@]}"; do
+    echo "  - $test"
+  done
+else
+  echo "No tests passed."
+fi

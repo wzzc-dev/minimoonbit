@@ -324,61 +324,89 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
       result.push(Mv(rd, tuple_reg)) // 临时实现
     }
     @ssa.Opcode::MakeClosure(func_name, free_vars) => {
-      // 闭包创建 - 按照emit.mbt的方式实现
+      // 闭包创建 - 总是创建闭包对象，但对无自由变量的情况做特殊标记
       let result_reg = get_register_for_value(instr.result)
       result.push(Comment("MakeClosure: " + func_name))
-      
+
+      // 总是创建闭包对象
+      // 1. 计算需要的内存大小 (函数指针 + 自由变量)
+      let size = if free_vars.length() * 8 + 8 < 16 { 16 } else { free_vars.length() * 8 + 8 }
+
+      // 2. 调用 malloc 分配内存
+      result.push(Li(A0, size.to_string()))
+      result.push(Call(Label("minimbt_malloc")))
+
+      // 3. 存储函数指针到闭包对象的偏移0处
+      result.push(La(T0, Label(func_name)))
+      result.push(Sd(T0, { base: A0, offset: 0 }))
+
       if free_vars.length() > 0 {
-        // 有自由变量，创建闭包对象
-        // 1. 计算需要的内存大小 (函数指针 + 自由变量)
-        let size = if free_vars.length() * 8 + 8 < 16 { 16 } else { free_vars.length() * 8 + 8 }
-        
-        // 2. 调用 malloc 分配内存
-        result.push(Li(A0, size.to_string()))
-        result.push(Call(Label("minimbt_malloc")))
-        
-        // 3. 存储函数指针到闭包对象的偏移0处
-        result.push(La(T0, Label(func_name)))
-        result.push(Sd(T0, { base: A0, offset: 0 }))
-        
-        // 4. 存储捕获的自由变量
+        // 有自由变量，存储它们
         for i, free_var in free_vars {
           // 获取自由变量的寄存器
           let var_reg = get_register_for_value(free_var)
           // 存储到闭包对象的偏移 (i+1)*8 处
           result.push(Sd(var_reg, { base: A0, offset: (i + 1) * 8 }))
         }
-        
-        // 5. 将闭包对象指针移动到结果寄存器
-        if result_reg != A0 {
-          result.push(Mv(result_reg, A0))
-        }
       } else {
-        // 没有自由变量，直接返回函数指针
-        result.push(La(result_reg, Label(func_name)))
+        // 没有自由变量，存储特殊标记值0到偏移8处
+        result.push(Li(T1, "0"))
+        result.push(Sd(T1, { base: A0, offset: 8 }))
+      }
+
+      // 4. 将闭包对象指针移动到结果寄存器
+      if result_reg != A0 {
+        result.push(Mv(result_reg, A0))
       }
     }
     @ssa.Opcode::CallClosure(closure, args) => {
-      // 闭包调用 - 需要加载捕获的变量作为额外参数
+      // 闭包调用 - 智能处理捕获变量和显式参数
       let closure_reg = get_register_for_value(closure)
+
+      // 生成唯一标签以避免冲突
+      let label_suffix = instr.result.id.to_string()
 
       result.push(Comment("CallClosure: setting up function call"))
 
       // 1. 首先将闭包对象指针加载到临时寄存器
       result.push(Mv(T0, closure_reg))
 
-      // 2. 加载捕获的变量（从闭包对象的偏移8开始）
-      // 注意：这里假设我们知道adder函数有1个捕获变量
-      // 在实际实现中，应该从类型信息中获取捕获变量的数量
-      result.push(Ld(T1, { base: T0, offset: 8 }))  // 加载捕获的x到T1
+      // 2. 加载偏移8处的值，检查是否为特殊标记0
+      result.push(Ld(T1, { base: T0, offset: 8 }))
 
-      // 3. 设置参数寄存器 - 先放捕获的变量，再放显式参数
-      // 根据SSA IR，adder函数的第一个参数(value_id:1)是捕获的x，第二个参数(value_id:2)是显式y
-      if T1 != A0 {
-        result.push(Mv(A0, T1))  // A0 = 捕获的x
+      // 3. 检查是否为特殊标记值0（表示无捕获变量）
+      result.push(Li(T2, "0"))
+      result.push(Bne(T1, T2, Label("has_captured_vars_" + label_suffix)))
+
+      // 无捕获变量的情况
+      result.push(Comment("No captured vars - direct function call"))
+      // 将显式参数放入参数寄存器（从A0开始）
+      for i, arg in args {
+        let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
+        result.append(load_instrs)
+        let param_reg = match i {
+          0 => A0  // 第一个显式参数放到A0
+          1 => A1  // 第二个显式参数放到A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          7 => A7
+          _ => A0  // 超过参数寄存器数量的情况
+        }
+        if arg_reg != param_reg {
+          result.push(Mv(param_reg, arg_reg))
+        }
       }
+      result.push(J(Label("call_function_" + label_suffix)))
 
-      // 4. 将显式参数放入参数寄存器（从A1开始，因为A0已被捕获变量占用）
+      // 有捕获变量的情况
+      result.push(Label("has_captured_vars_" + label_suffix))
+      result.push(Comment("Has captured vars - load them first"))
+      // 将捕获变量放到A0
+      result.push(Mv(A0, T1))
+      // 将显式参数放入参数寄存器（从A1开始）
       for i, arg in args {
         let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
         result.append(load_instrs)
@@ -397,12 +425,13 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
         }
       }
 
-      // 5. 从闭包对象提取函数指针并调用
+      // 4. 调用函数
+      result.push(Label("call_function_" + label_suffix))
       result.push(Comment("Extract function pointer and call"))
       result.push(Ld(T1, { base: T0, offset: 0 }))  // 函数指针在偏移0处
       result.push(Jalr(T1))
 
-      // 6. 将返回值移动到结果寄存器
+      // 5. 将返回值移动到结果寄存器
       let result_reg = get_register_for_value(instr.result)
       if result_reg != A0 {
         result.push(Mv(result_reg, A0))
