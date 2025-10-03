@@ -5,7 +5,7 @@
 ///|
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
-  @util.logger("closure ir: " + input.to_json().stringify())
+  // @util.logger("closure ir: " + input.to_json().stringify())
   // 初始化SSA程序
   let functions = []
 
@@ -76,6 +76,7 @@ fn convert_function(fundef : @closure.FuncDef) -> Function {
     blocks,
     block_map: @immut/hashmap.new(), // 块映射，用于控制流
     var_env: var_env, // 包含参数和自由变量的环境
+    func_env: @immut/hashmap.new(), // 函数环境，初始为空
   }
   let result = convert_expr(context, fundef.body)
   
@@ -134,6 +135,7 @@ fn convert_main_function(body : @closure.Expr) -> Function {
     blocks,
     block_map: @immut/hashmap.new(), // 块映射，用于控制流
     var_env: @immut/hashmap.new(), // 变量环境
+    func_env: @immut/hashmap.new(), // 函数环境
   }
   // 转换表达式
   let result = convert_expr(context, body)
@@ -174,6 +176,8 @@ priv struct Context {
   block_map : @immut/hashmap.HashMap[Int, BasicBlock]
   // 添加变量环境：Name到Value的映射
   var_env : @immut/hashmap.HashMap[@types.Name, Value]
+  // 添加函数环境：函数名到函数类型的映射
+  func_env : @immut/hashmap.HashMap[String, @types.Type]
 } derive(Show)
 
 ///|
@@ -232,6 +236,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: current_context.block_map,
         var_env: current_context.var_env,
+        func_env: current_context.func_env,
       }
       
       ExprResult::{ value: Some(result_value), context: updated_context }
@@ -278,6 +283,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
           blocks: updated_blocks,
           block_map: current_context.block_map,
           var_env: updated_var_env,
+          func_env: current_context.func_env,
         }
       }
 
@@ -318,6 +324,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context.block_map,
         var_env: context.var_env,
+        func_env: context.func_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -348,7 +355,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         current_block: updated_block,
         blocks: updated_blocks,
         block_map: context.block_map,
-        var_env: context.var_env
+        var_env: context.var_env,
+        func_env: context.func_env
       }
       ExprResult::{ value: Some(array_value), context: updated_context }
     }
@@ -365,6 +373,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: context.blocks,
         block_map: context.block_map,
         var_env: updated_var_env,
+        func_env: context.func_env,
       }
 
       // 赋值表达式返回Unit类型
@@ -428,6 +437,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: updated_block_map,
         var_env: context.var_env,
+        func_env: context.func_env,
       }
 
       let cond_result = convert_expr(header_context, cond_expr)
@@ -448,6 +458,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: cond_context.blocks,
         block_map: cond_context.block_map,
         var_env: context.var_env, // 循环体不改变变量环境
+        func_env: context.func_env,
       }
 
       let body_result = convert_expr(body_context, body_expr)
@@ -469,6 +480,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: final_blocks,
         block_map: final_body_context.block_map,
         var_env: context.var_env, // 保持原始变量环境
+        func_env: context.func_env,
       }
 
       // While循环返回Unit类型
@@ -502,6 +514,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context.block_map,
         var_env: context.var_env,
+        func_env: context.func_env,
       }
       ExprResult::{ value: Some(array_value), context: updated_context }
     }
@@ -546,6 +559,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context.block_map,
         var_env: context.var_env,
+        func_env: context.func_env,
       }
 
       // ArrayPut是表达式，返回Unit类型
@@ -591,6 +605,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context.block_map,
         var_env: context.var_env,
+        func_env: context.func_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -623,6 +638,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context.block_map,
         var_env: context.var_env, // 变量环境
+        func_env: context.func_env,
       }
       ExprResult::{ value: Some(value), context: updated_context }
     }
@@ -655,6 +671,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context.block_map,
         var_env: context.var_env, // 变量环境
+        func_env: context.func_env,
       }
       ExprResult::{ value: Some(value), context: updated_context }
     }
@@ -702,6 +719,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context1.block_map,
         var_env: context1.var_env,
+        func_env: context1.func_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -749,6 +767,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context1.block_map,
         var_env: context1.var_env,
+        func_env: context1.func_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -781,6 +800,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context.block_map,
         var_env: context.var_env, // 变量环境
+        func_env: context.func_env,
       }
       ExprResult::{ value: Some(value), context: updated_context }
     }
@@ -843,6 +863,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context.block_map,
         var_env: context.var_env, // 变量环境
+        func_env: context.func_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -934,7 +955,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         current_block: then_block,
         blocks: updated_blocks,
         block_map: updated_block_map,
-        var_env: context2.var_env  // 保持变量环境
+        var_env: context2.var_env,  // 保持变量环境
+        func_env: context2.func_env,
       }
 
       // 转换then分支
@@ -959,7 +981,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         current_block: else_block,
         blocks: then_context.blocks,
         block_map: then_context.block_map,
-        var_env: context2.var_env  // 保持变量环境
+        var_env: context2.var_env,  // 保持变量环境
+        func_env: context2.func_env,
       }
 
       // 转换else分支
@@ -1020,7 +1043,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         current_block: updated_merge_block,
         blocks: final_blocks,
         block_map: final_else_context.block_map,
-        var_env: context2.var_env  // 保持变量环境
+        var_env: context2.var_env,  // 保持变量环境
+        func_env: context2.func_env,
       }
       
       ExprResult::{ value: result_value, context: final_context }
@@ -1050,7 +1074,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
             current_block: context1.current_block,
             blocks: context1.blocks,
             block_map: context1.block_map,
-            var_env: updated_var_env
+            var_env: updated_var_env,
+            func_env: context1.func_env
           }
           
           // 计算e2，使用更新后的环境
@@ -1084,21 +1109,30 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
 
       // 根据函数名确定返回类型
-      let return_type = match label.0 {
-        "minimbt_create_array" | "minimbt_create_float_array" | "minimbt_create_ptr_array" => {
-          // 数组创建函数，返回数组类型
-          // 元素类型取决于函数名和参数
-          match label.0 {
-            "minimbt_create_array" => Type::Array(Type::Int)
-            "minimbt_create_float_array" => Type::Array(Type::Float)
-            "minimbt_create_ptr_array" => {
-              // 指针数组，元素类型是指针
-              Type::Array(Type::Pointer(Type::Int))
+      let return_type = {
+        // 优先从Context的函数环境中查找
+        match current_context.func_env.get(label.0) {
+          Some(func_type) => {
+            // 从函数环境中找到函数类型，提取返回类型
+            match func_type {
+              @types.Type::Fun(_, ret_type) => convert_type_from_types(ret_type)
+              _ => Type::Int // 默认返回Int
             }
-            _ => Type::Array(Type::Int) // 默认
+          }
+          None => {
+            // 从外部环境中查找类型信息
+            match @typing.extenv.get(label.0) {
+              Some(func_type) => {
+                // 从外部环境中找到函数类型，提取返回类型
+                match func_type {
+                  @types.Type::Fun(_, ret_type) => convert_type_from_types(ret_type)
+                  _ => Type::Int // 默认返回Int
+                }
+              }
+              None => Type::Int // 默认返回Int
+            }
           }
         }
-        _ => Type::Int // 其他函数默认返回Int
       }
 
       let result_value = Value::{ id: new_value_id(), ty: return_type }
@@ -1130,6 +1164,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: current_context.block_map,
         var_env: current_context.var_env, // 变量环境
+        func_env: current_context.func_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -1173,6 +1208,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: context.block_map,
         var_env: updated_var_env, // 包含新绑定的变量环境
+        func_env: context.func_env,
       }
 
       let result = convert_expr(intermediate_context, e)
@@ -1227,6 +1263,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         blocks: updated_blocks,
         block_map: current_context.block_map,
         var_env: current_context.var_env, // 变量环境
+        func_env: current_context.func_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -1248,6 +1285,27 @@ fn convert_type(ty : @closure.LowType) -> Type {
     Tuple(elements) => Type::Tuple(elements.map(convert_type))
     Array(element) => Type::Array(convert_type(element))
     Ptr => Type::Pointer(Type::Int)
+  }
+}
+
+///|
+/// 从 @types.Type 转换到 SSA Type
+fn convert_type_from_types(ty : @types.Type) -> Type {
+  match ty {
+    @types.Type::Unit => Type::Unit
+    @types.Type::Bool => Type::Bool
+    @types.Type::Int => Type::Int
+    @types.Type::Double => Type::Float
+    @types.Type::Fun(args, ret) =>
+      Type::Function(args.map(convert_type_from_types), convert_type_from_types(ret))
+    @types.Type::Tuple(elements) => Type::Tuple(elements.map(convert_type_from_types))
+    @types.Type::Array(element) => Type::Array(convert_type_from_types(element))
+    @types.Type::Ptr => Type::Pointer(Type::Int)
+    @types.Type::Var(_) => Type::Int // 类型变量，默认为Int
+    @types.Type::UserDefineType(_, _) => Type::Int // 用户自定义类型，默认为Int
+    @types.Type::Struct(_, _) => Type::Int // 结构体，默认为Int
+    @types.Type::Enum(_, _) => Type::Int // 枚举，默认为Int
+    @types.Type::ArrayData(_) => Type::Array(Type::Int) // 静态数组数据，默认Int数组
   }
 }
 

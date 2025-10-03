@@ -24,9 +24,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
   let live_intervals = compute_live_intervals_for_function(func)
-  // @util.logger("live_intervals: " + live_intervals.to_string())
+  @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(live_intervals)
-  // @util.logger("allocator: " + allocator.to_string())
+  @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
   
   // 计算栈帧大小（包括溢出槽）
@@ -116,23 +116,12 @@ fn emit_binary_op_with_regalloc(result_val : @ssa.Value, lhs : @ssa.Value, rhs :
   let (rs1, load1) = get_register_or_spill_load(lhs.id, allocator)
   let (rs2, load2) = get_register_or_spill_load(rhs.id, allocator)
   let (rd, load_rd) = get_register_or_spill_load(result_val.id, allocator)
-
+  
   instrs.append(load1)
   instrs.append(load2)
   instrs.append(load_rd)
-
-  // 如果目标寄存器与源寄存器冲突，或源寄存器之间冲突，使用临时寄存器
-  if rd == rs1 || rd == rs2 || rs1 == rs2 {
-    // 选择一个不与rs1、rs2、rd冲突的临时寄存器
-    let temp_reg = match (rs1, rs2, rd) {
-      (T0, _, _) | (_, T0, _) | (_, _, T0) => T1
-      _ => T0
-    }
-    instrs.push(op(temp_reg, rs1, rs2))
-    instrs.push(Mv(rd, temp_reg))
-  } else {
-    instrs.push(op(rd, rs1, rs2))
-  }
+  
+  instrs.push(op(rd, rs1, rs2))
 
   let spill_instrs = generate_spill_store_if_needed(result_val.id, rd, allocator)
   instrs.append(spill_instrs)
