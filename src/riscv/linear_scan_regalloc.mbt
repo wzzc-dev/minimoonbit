@@ -437,25 +437,10 @@ pub fn get_register_or_spill_load(
           (temp_reg, [load_instr])
         }
         None => {
-          // 如果都没找到，使用简单的基于ID的分配作为回退
-          let reg = match value_id % 16 {
-            0 => T0
-            1 => T1
-            2 => T2
-            3 => T3
-            4 => T4
-            5 => T5
-            6 => T6
-            7 => S2
-            8 => S3
-            9 => S4
-            10 => S5
-            11 => S6
-            12 => S7
-            13 => S8
-            14 => S9
-            _ => S10
-          }
+          // 如果都没找到，使用更智能的分配策略
+          // 优先使用临时寄存器，然后是通用寄存器
+          let available_regs = [T0, T1, T2, T3, T4, T5, T6, S2, S3, S4, S5, S6, S7, S8, S9, S10]
+          let reg = available_regs[value_id % available_regs.length()]
           (reg, [])
         }
       }

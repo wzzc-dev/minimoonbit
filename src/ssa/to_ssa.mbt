@@ -11,6 +11,9 @@ pub fn to_ssa(input : @closure.Program) -> Ssa {
 
   // 转换每个函数定义
   for fundef in input.fundefs {
+    if fundef.old_name.to_string() == "inprod" {
+      @util.die("main function is not supported")
+    }
     if not(@typing.extenv.contains(fundef.old_name.to_string())) {
       let ssa_func = convert_function(fundef)
       // @util.logger("convert_function: " + ssa_func.to_json().stringify())
@@ -345,8 +348,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         current_block: updated_block,
         blocks: updated_blocks,
         block_map: context.block_map,
-        var_env: context.var_env,
-        in_loop_condition: context.in_loop_condition,
+        var_env: context.var_env
       }
       ExprResult::{ value: Some(array_value), context: updated_context }
     }
@@ -665,13 +667,13 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 创建结果值和指令 (整数取负: 0 - x)
       let result_value = Value::{ id: new_value_id(), ty: Type::Int }
       let zero_value = Value::{ id: new_value_id(), ty: Type::Int }
-      
+
       // 先创建常量0
       let zero_instruction = Instruction::{
         result: zero_value,
         opcode: Opcode::ConstInt(0),
       }
-      
+
       // 然后执行减法 (0 - operand)
       let neg_instruction = Instruction::{
         result: result_value,
@@ -712,13 +714,13 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 创建结果值和指令 (浮点取负: 0.0 - x)
       let result_value = Value::{ id: new_value_id(), ty: Type::Float }
       let zero_value = Value::{ id: new_value_id(), ty: Type::Float }
-      
+
       // 先创建浮点常量0.0
       let zero_instruction = Instruction::{
         result: zero_value,
         opcode: Opcode::ConstFloat(0.0),
       }
-      
+
       // 然后执行浮点减法 (0.0 - operand)
       let neg_instruction = Instruction::{
         result: result_value,

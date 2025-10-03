@@ -121,9 +121,13 @@ fn emit_binary_op_with_regalloc(result_val : @ssa.Value, lhs : @ssa.Value, rhs :
   instrs.append(load2)
   instrs.append(load_rd)
 
-  // 如果目标寄存器与源寄存器冲突，使用临时寄存器
-  if rd == rs1 || rd == rs2 {
-    let temp_reg = T0
+  // 如果目标寄存器与源寄存器冲突，或源寄存器之间冲突，使用临时寄存器
+  if rd == rs1 || rd == rs2 || rs1 == rs2 {
+    // 选择一个不与rs1、rs2、rd冲突的临时寄存器
+    let temp_reg = match (rs1, rs2, rd) {
+      (T0, _, _) | (_, T0, _) | (_, _, T0) => T1
+      _ => T0
+    }
     instrs.push(op(temp_reg, rs1, rs2))
     instrs.push(Mv(rd, temp_reg))
   } else {
