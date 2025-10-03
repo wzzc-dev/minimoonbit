@@ -356,8 +356,9 @@ fn expire_old_intervals(
       match interval.reg {
         Some(reg) => {
           allocator.available_regs.push(reg)
-          // 从value_to_reg映射中移除该值
-          allocator.value_to_reg = allocator.value_to_reg.remove(interval.value_id)
+          // 注意：不要从value_to_reg映射中移除该值！
+          // 寄存器分配应该在整个函数期间保持有效
+          // 活跃区间只用于跟踪当前使用中的寄存器，不用于最终的分配映射
         }
         None => ()
       }
@@ -398,8 +399,8 @@ fn spill_at_interval(
     // 溢出候选区间，将其寄存器分配给当前区间
     match spill_candidate.reg {
       Some(reg) => {
-        // 从value_to_reg中移除被溢出的值
-        allocator.value_to_reg = allocator.value_to_reg.remove(spill_candidate.value_id)
+        // 注意：不要从value_to_reg中移除被溢出的值！
+        // 寄存器分配应该保持有效，即使值被溢出到内存
         // 将寄存器分配给当前区间
         allocator.value_to_reg = allocator.value_to_reg.add(
           interval.value_id,
@@ -461,11 +462,16 @@ pub fn get_register_or_spill_load(
   allocator : RegisterAllocator,
 ) -> (Reg, Array[RvAsm]) {
   match allocator.value_to_reg.get(value_id) {
-    Some(reg) => (reg, []) // 直接使用分配的寄存器
+    Some(reg) => {
+      // 值有寄存器分配，直接使用
+      // 即使值也被溢出，优先使用寄存器
+      (reg, [])
+    }
     None =>
-      // 值被溢出到内存，需要加载
+      // 值没有寄存器分配，检查是否被溢出
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
+          // 值被溢出到内存，需要加载
           let temp_reg = T0 // 使用临时寄存器
           let load_instr = Ld(temp_reg, {
             base: Fp,
