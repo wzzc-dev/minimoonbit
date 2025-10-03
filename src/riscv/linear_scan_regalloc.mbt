@@ -32,15 +32,27 @@ struct RegisterAllocator {
 pub fn compute_live_intervals_for_function(
   func : @ssa.Function,
 ) -> Array[LiveInterval] {
-  let intervals = @immut/hashmap.new()
+  let mut intervals = @immut/hashmap.new()
   let mut instruction_count = 0
+
+  // 首先处理函数参数，它们在函数开始时就是活跃的
+  for param in func.params {
+    let value_id = param.id
+    intervals = intervals.add(value_id, {
+      value_id,
+      start: 0,  // 函数开始时就活跃
+      end: 0,    // 将在使用时更新
+      reg: None,
+      spill_slot: None,
+    })
+  }
 
   // 遍历所有基本块和指令，计算每个值的定义和使用位置
   for block in func.blocks {
     // 基本块参数在块开始时定义
     for param in block.params {
       let value_id = param.id
-      let _ = intervals.add(value_id, {
+      intervals = intervals.add(value_id, {
         value_id,
         start: instruction_count,
         end: instruction_count,
@@ -55,7 +67,7 @@ pub fn compute_live_intervals_for_function(
     for instr in block.instructions {
       // 记录当前指令定义的值
       let def_value_id = instr.result.id
-      let _ = intervals.add(def_value_id, {
+      intervals = intervals.add(def_value_id, {
         value_id: def_value_id,
         start: instruction_count,
         end: instruction_count,
@@ -68,18 +80,19 @@ pub fn compute_live_intervals_for_function(
       for used_id in used_value_ids {
         match intervals.get(used_id) {
           Some(interval) => {
-            let _ = intervals.add(used_id, {
+            intervals = intervals.add(used_id, {
               ..interval,
-              end: instruction_count,
+              end: instruction_count + 1,  // 值在使用后还需要活跃到下一条指令
             })
 
           }
           None => {
             // 如果没有找到定义，可能是函数参数或常量，创建一个区间
-            let _ = intervals.add(used_id, {
+            // 常量应该从当前指令开始活跃（如果还没有区间的话）
+            intervals = intervals.add(used_id, {
               value_id: used_id,
-              start: 0,
-              end: instruction_count,
+              start: instruction_count,  // 从当前指令开始活跃
+              end: instruction_count + 1,  // 值在使用后还需要活跃到下一条指令
               reg: None,
               spill_slot: None,
             })
@@ -95,14 +108,14 @@ pub fn compute_live_intervals_for_function(
     for used_id in term_uses {
       match intervals.get(used_id) {
         Some(interval) => {
-          let _ = intervals.add(used_id, { ..interval, end: instruction_count })
+          intervals = intervals.add(used_id, { ..interval, end: instruction_count + 1 })
 
         }
         None => {
-          let _ = intervals.add(used_id, {
+          intervals = intervals.add(used_id, {
             value_id: used_id,
-            start: 0,
-            end: instruction_count,
+            start: instruction_count,  // 从当前指令开始活跃
+            end: instruction_count + 1,
             reg: None,
             spill_slot: None,
           })
@@ -115,7 +128,9 @@ pub fn compute_live_intervals_for_function(
 
   // 将HashMap转换为Array
   let result = []
-  intervals.each(fn(_key, interval) { result.push(interval) })
+  intervals.each(fn(_key, interval) {
+    result.push(interval)
+  })
   result
 }
 
@@ -199,8 +214,8 @@ fn get_instruction_uses_ids(instr : @ssa.Instruction) -> Array[Int] {
       }
     @ssa.Opcode::GetElement(tuple, _) => uses.push(tuple.id)
     @ssa.Opcode::MakeClosure(_, free_vars) =>
-      for _var in free_vars {
-        // uses.push(var.0.id)
+      for free_var in free_vars {
+        uses.push(free_var.id)
       }
     @ssa.Opcode::CallClosure(closure, args) => {
       uses.push(closure.id)
@@ -235,6 +250,7 @@ pub fn linear_scan_register_allocation(
   intervals : Array[LiveInterval],
 ) -> RegisterAllocator {
   // 初始化寄存器分配器
+  // 优先使用调用者保存寄存器（t0-t6），因为它们不需要在函数调用间保存
   let allocator = {
     available_regs: [
       T0,
@@ -244,6 +260,8 @@ pub fn linear_scan_register_allocation(
       T4,
       T5,
       T6,
+      // 将调用者保存寄存器（caller-saved）放在前面
+      // 只有在没有可用寄存器时才使用被调用者保存寄存器（callee-saved）
       S2,
       S3,
       S4,
@@ -299,7 +317,11 @@ fn expire_old_intervals(
     if interval.end < current_pos {
       // 区间已结束，释放寄存器
       match interval.reg {
-        Some(reg) => allocator.available_regs.push(reg)
+        Some(reg) => {
+          allocator.available_regs.push(reg)
+          // 从value_to_reg映射中移除该值
+          allocator.value_to_reg = allocator.value_to_reg.remove(interval.value_id)
+        }
         None => ()
       }
       // 从活跃列表中移除
@@ -339,6 +361,9 @@ fn spill_at_interval(
     // 溢出候选区间，将其寄存器分配给当前区间
     match spill_candidate.reg {
       Some(reg) => {
+        // 从value_to_reg中移除被溢出的值
+        allocator.value_to_reg = allocator.value_to_reg.remove(spill_candidate.value_id)
+        // 将寄存器分配给当前区间
         allocator.value_to_reg = allocator.value_to_reg.add(
           interval.value_id,
           reg,

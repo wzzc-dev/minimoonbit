@@ -24,8 +24,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
   let live_intervals = compute_live_intervals_for_function(func)
+  @util.logger("live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(live_intervals)
-  
+  @util.logger("allocator: " + allocator.to_string())
   let asm_instructions = []
   
   // 计算栈帧大小（包括溢出槽）
@@ -37,6 +38,27 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   asm_instructions.push(Sd(Ra, { base: Sp, offset: framesize - 8 })) // 保存返回地址
   asm_instructions.push(Sd(Fp, { base: Sp, offset: framesize - 16 })) // 保存帧指针
   asm_instructions.push(Addi(Fp, Sp, framesize)) // 设置帧指针
+
+  // 保存函数中使用的被调用者保存寄存器（callee-saved registers）
+  let saved_callee_regs = []
+  allocator.value_to_reg.each(fn(_, reg) {
+    // 检查是否是被调用者保存的寄存器（s0-s11）
+    match reg {
+      S2 | S3 | S4 | S5 | S6 | S7 | S8 | S9 | S10 | S11 => {
+        if not(saved_callee_regs.contains(reg)) {
+          saved_callee_regs.push(reg)
+        }
+      }
+      _ => ()
+    }
+  })
+
+  // 保存被调用者保存的寄存器到栈上
+  let mut offset = 24
+  for reg in saved_callee_regs {
+    asm_instructions.push(Sd(reg, { base: Fp, offset: -offset }))
+    offset += 8
+  }
   
   // 设置函数参数到对应的寄存器
   for i, param in func.params {
@@ -325,7 +347,8 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
     }
     @ssa.Opcode::MakeClosure(func_name, free_vars) => {
       // 闭包创建 - 总是创建闭包对象，但对无自由变量的情况做特殊标记
-      let result_reg = get_register_for_value(instr.result)
+      let (result_reg, load_instrs) = get_register_or_spill_load(instr.result.id, allocator)
+      result.append(load_instrs)
       result.push(Comment("MakeClosure: " + func_name))
 
       // 总是创建闭包对象
@@ -344,7 +367,8 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
         // 有自由变量，存储它们
         for i, free_var in free_vars {
           // 获取自由变量的寄存器
-          let var_reg = get_register_for_value(free_var)
+          let (var_reg, load_instrs) = get_register_or_spill_load(free_var.id, allocator)
+          result.append(load_instrs)
           // 存储到闭包对象的偏移 (i+1)*8 处
           result.push(Sd(var_reg, { base: A0, offset: (i + 1) * 8 }))
         }
@@ -358,10 +382,15 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
       if result_reg != A0 {
         result.push(Mv(result_reg, A0))
       }
+
+      // 如果结果需要溢出，生成存储指令
+      let spill_instrs = generate_spill_store_if_needed(instr.result.id, result_reg, allocator)
+      result.append(spill_instrs)
     }
     @ssa.Opcode::CallClosure(closure, args) => {
       // 闭包调用 - 智能处理捕获变量和显式参数
-      let closure_reg = get_register_for_value(closure)
+      let (closure_reg, load_closure_instrs) = get_register_or_spill_load(closure.id, allocator)
+      result.append(load_closure_instrs)
 
       // 生成唯一标签以避免冲突
       let label_suffix = instr.result.id.to_string()
@@ -432,10 +461,15 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
       result.push(Jalr(T1))
 
       // 5. 将返回值移动到结果寄存器
-      let result_reg = get_register_for_value(instr.result)
+      let (result_reg, load_result_instrs) = get_register_or_spill_load(instr.result.id, allocator)
+      result.append(load_result_instrs)
       if result_reg != A0 {
         result.push(Mv(result_reg, A0))
       }
+
+      // 如果结果需要溢出，生成存储指令
+      let spill_instrs = generate_spill_store_if_needed(instr.result.id, result_reg, allocator)
+      result.append(spill_instrs)
     }
     _ => {
       // 默认情况下，使用简单的寄存器分配策略
@@ -539,6 +573,28 @@ fn emit_terminator_with_regalloc(terminator : @ssa.Terminator, allocator : Regis
         }
       }
       let framesize = 24 + allocator.next_spill_slot
+
+      // 恢复被调用者保存的寄存器
+      let saved_callee_regs = []
+      allocator.value_to_reg.each(fn(_, reg) {
+        // 检查是否是被调用者保存的寄存器（s0-s11）
+        match reg {
+          S2 | S3 | S4 | S5 | S6 | S7 | S8 | S9 | S10 | S11 => {
+            if not(saved_callee_regs.contains(reg)) {
+              saved_callee_regs.push(reg)
+            }
+          }
+          _ => ()
+        }
+      })
+
+      // 恢复被调用者保存的寄存器从栈上
+      let mut offset = 24
+      for reg in saved_callee_regs {
+        result.push(Ld(reg, { base: Fp, offset: -offset }))
+        offset += 8
+      }
+
       result.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
       result.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
       result.push(Addi(Sp, Sp, framesize))
