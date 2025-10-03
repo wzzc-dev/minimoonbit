@@ -200,6 +200,28 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
       let rs2 = get_float_register_for_value(rhs)
       result.push(FdivD(rd, rs1, rs2))
     }
+    @ssa.Opcode::FMod(lhs, rhs) => {
+      // 浮点取模运算，使用库函数实现
+      let rd = get_float_register_for_value(instr.result)
+      let rs1 = get_float_register_for_value(lhs)
+      let rs2 = get_float_register_for_value(rhs)
+
+      // 将参数移动到浮点参数寄存器
+      if rs1 != Fa0 {
+        result.push(FmvD(Fa0, rs1))
+      }
+      if rs2 != Fa1 {
+        result.push(FmvD(Fa1, rs2))
+      }
+
+      // 调用浮点取模库函数
+      result.push(Call(Label("fmod")))
+
+      // 将返回值移动到结果寄存器
+      if rd != Fa0 {
+        result.push(FmvD(rd, Fa0))
+      }
+    }
     @ssa.Opcode::Eq(lhs, rhs) => {
       // 相等比较
       let (rd, load_rd) = get_register_or_spill_load(instr.result.id, allocator)
@@ -338,6 +360,26 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
       result.push(Comment("TODO: implement tuple creation"))
       result.push(Li(result_reg, "0")) // 临时实现
     }
+    @ssa.Opcode::Alloc(ty) => {
+      // 内存分配
+      let (result_reg, load_instrs) = get_register_or_spill_load(instr.result.id, allocator)
+      result.append(load_instrs)
+
+      // 将分配大小放入参数寄存器
+      let size = match ty {
+        @ssa.Type::Unit => "8"
+        _ => "0" // 其他类型暂不支持
+      }
+
+      result.push(Li(A0, size.to_string()))
+      result.push(Call(Label("minimbt_malloc")))
+      
+      // 将返回的指针移动到结果寄存器
+      if result_reg != A0 {
+        result.push(Mv(result_reg, A0))
+      }
+      
+    }
     @ssa.Opcode::GetElement(tuple, _index) => {
       // 元组元素访问
       let rd = get_register_for_value(instr.result)
@@ -471,9 +513,119 @@ fn emit_instruction_with_regalloc(instr : @ssa.Instruction, allocator : Register
       let spill_instrs = generate_spill_store_if_needed(instr.result.id, result_reg, allocator)
       result.append(spill_instrs)
     }
-    _ => {
-      // 默认情况下，使用简单的寄存器分配策略
-      result.push(Comment("TODO: implement " + instr.opcode.to_string() + " with regalloc"))
+    @ssa.Opcode::ArrayGet(array, index) => {
+      // 数组访问：array[index]
+      result.push(Comment("ArrayGet: accessing array element"))
+
+      // 获取数组基地址和索引值的寄存器
+      let (array_reg, load_array_instrs) = get_register_or_spill_load(array.id, allocator)
+      let (index_reg, load_index_instrs) = get_register_or_spill_load(index.id, allocator)
+
+      result.append(load_array_instrs)
+      result.append(load_index_instrs)
+
+      // 加载数组指针（array_reg中存储的是指向数组的指针）
+      result.push(Ld(T0, { base: array_reg, offset: 0 }))
+
+      // 计算元素偏移量
+      // 根据元素类型计算偏移：整数类型 *4，其他类型 *8
+      let scale = match instr.result.ty {
+        @ssa.Type::Int => 2  // 2^2 = 4 bytes
+        _ => 3              // 2^3 = 8 bytes
+      }
+      result.push(Slli(T1, index_reg, scale))  // T1 = index * scale
+
+      // 计算元素地址：base + offset
+      result.push(Add(T0, T0, T1))
+
+      // 根据元素类型加载值
+      match instr.result.ty {
+        @ssa.Type::Int => {
+          let (result_reg, load_result_instrs) = get_register_or_spill_load(instr.result.id, allocator)
+          result.append(load_result_instrs)
+          result.push(Lw(T2, { base: T0, offset: 0 }))  // Load word (4 bytes)
+          // 将结果移动到目标寄存器
+          if result_reg != T2 {
+            result.push(Mv(result_reg, T2))
+          }
+          // 如果结果需要溢出，生成存储指令
+          let spill_instrs = generate_spill_store_if_needed(instr.result.id, result_reg, allocator)
+          result.append(spill_instrs)
+        }
+        @ssa.Type::Float => {
+          let result_reg = get_float_register_for_value(instr.result)
+          let float_temp_reg = get_float_register_for_value(instr.result)
+          result.push(Fld(float_temp_reg, { base: T0, offset: 0 })) // Load double (8 bytes) to float register
+          // 将结果移动到目标浮点寄存器
+          if result_reg != float_temp_reg {
+            result.push(FmvD(result_reg, float_temp_reg))
+          }
+        }
+        _ => {
+          let (result_reg, load_result_instrs) = get_register_or_spill_load(instr.result.id, allocator)
+          result.append(load_result_instrs)
+          result.push(Ld(T2, { base: T0, offset: 0 }))  // Load double word (8 bytes)
+          // 将结果移动到目标寄存器
+          if result_reg != T2 {
+            result.push(Mv(result_reg, T2))
+          }
+          // 如果结果需要溢出，生成存储指令
+          let spill_instrs = generate_spill_store_if_needed(instr.result.id, result_reg, allocator)
+          result.append(spill_instrs)
+        }
+      }
+    }
+    @ssa.Opcode::ArrayPut(array, index, value) => {
+      // 数组赋值：array[index] = value
+      result.push(Comment("ArrayPut: storing array element"))
+
+      // 获取数组基地址和索引值的寄存器
+      let (array_reg, load_array_instrs) = get_register_or_spill_load(array.id, allocator)
+      let (index_reg, load_index_instrs) = get_register_or_spill_load(index.id, allocator)
+
+      result.append(load_array_instrs)
+      result.append(load_index_instrs)
+
+      // 加载数组指针
+      result.push(Ld(T0, { base: array_reg, offset: 0 }))
+
+      // 计算元素偏移量
+      let scale = match value.ty {
+        @ssa.Type::Int => 2  // 2^2 = 4 bytes
+        _ => 3              // 2^3 = 8 bytes
+      }
+      result.push(Slli(T1, index_reg, scale))  // T1 = index * scale
+
+      // 计算元素地址：base + offset
+      result.push(Add(T0, T0, T1))
+
+      // 根据元素类型存储值
+      match value.ty {
+        @ssa.Type::Float => {
+          let float_temp_reg = get_float_register_for_value(value)
+          // 获取值到float寄存器
+          // 如果需要，可以从内存中加载值到float寄存器
+          // 这里直接使用float_temp_reg作为存储寄存器
+          result.push(Fsd(float_temp_reg, { base: T0, offset: 0 })) // Store double (8 bytes)
+        }
+        _ => {
+          let (value_reg, load_value_instrs) = get_register_or_spill_load(value.id, allocator)
+          result.append(load_value_instrs)
+          // 对于整数和其他类型，使用T2作为临时寄存器
+          if value_reg != T2 {
+            result.push(Mv(T2, value_reg))
+          }
+          // 根据类型选择存储指令
+          match value.ty {
+            @ssa.Type::Int => {
+              result.push(Sw(T2, { base: T0, offset: 0 }))  // Store word (4 bytes)
+            }
+            _ => {
+              result.push(Sd(T2, { base: T0, offset: 0 }))  // Store double word (8 bytes)
+            }
+          }
+        }
+      }
     }
   }
   
@@ -562,10 +714,21 @@ fn emit_terminator_with_regalloc(terminator : @ssa.Terminator, allocator : Regis
     @ssa.Terminator::Return(value) => {
       match value {
         Some(val) => {
-          let (src_reg, load_instrs) = get_register_or_spill_load(val.id, allocator)
-          result.append(load_instrs)
-          if src_reg != A0 {
-            result.push(Mv(A0, src_reg))
+          // Check if the return value is a float
+          match val.ty {
+            @ssa.Type::Float => {
+              let float_reg = get_float_register_for_value(val)
+              if float_reg != Fa0 {
+                result.push(FmvD(Fa0, float_reg))
+              }
+            }
+            _ => {
+              let (src_reg, load_instrs) = get_register_or_spill_load(val.id, allocator)
+              result.append(load_instrs)
+              if src_reg != A0 {
+                result.push(Mv(A0, src_reg))
+              }
+            }
           }
         }
         None => {

@@ -233,17 +233,364 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
-    // 其他未实现的表达式暂时返回None
-    LetTuple(_, _, _)
-    | TupleGet(_, _, _)
-    | ArrayPut(_, _, _)
-    | ArrayGet(_, _)
-    | ExternalArray(Label(_))
-    | Assign(_, _)
-    | While(_, _)
-    | StaticArrayRef(Label(_)) => {
-      @util.logger("Warning: Unimplemented expression type in SSA conversion: " + expr.to_string())
-      ExprResult::{ value: None, context }
+    LetTuple(pattern_vars, tuple_name, body_expr) => {
+      // 元组解构：let (x1, x2, ...) = tuple_name in body_expr
+      // 获取元组值
+      let tuple_value = context.var_env.get(tuple_name).unwrap()
+
+      // 为每个模式变量创建元组获取指令
+      let mut current_context = context
+      let mut updated_var_env = current_context.var_env
+
+      // 为每个变量创建GetElement指令
+      let len = pattern_vars.length()
+      for i = 0; i < len; i = i + 1 {
+        let (var_name, var_type) = pattern_vars[i]
+        let element_value = Value::{ id: new_value_id(), ty: convert_type(var_type) }
+        let instruction = Instruction::{
+          result: element_value,
+          opcode: Opcode::GetElement(tuple_value, i),
+        }
+
+        // 添加指令到当前块
+        current_context.current_block.instructions.push(instruction)
+        let updated_block = BasicBlock::{
+          id: current_context.current_block.id,
+          params: current_context.current_block.params,
+          instructions: current_context.current_block.instructions,
+          terminator: current_context.current_block.terminator,
+        }
+
+        // 更新块列表
+        let updated_blocks = current_context.blocks.map(fn(b) {
+          if b.id == updated_block.id { updated_block } else { b }
+        })
+
+        // 更新变量环境
+        updated_var_env = updated_var_env.add(var_name, element_value)
+
+        // 更新上下文
+        current_context = Context::{
+          current_block: updated_block,
+          blocks: updated_blocks,
+          block_map: current_context.block_map,
+          var_env: updated_var_env,
+        }
+      }
+
+      // 使用更新后的环境转换body表达式
+      convert_expr(current_context, body_expr)
+    }
+    TupleGet(tuple_name, tuple_type, index) => {
+      // 元组访问：tuple_name.index
+      let tuple_value = context.var_env.get(tuple_name).unwrap()
+
+      // 从元组类型中推断元素类型
+      let element_type = match convert_type(tuple_type) {
+        Type::Tuple(types) => types[index]
+        _ => @util.die("Expected tuple type in TupleGet")
+      }
+
+      let result_value = Value::{ id: new_value_id(), ty: element_type }
+      let instruction = Instruction::{
+        result: result_value,
+        opcode: Opcode::GetElement(tuple_value, index),
+      }
+
+      // 更新当前块的指令列表
+      context.current_block.instructions.push(instruction)
+      let updated_block = BasicBlock::{
+        id: context.current_block.id,
+        params: context.current_block.params,
+        instructions: context.current_block.instructions,
+        terminator: context.current_block.terminator,
+      }
+
+      // 更新上下文
+      let updated_blocks = context.blocks.map(fn(b) {
+        if b.id == updated_block.id { updated_block } else { b }
+      })
+      let updated_context = Context::{
+        current_block: updated_block,
+        blocks: updated_blocks,
+        block_map: context.block_map,
+        var_env: context.var_env,
+      }
+      ExprResult::{ value: Some(result_value), context: updated_context }
+    }
+    ExternalArray(label) => {
+      // 外部数组引用：创建一个指向外部数组的值
+      let array_value = Value::{ id: new_value_id(), ty: Type::Array(Type::Int) } // 默认Int数组
+
+      // 创建外部数组引用指令（使用Call指令）
+      let instruction = Instruction::{
+        result: array_value,
+        opcode: Opcode::Call(label.0, []),
+      }
+
+      // 更新当前块的指令列表
+      context.current_block.instructions.push(instruction)
+      let updated_block = BasicBlock::{
+        id: context.current_block.id,
+        params: context.current_block.params,
+        instructions: context.current_block.instructions,
+        terminator: context.current_block.terminator,
+      }
+
+      // 更新上下文
+      let updated_blocks = context.blocks.map(fn(b) {
+        if b.id == updated_block.id { updated_block } else { b }
+      })
+      let updated_context = Context::{
+        current_block: updated_block,
+        blocks: updated_blocks,
+        block_map: context.block_map,
+        var_env: context.var_env,
+        in_loop_condition: context.in_loop_condition,
+      }
+      ExprResult::{ value: Some(array_value), context: updated_context }
+    }
+    Assign(lhs_name, rhs_name) => {
+      // 变量赋值：lhs = rhs
+      let rhs_value = context.var_env.get(rhs_name).unwrap()
+
+      // 在SSA中，赋值操作实际上是更新变量环境
+      // 将lhs名称映射到rhs的值
+      let updated_var_env = context.var_env.add(lhs_name, rhs_value)
+
+      let updated_context = Context::{
+        current_block: context.current_block,
+        blocks: context.blocks,
+        block_map: context.block_map,
+        var_env: updated_var_env,
+      }
+
+      // 赋值表达式返回Unit类型
+      ExprResult::{ value: None, context: updated_context }
+    }
+    While(cond_expr, body_expr) => {
+      // While循环：while condition { body }
+
+      // 创建循环的基本块结构
+      let header_block_id = new_block_id()
+      let body_block_id = new_block_id()
+      let exit_block_id = new_block_id()
+
+      // 创建循环头块（检查条件）
+      let header_block = BasicBlock::{
+        id: header_block_id,
+        params: [],
+        instructions: [],
+        terminator: Terminator::Jump(exit_block_id, []), // 临时设置
+      }
+
+      // 创建循环体块
+      let body_block = BasicBlock::{
+        id: body_block_id,
+        params: [],
+        instructions: [],
+        terminator: Terminator::Jump(header_block_id, []), // 循环回到头块
+      }
+
+      // 创建退出块
+      let exit_block = BasicBlock::{
+        id: exit_block_id,
+        params: [],
+        instructions: [],
+        terminator: Terminator::Jump(context.current_block.id, []), // 跳回原来的控制流
+      }
+
+      // 当前块跳转到循环头块
+      let updated_current_block = BasicBlock::{
+        id: context.current_block.id,
+        params: context.current_block.params,
+        instructions: context.current_block.instructions,
+        terminator: Terminator::Jump(header_block_id, []),
+      }
+
+      // 更新块列表
+      let updated_blocks = context.blocks.map(fn(b) {
+        if b.id == updated_current_block.id { updated_current_block } else { b }
+      })
+      updated_blocks.append([header_block, body_block, exit_block])
+
+      // 更新块映射
+      let updated_block_map = context.block_map
+        .add(header_block_id.id, header_block)
+        .add(body_block_id.id, body_block)
+        .add(exit_block_id.id, exit_block)
+
+      // 在循环头块中转换条件表达式
+      let header_context = Context::{
+        current_block: header_block,
+        blocks: updated_blocks,
+        block_map: updated_block_map,
+        var_env: context.var_env,
+      }
+
+      let cond_result = convert_expr(header_context, cond_expr)
+      let cond_context = cond_result.context
+      let cond_value = cond_result.value.unwrap()
+
+      // 更新头块：条件跳转到循环体或退出块
+      let updated_header_block = BasicBlock::{
+        id: header_block_id,
+        params: header_block.params,
+        instructions: header_block.instructions,
+        terminator: Terminator::Branch(cond_value, body_block_id, exit_block_id),
+      }
+
+      // 在循环体块中转换body表达式
+      let body_context = Context::{
+        current_block: body_block,
+        blocks: cond_context.blocks,
+        block_map: cond_context.block_map,
+        var_env: context.var_env, // 循环体不改变变量环境
+      }
+
+      let body_result = convert_expr(body_context, body_expr)
+      let final_body_context = body_result.context
+
+      // 更新所有块
+      let final_blocks = final_body_context.blocks.map(fn(b) {
+        if b.id == updated_header_block.id {
+          updated_header_block
+        } else if b.id == final_body_context.current_block.id {
+          final_body_context.current_block
+        } else {
+          b
+        }
+      })
+
+      let final_context = Context::{
+        current_block: exit_block, // 当前块设置为退出块
+        blocks: final_blocks,
+        block_map: final_body_context.block_map,
+        var_env: context.var_env, // 保持原始变量环境
+      }
+
+      // While循环返回Unit类型
+      ExprResult::{ value: None, context: final_context }
+    }
+    StaticArrayRef(label) => {
+      // 静态数组引用：类似于ExternalArray，但引用的是静态数据段中的数组
+      let array_value = Value::{ id: new_value_id(), ty: Type::Array(Type::Int) } // 默认Int数组
+
+      // 创建静态数组引用指令
+      let instruction = Instruction::{
+        result: array_value,
+        opcode: Opcode::Call("static_array_" + label.0, []), // 使用特殊的函数名标识静态数组
+      }
+
+      // 更新当前块的指令列表
+      context.current_block.instructions.push(instruction)
+      let updated_block = BasicBlock::{
+        id: context.current_block.id,
+        params: context.current_block.params,
+        instructions: context.current_block.instructions,
+        terminator: context.current_block.terminator,
+      }
+
+      // 更新上下文
+      let updated_blocks = context.blocks.map(fn(b) {
+        if b.id == updated_block.id { updated_block } else { b }
+      })
+      let updated_context = Context::{
+        current_block: updated_block,
+        blocks: updated_blocks,
+        block_map: context.block_map,
+        var_env: context.var_env,
+      }
+      ExprResult::{ value: Some(array_value), context: updated_context }
+    }
+    ArrayPut(array_name, index_name, value_name) => {
+      // 数组赋值：array[index] = value
+      // 获取数组、索引和值的Value
+      let array_value = context.var_env.get(array_name).unwrap()
+      let index_value = context.var_env.get(index_name).unwrap()
+      let value_to_store = context.var_env.get(value_name).unwrap()
+
+      // 验证数组类型
+      match array_value.ty {
+        Type::Array(_) => () // 验证确实是数组类型
+        _ => @util.die("Expected array type in ArrayPut")
+      }
+
+      // 创建ArrayPut指令
+      let instruction = Instruction::{
+        result: Value::{ id: new_value_id(), ty: Type::Unit }, // ArrayPut返回Unit
+        opcode: Opcode::ArrayPut(array_value, index_value, value_to_store),
+      }
+
+      // 更新当前块的指令列表
+      context.current_block.instructions.push(instruction)
+      let updated_block = BasicBlock::{
+        id: context.current_block.id,
+        params: context.current_block.params,
+        instructions: context.current_block.instructions,
+        terminator: context.current_block.terminator,
+      }
+
+      // 更新上下文
+      let updated_blocks = context.blocks.map(fn(b) {
+        if b.id == updated_block.id {
+          updated_block
+        } else {
+          b
+        }
+      })
+      let updated_context = Context::{
+        current_block: updated_block,
+        blocks: updated_blocks,
+        block_map: context.block_map,
+        var_env: context.var_env,
+      }
+
+      // ArrayPut是表达式，返回Unit类型
+      ExprResult::{ value: None, context: updated_context }
+    }
+    ArrayGet(array_name, index_name) => {
+      // 数组访问：array[index]
+      // 获取数组和索引的值
+      let array_value = context.var_env.get(array_name).unwrap()
+      let index_value = context.var_env.get(index_name).unwrap()
+
+      // 创建结果值 - 数组元素的类型需要从数组类型中推断
+      let element_type = match array_value.ty {
+        Type::Array(elem_type) => elem_type
+        _ => @util.die("Expected array type in ArrayGet")
+      }
+
+      let result_value = Value::{ id: new_value_id(), ty: element_type }
+      let instruction = Instruction::{
+        result: result_value,
+        opcode: Opcode::ArrayGet(array_value, index_value),
+      }
+
+      // 更新当前块的指令列表
+      context.current_block.instructions.push(instruction)
+      let updated_block = BasicBlock::{
+        id: context.current_block.id,
+        params: context.current_block.params,
+        instructions: context.current_block.instructions,
+        terminator: context.current_block.terminator,
+      }
+
+      // 更新上下文
+      let updated_blocks = context.blocks.map(fn(b) {
+        if b.id == updated_block.id {
+          updated_block
+        } else {
+          b
+        }
+      })
+      let updated_context = Context::{
+        current_block: updated_block,
+        blocks: updated_blocks,
+        block_map: context.block_map,
+        var_env: context.var_env,
+      }
+      ExprResult::{ value: Some(result_value), context: updated_context }
     }
     Int(i) => {
       let value = Value::{ id: new_value_id(), ty: Type::Int }
@@ -734,7 +1081,25 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         }
       }
 
-      let result_value = Value::{ id: new_value_id(), ty: Type::Int }
+      // 根据函数名确定返回类型
+      let return_type = match label.0 {
+        "minimbt_create_array" | "minimbt_create_float_array" | "minimbt_create_ptr_array" => {
+          // 数组创建函数，返回数组类型
+          // 元素类型取决于函数名和参数
+          match label.0 {
+            "minimbt_create_array" => Type::Array(Type::Int)
+            "minimbt_create_float_array" => Type::Array(Type::Float)
+            "minimbt_create_ptr_array" => {
+              // 指针数组，元素类型是指针
+              Type::Array(Type::Pointer(Type::Int))
+            }
+            _ => Type::Array(Type::Int) // 默认
+          }
+        }
+        _ => Type::Int // 其他函数默认返回Int
+      }
+
+      let result_value = Value::{ id: new_value_id(), ty: return_type }
       let instruction = Instruction::{
         result: result_value,
         opcode: Opcode::Call(label.0, arg_values),
