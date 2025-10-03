@@ -1,6 +1,6 @@
 ///| 线性扫描寄存器分配算法
 
-///| 为SSA IR实现线性扫描寄存器分配
+///| 为SSA IR实现线性扫描寄存器分配，包含优化后的活跃区间分析
 
 ///|
 /// 生命周期区间，表示一个SSA值的活跃范围
@@ -21,29 +21,41 @@ struct RegisterAllocator {
   active_intervals : Array[LiveInterval]
   // 值ID到寄存器的映射
   mut value_to_reg : @immut/hashmap.HashMap[Int, Reg]
-  // 值ID到栈槽的映射  
+  // 值ID到栈槽的映射
   mut value_to_spill : @immut/hashmap.HashMap[Int, Int]
   // 下一个可用的栈槽
   mut next_spill_slot : Int
 } derive(Show)
 
 ///|
-/// 计算SSA函数的活跃区间
+// 辅助函数：计算两个整数的最大值
+fn max(a: Int, b: Int) -> Int {
+  if a > b { a } else { b }
+}
+
+///| 计算SSA函数的活跃区间 - 优化版本
+///| 包含三项优化：
+///| 1. 动态计算参数活跃范围，而不是固定大值
+///| 2. 使用函数长度的动态阈值区分长生命周期值
+///| 3. 跟踪每个值的实际最后一次使用位置
 pub fn compute_live_intervals_for_function(
   func : @ssa.Function,
 ) -> Array[LiveInterval] {
   let mut intervals = @immut/hashmap.new()
+  let mut last_use_positions = @immut/hashmap.new()
   let mut instruction_count = 0
-
-  // 首先处理函数参数，它们在函数开始时就是活跃的
+  
+  // 1. 首先记录参数的定义位置，但暂时不设置长生命周期
+  let param_ids = []
   for param in func.params {
     let value_id = param.id
+    param_ids.push(value_id)
     intervals = intervals.add(value_id, {
       value_id,
-      start: 0,  // 函数开始时就活跃
-      end: 0,    // 将在使用时更新
+      start: 0,
+      end: 0,
       reg: None,
-      spill_slot: None,
+      spill_slot: None
     })
   }
 
@@ -57,11 +69,10 @@ pub fn compute_live_intervals_for_function(
         start: instruction_count,
         end: instruction_count,
         reg: None,
-        spill_slot: None,
+        spill_slot: None
       })
-
     }
-    instruction_count += 1
+    instruction_count = instruction_count + 1
 
     // 处理块内指令
     for instr in block.instructions {
@@ -72,65 +83,91 @@ pub fn compute_live_intervals_for_function(
         start: instruction_count,
         end: instruction_count,
         reg: None,
-        spill_slot: None,
+        spill_slot: None
       })
 
       // 更新指令使用的值的结束位置
       let used_value_ids = get_instruction_uses_ids(instr)
       for used_id in used_value_ids {
+        // 记录该值的最后使用位置
+        last_use_positions = last_use_positions.add(used_id, instruction_count)
+        
         match intervals.get(used_id) {
           Some(interval) => {
+            // 更新区间的结束位置为当前指令+1
             intervals = intervals.add(used_id, {
               ..interval,
-              end: instruction_count + 1,  // 值在使用后还需要活跃到下一条指令
+              end: instruction_count + 1
             })
-
           }
           None => {
             // 如果没有找到定义，可能是函数参数或常量，创建一个区间
-            // 常量应该从当前指令开始活跃（如果还没有区间的话）
             intervals = intervals.add(used_id, {
               value_id: used_id,
-              start: instruction_count,  // 从当前指令开始活跃
-              end: instruction_count + 1,  // 值在使用后还需要活跃到下一条指令
+              start: instruction_count,
+              end: instruction_count + 1,
               reg: None,
-              spill_slot: None,
+              spill_slot: None
             })
-
           }
         }
       }
-      instruction_count += 1
+      instruction_count = instruction_count + 1
     }
 
     // 处理终止指令
     let term_uses = get_terminator_uses_ids(block.terminator)
     for used_id in term_uses {
+      // 记录该值的最后使用位置
+      last_use_positions = last_use_positions.add(used_id, instruction_count)
+      
       match intervals.get(used_id) {
         Some(interval) => {
+          // 更新区间的结束位置为当前指令+1
           intervals = intervals.add(used_id, { ..interval, end: instruction_count + 1 })
-
         }
         None => {
           intervals = intervals.add(used_id, {
             value_id: used_id,
-            start: instruction_count,  // 从当前指令开始活跃
+            start: instruction_count,
             end: instruction_count + 1,
             reg: None,
-            spill_slot: None,
+            spill_slot: None
           })
-
         }
       }
     }
-    instruction_count += 1
+    instruction_count = instruction_count + 1
   }
 
-  // 将HashMap转换为Array
+  // 3. 根据函数长度设置动态阈值
+  let function_length = instruction_count
+  // 计算函数长度的70%，转换为整数
+  let threshold = (function_length * 7) / 10
+  let long_lived_threshold = max(50, threshold)
+  
+  // 4. 最后统一更新所有值的end为实际最后一次使用位置+1
+  // 并对真正常用的值设置较长的生命周期
   let result = []
-  intervals.each(fn(_key, interval) {
-    result.push(interval)
+  intervals.each(fn(value_id, interval) {
+    // 检查该值是否有记录的最后使用位置
+    let updated_end = match last_use_positions.get(value_id) {
+      Some(pos) => pos + 1
+      None => interval.end
+    }
+    
+    // 对于函数参数，如果它们被广泛使用，设置一个适当的较长生命周期
+    // 这里定义"广泛使用"为在函数后半部分仍有使用
+    let final_end = if param_ids.contains(value_id) && updated_end > long_lived_threshold {
+      // 对广泛使用的参数，设置生命周期为函数长度+1
+      function_length + 1
+    } else {
+      updated_end
+    }
+    
+    result.push({..interval, end: final_end})
   })
+  
   result
 }
 

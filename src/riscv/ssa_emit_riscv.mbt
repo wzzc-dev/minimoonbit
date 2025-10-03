@@ -24,9 +24,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
   let live_intervals = compute_live_intervals_for_function(func)
-  @util.logger("live_intervals: " + live_intervals.to_string())
+  // @util.logger("live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(live_intervals)
-  @util.logger("allocator: " + allocator.to_string())
+  // @util.logger("allocator: " + allocator.to_string())
   let asm_instructions = []
   
   // 计算栈帧大小（包括溢出槽）
