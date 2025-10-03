@@ -11,9 +11,6 @@ pub fn to_ssa(input : @closure.Program) -> Ssa {
 
   // 转换每个函数定义
   for fundef in input.fundefs {
-    if fundef.old_name.to_string() == "inprod" {
-      @util.die("main function is not supported")
-    }
     if not(@typing.extenv.contains(fundef.old_name.to_string())) {
       let ssa_func = convert_function(fundef)
       // @util.logger("convert_function: " + ssa_func.to_json().stringify())

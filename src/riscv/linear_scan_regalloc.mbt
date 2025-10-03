@@ -28,28 +28,22 @@ struct RegisterAllocator {
 } derive(Show)
 
 ///|
-// 辅助函数：计算两个整数的最大值
-fn max(a: Int, b: Int) -> Int {
-  if a > b { a } else { b }
-}
 
-///| 计算SSA函数的活跃区间 - 优化版本
-///| 包含三项优化：
-///| 1. 动态计算参数活跃范围，而不是固定大值
-///| 2. 使用函数长度的动态阈值区分长生命周期值
-///| 3. 跟踪每个值的实际最后一次使用位置
+///| 计算SSA函数的活跃区间
+///| 跟踪每个值的实际最后一次使用位置，确保寄存器分配准确
 pub fn compute_live_intervals_for_function(
   func : @ssa.Function,
 ) -> Array[LiveInterval] {
   let mut intervals = @immut/hashmap.new()
   let mut last_use_positions = @immut/hashmap.new()
   let mut instruction_count = 0
-  
-  // 1. 首先记录参数的定义位置，但暂时不设置长生命周期
+
+  // 1. 首先记录参数的定义位置，设置合理的初始活跃区间
   let param_ids = []
   for param in func.params {
     let value_id = param.id
     param_ids.push(value_id)
+    // 参数在函数开始时（位置0）定义，先设置结束位置为0
     intervals = intervals.add(value_id, {
       value_id,
       start: 0,
@@ -86,30 +80,24 @@ pub fn compute_live_intervals_for_function(
         spill_slot: None
       })
 
-      // 更新指令使用的值的结束位置
+      // 记录指令使用的值的最后使用位置，但不立即更新活跃区间
       let used_value_ids = get_instruction_uses_ids(instr)
       for used_id in used_value_ids {
         // 记录该值的最后使用位置
         last_use_positions = last_use_positions.add(used_id, instruction_count)
-        
+
+        // 如果没有找到定义，可能是函数参数或常量，创建一个区间
         match intervals.get(used_id) {
-          Some(interval) => {
-            // 更新区间的结束位置为当前指令+1
-            intervals = intervals.add(used_id, {
-              ..interval,
-              end: instruction_count + 1
-            })
-          }
           None => {
-            // 如果没有找到定义，可能是函数参数或常量，创建一个区间
             intervals = intervals.add(used_id, {
               value_id: used_id,
-              start: instruction_count,
+              start: 0,  // 对于参数和常量，假设从位置0开始
               end: instruction_count + 1,
               reg: None,
               spill_slot: None
             })
           }
+          Some(_) => () // 已存在的区间，稍后统一更新结束位置
         }
       }
       instruction_count = instruction_count + 1
@@ -120,34 +108,26 @@ pub fn compute_live_intervals_for_function(
     for used_id in term_uses {
       // 记录该值的最后使用位置
       last_use_positions = last_use_positions.add(used_id, instruction_count)
-      
+
+      // 如果没有找到定义，可能是函数参数或常量，创建一个区间
       match intervals.get(used_id) {
-        Some(interval) => {
-          // 更新区间的结束位置为当前指令+1
-          intervals = intervals.add(used_id, { ..interval, end: instruction_count + 1 })
-        }
         None => {
           intervals = intervals.add(used_id, {
             value_id: used_id,
-            start: instruction_count,
+            start: 0,  // 对于参数和常量，假设从位置0开始
             end: instruction_count + 1,
             reg: None,
             spill_slot: None
           })
         }
+        Some(_) => () // 已存在的区间，稍后统一更新结束位置
       }
     }
     instruction_count = instruction_count + 1
   }
 
-  // 3. 根据函数长度设置动态阈值
-  let function_length = instruction_count
-  // 计算函数长度的70%，转换为整数
-  let threshold = (function_length * 7) / 10
-  let long_lived_threshold = max(50, threshold)
-  
-  // 4. 最后统一更新所有值的end为实际最后一次使用位置+1
-  // 并对真正常用的值设置较长的生命周期
+  // 3. 最后统一更新所有值的end为实际最后一次使用位置+1
+  // 不对函数参数设置特殊的长时间生命周期，使用实际的使用位置
   let result = []
   intervals.each(fn(value_id, interval) {
     // 检查该值是否有记录的最后使用位置
@@ -155,16 +135,11 @@ pub fn compute_live_intervals_for_function(
       Some(pos) => pos + 1
       None => interval.end
     }
-    
-    // 对于函数参数，如果它们被广泛使用，设置一个适当的较长生命周期
-    // 这里定义"广泛使用"为在函数后半部分仍有使用
-    let final_end = if param_ids.contains(value_id) && updated_end > long_lived_threshold {
-      // 对广泛使用的参数，设置生命周期为函数长度+1
-      function_length + 1
-    } else {
-      updated_end
-    }
-    
+
+    // 对于函数参数，使用实际的最后使用位置，不延长生命周期
+    // 这样可以避免寄存器被长时间占用
+    let final_end = updated_end
+
     result.push({..interval, end: final_end})
   })
   
@@ -399,8 +374,10 @@ fn spill_at_interval(
     // 溢出候选区间，将其寄存器分配给当前区间
     match spill_candidate.reg {
       Some(reg) => {
-        // 注意：不要从value_to_reg中移除被溢出的值！
-        // 寄存器分配应该保持有效，即使值被溢出到内存
+        // 从value_to_reg中移除被溢出的值，避免寄存器冲突
+        // 这样在生成代码时会正确地从内存加载被溢出的值
+        allocator.value_to_reg = allocator.value_to_reg.remove(spill_candidate.value_id)
+
         // 将寄存器分配给当前区间
         allocator.value_to_reg = allocator.value_to_reg.add(
           interval.value_id,
@@ -480,11 +457,10 @@ pub fn get_register_or_spill_load(
           (temp_reg, [load_instr])
         }
         None => {
-          // 如果都没找到，使用更智能的分配策略
-          // 优先使用临时寄存器，然后是通用寄存器
-          let available_regs = [T0, T1, T2, T3, T4, T5, T6, S2, S3, S4, S5, S6, S7, S8, S9, S10]
-          let reg = available_regs[value_id % available_regs.length()]
-          (reg, [])
+          // 如果都没有分配，说明这是一个错误情况
+          // 在活跃区间计算正确的情况下，所有使用的值都应该有寄存器分配
+          // 为了避免寄存器冲突，我们使用一个保守的策略：总是使用T0作为临时寄存器
+          (T0, [])
         }
       }
   }
