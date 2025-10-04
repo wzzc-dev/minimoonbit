@@ -70,6 +70,27 @@ pub fn compute_live_intervals_for_function(
 
     // 处理块内指令
     for instr in block.instructions {
+      // 首先记录指令使用的值的最后使用位置
+      let used_value_ids = get_instruction_uses_ids(instr)
+      for used_id in used_value_ids {
+        // 记录该值的最后使用位置
+        last_use_positions = last_use_positions.add(used_id, instruction_count)
+
+        // 如果没有找到定义，可能是函数参数，创建一个区间
+        match intervals.get(used_id) {
+          None => {
+            intervals = intervals.add(used_id, {
+              value_id: used_id,
+              start: 0,  // 对于参数，假设从位置0开始
+              end: instruction_count,  // 当前指令位置
+              reg: None,
+              spill_slot: None
+            })
+          }
+          Some(_) => () // 已存在的区间，稍后统一更新结束位置
+        }
+      }
+
       // 记录当前指令定义的值
       let def_value_id = instr.result.id
       intervals = intervals.add(def_value_id, {
@@ -80,26 +101,6 @@ pub fn compute_live_intervals_for_function(
         spill_slot: None
       })
 
-      // 记录指令使用的值的最后使用位置，但不立即更新活跃区间
-      let used_value_ids = get_instruction_uses_ids(instr)
-      for used_id in used_value_ids {
-        // 记录该值的最后使用位置
-        last_use_positions = last_use_positions.add(used_id, instruction_count)
-
-        // 如果没有找到定义，可能是函数参数或常量，创建一个区间
-        match intervals.get(used_id) {
-          None => {
-            intervals = intervals.add(used_id, {
-              value_id: used_id,
-              start: 0,  // 对于参数和常量，假设从位置0开始
-              end: instruction_count + 1,
-              reg: None,
-              spill_slot: None
-            })
-          }
-          Some(_) => () // 已存在的区间，稍后统一更新结束位置
-        }
-      }
       instruction_count = instruction_count + 1
     }
 
@@ -109,13 +110,13 @@ pub fn compute_live_intervals_for_function(
       // 记录该值的最后使用位置
       last_use_positions = last_use_positions.add(used_id, instruction_count)
 
-      // 如果没有找到定义，可能是函数参数或常量，创建一个区间
+      // 如果没有找到定义，可能是函数参数，创建一个区间
       match intervals.get(used_id) {
         None => {
           intervals = intervals.add(used_id, {
             value_id: used_id,
-            start: 0,  // 对于参数和常量，假设从位置0开始
-            end: instruction_count + 1,
+            start: 0,  // 对于参数，假设从位置0开始
+            end: instruction_count,  // 当前指令位置
             reg: None,
             spill_slot: None
           })
@@ -126,13 +127,12 @@ pub fn compute_live_intervals_for_function(
     instruction_count = instruction_count + 1
   }
 
-  // 3. 最后统一更新所有值的end为实际最后一次使用位置+1
-  // 不对函数参数设置特殊的长时间生命周期，使用实际的使用位置
+  // 3. 最后统一更新所有值的end为实际最后一次使用位置
   let result = []
   intervals.each(fn(value_id, interval) {
     // 检查该值是否有记录的最后使用位置
     let updated_end = match last_use_positions.get(value_id) {
-      Some(pos) => pos + 1
+      Some(pos) => pos + 1  // 活跃区间应该包含最后使用的指令
       None => interval.end
     }
 
@@ -142,7 +142,7 @@ pub fn compute_live_intervals_for_function(
 
     result.push({..interval, end: final_end})
   })
-  
+
   result
 }
 
