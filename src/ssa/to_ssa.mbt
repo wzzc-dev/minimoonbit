@@ -5,7 +5,7 @@
 ///|
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
-  // @util.logger("closure ir: " + input.to_json().stringify())
+  @util.logger("closure ir: " + input.to_json().stringify())
   // 初始化SSA程序
   let functions = []
 
@@ -36,10 +36,6 @@ fn convert_function(fundef : @closure.FuncDef) -> Function {
     Value::{ id: new_value_id(), ty: convert_type(free_var.1) }
   })
   
-  // 合并所有参数
-  let all_params = []
-  all_params.append(regular_params)
-  all_params.append(free_var_params)
 
   // 创建基本块列表
   let blocks = []
@@ -54,18 +50,20 @@ fn convert_function(fundef : @closure.FuncDef) -> Function {
   blocks.push(entry_block)
   
   // 创建变量环境，将函数参数添加到环境中
+  // 注意：由于我们改变了参数顺序，需要相应调整索引
   let mut var_env = @immut/hashmap.new()
-  for i, arg in fundef.args {
-    let param_name = arg.0
-    let param_value = regular_params[i]
-    var_env = var_env.add(param_name, param_value)
-  }
-  
-  // 添加自由变量到环境中
+
   for i, free_var in fundef.formal_free_vars {
     let free_var_name = free_var.0
     let free_var_value = free_var_params[i]
     var_env = var_env.add(free_var_name, free_var_value)
+  }
+  
+  // 再添加正常参数到环境中（现在在参数列表的后面）
+  for i, arg in fundef.args {
+    let param_name = arg.0
+    let param_value = regular_params[i]
+    var_env = var_env.add(param_name, param_value)
   }
   
   let context = {
@@ -98,7 +96,8 @@ fn convert_function(fundef : @closure.FuncDef) -> Function {
   
   {
     name: fundef.name.0.to_string(),
-    params: all_params,
+    params: regular_params,
+    closure_param: free_var_params,
     return_type: match fundef.ty {
       @closure.LowType::DirectFn(_, ret) => convert_type(ret)
       @closure.LowType::ClosureFn(_, ret) => convert_type(ret)
@@ -160,6 +159,7 @@ fn convert_main_function(body : @closure.Expr) -> Function {
   {
     name: "minimbt_main",
     params,
+    closure_param: [], // 主函数没有自由变量
     return_type: Type::Unit,
     blocks: updated_blocks,
   }
@@ -1218,12 +1218,12 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let mut current_context = closure_result.context
 
       // 转换所有参数，正确链式传递上下文
-      let arg_values = []
+      let call_arg_values = []
       for x in xs {
         let arg_result = convert_expr(current_context, @closure.Expr::Var(x))
         current_context = arg_result.context
         match arg_result.value {
-          Some(val) => arg_values.push(val)
+          Some(val) => call_arg_values.push(val)
           None => () // 参数可能为Unit类型
         }
       }
@@ -1231,11 +1231,13 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 获取闭包值
       let closure_value = closure_result.value.unwrap()
 
-      // 创建结果值和指令
+      // 闭包调用时，需要先传递捕获的变量（自由变量），然后传递调用时的参数
+      // 但在当前的CallClosure实现中，我们只需要传递调用参数
+      // 因为捕获的变量已经在闭包创建时绑定了
       let result_value = Value::{ id: new_value_id(), ty: Type::Int }
       let instruction = Instruction::{
         result: result_value,
-        opcode: Opcode::CallClosure(closure_value, arg_values),
+        opcode: Opcode::CallClosure(closure_value, call_arg_values),
       }
 
       // 更新当前块的指令列表

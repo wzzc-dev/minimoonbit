@@ -269,6 +269,7 @@ pub fn Function::to_json(self : Function) -> Json {
   {
     "name": self.name,
     "params": self.params.map(Value::to_json),
+    "closure_param": self.closure_param.map(Value::to_json),
     "return_type": self.return_type.to_json(),
     "blocks": self.blocks.map(BasicBlock::to_json),
   }
@@ -281,6 +282,7 @@ pub fn Function::from_json(json : Json) -> Function raise {
     {
       "name": String(name),
       "params": Array(params),
+      "closure_param": Array(closure_param),
       "return_type": return_type,
       "blocks": Array(blocks),
       ..
@@ -292,6 +294,10 @@ pub fn Function::from_json(json : Json) -> Function raise {
             params_res.push((Value::from_json(value)))
         }
       }
+      let closure_param_res = []
+      for cp in closure_param {
+        closure_param_res.push(Value::from_json(cp))
+      }
       let blocks_res = []
       for b in blocks {
         blocks_res.push(BasicBlock::from_json(b))
@@ -299,6 +305,7 @@ pub fn Function::from_json(json : Json) -> Function raise {
       Function::{
         name,
         params: params_res,
+        closure_param: closure_param_res,
         return_type: Type::from_json(return_type),
         blocks: blocks_res,
       }

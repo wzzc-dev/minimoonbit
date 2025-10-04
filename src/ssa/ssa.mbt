@@ -97,6 +97,7 @@ pub(all) enum Terminator {
 pub(all) struct Function {
   name : String // 函数名
   params : Array[Value] // 函数参数
+  closure_param : Array[Value] // 闭包参数
   return_type : Type // 返回类型
   blocks : Array[BasicBlock] // 基本块列表
 } derive(Show)
