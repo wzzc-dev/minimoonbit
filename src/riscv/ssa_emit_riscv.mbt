@@ -24,9 +24,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
   let live_intervals = compute_live_intervals_for_function(func)
-  // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
+  @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(live_intervals)
-  // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
+  @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
   // 计算栈帧大小（包括溢出槽）
@@ -296,6 +296,9 @@ fn emit_instruction_with_regalloc(
     // 函数调用
     @ssa.Opcode::Call(name, args) =>
       emit_function_call_instruction(instr.result, name, args, allocator)
+    // 函数引用调用
+    @ssa.Opcode::CallRef(name, args) =>
+      emit_function_ref_call_instruction(instr.result, name, args, allocator)
 
     // 内存操作
     @ssa.Opcode::Load(addr) =>
@@ -620,6 +623,27 @@ fn emit_function_call_instruction(
       instrs
     }
   }
+}
+
+///|
+/// 生成函数引用调用指令
+fn emit_function_ref_call_instruction(
+  result_val: @ssa.Value,
+  label: String,
+  _args: Array[@ssa.Value],
+  allocator: RegisterAllocator
+) -> Array[RvAsm] {
+  let instrs = []
+  let (result_reg, load_instrs) = get_register_or_spill_load(
+        result_val.id,
+        allocator,
+      )
+  instrs.push(La(T0, label))
+  if result_reg != T0 {
+    instrs.push(Mv(result_reg, T0))
+  }
+  instrs.append(load_instrs)
+  instrs
 }
 
 ///|

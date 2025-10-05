@@ -70,6 +70,10 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
       let values_json = values.map(Value::to_json)
       ["Call", name.to_json(), values_json]
     }
+    Opcode::CallRef(name, values) => {
+      let values_json = values.map(Value::to_json)
+      ["CallRef", name.to_json(), values_json]
+    }
     Opcode::Tuple(values) => {
       let values_json = values.map(Value::to_json)
       ["Tuple", values_json]

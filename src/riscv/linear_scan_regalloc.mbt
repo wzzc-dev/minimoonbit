@@ -440,6 +440,7 @@ pub fn get_register_or_spill_load(
 ) -> (Reg, Array[RvAsm]) {
   match allocator.value_to_reg.get(value_id) {
     Some(reg) => {
+      // @util.logger("Value " + value_id.to_string() + " has register " + reg.to_string())
       // 值有寄存器分配，直接使用
       // 即使值也被溢出，优先使用寄存器
       (reg, [])
@@ -457,6 +458,7 @@ pub fn get_register_or_spill_load(
           (temp_reg, [load_instr])
         }
         None => {
+          @util.logger("Value " + value_id.to_string() + " has no register or spill slot")
           // 如果都没有分配，说明这是一个错误情况
           // 在活跃区间计算正确的情况下，所有使用的值都应该有寄存器分配
           // 为了避免寄存器冲突，我们使用一个保守的策略：总是使用T0作为临时寄存器

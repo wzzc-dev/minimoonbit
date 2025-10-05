@@ -80,7 +80,7 @@ fn convert_function(
     func_env,
   } // 包含参数和自由变量的环境
   let result = convert_expr(context, fundef.body)
-
+  // @util.logger("convert_expr: " + result.to_string())
   // 更新最后一个块的终止指令，使其返回表达式的结果
   let final_context = result.context
   let return_value = result.value
@@ -1096,7 +1096,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
       ExprResult::{ value: result_value, context: final_context }
     }
-    Var(name) =>
+    Var(name) => {
+      // @util.logger("Var: " + name.to_string() + " context.func_env: " + context.func_env.to_string())
       // 变量引用，先从变量环境中查找
       match context.var_env.get(name.to_string()) {
         Some(value) => ExprResult::{ value: Some(value), context }
@@ -1105,27 +1106,61 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
           match context.func_env.get(name.to_string()) {
             Some(func_type) => {
               // 找到函数，创建一个函数引用值
-              let func_value = Value::{ id: new_value_id(), ty: func_type }
-              ExprResult::{ value: Some(func_value), context }
+              // 对于函数引用，我们也应该创建一条指令
+              let result_value = Value::{ id: new_value_id(), ty: func_type }
+              let instruction = Instruction::{
+                result: result_value,
+                opcode: Opcode::CallRef(name.to_string(), []),
+              }
+
+              // 更新当前块的指令列表
+              context.current_block.instructions.push(instruction)
+              let updated_block = BasicBlock::{
+                id: context.current_block.id,
+                params: context.current_block.params,
+                instructions: context.current_block.instructions,
+                terminator: context.current_block.terminator,
+              }
+
+              // 更新上下文
+              let updated_blocks = context.blocks.map(fn(b) {
+                if b.id == updated_block.id {
+                  updated_block
+                } else {
+                  b
+                }
+              })
+              let updated_context = Context::{
+                current_block: updated_block,
+                blocks: updated_blocks,
+                block_map: context.block_map,
+                var_env: context.var_env,
+                func_env: context.func_env,
+              }
+              ExprResult::{ value: Some(result_value), context: updated_context }
             }
             None =>
+              // @util.logger("Var: " + name.to_string() + " not found")
               // 如果在函数环境中也找不到，这是一个错误
               ExprResult::{ value: None, context }
           }
       }
+    }
     Let((name, _ty), e1, e2) => {
-      @util.logger(
-        "Let: " +
-        name.to_string() +
-        " = " +
-        e1.to_string() +
-        " in " +
-        e2.to_string(),
-      )
+
       // Let绑定：先计算e1
       let result1 = convert_expr(context, e1)
       let context1 = result1.context
-
+      // @util.logger(
+      //   "Let: " +
+      //   name.to_string() +
+      //   " = " +
+      //   e1.to_string() +
+      //   " in " +
+      //   e2.to_string() +
+      //   ", result1: " +
+      //   result1.value.to_string(),
+      // )
       // 将e1的结果绑定到name
       match result1.value {
         Some(value) => {
@@ -1151,14 +1186,14 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
     }
     CallDirect(label, args) => {
-      @util.logger("CallDirect: " + label.0)
-      @util.logger("CallDirect args: " + args.to_string())
-      @util.logger(
-        "CallDirect var: " +
-        context.var_env.to_string() +
-        " func_env: " +
-        context.func_env.to_string(),
-      )
+      // @util.logger("CallDirect: " + label.0)
+      // @util.logger("CallDirect args: " + args.to_string())
+      // @util.logger(
+      //   "CallDirect var: " +
+      //   context.var_env.to_string() +
+      //   " func_env: " +
+      //   context.func_env.to_string(),
+      // )
       // 直接函数调用
       // 先转换所有参数
       let mut current_context = context
@@ -1166,6 +1201,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
 
       // 依次转换每个参数
       for arg in args {
+        // @util.logger("CallDirect arg: " + arg.to_string())
         let arg_result = convert_expr(current_context, @closure.Expr::Var(arg))
         current_context = arg_result.context
         let _debug = arg_result.to_string()
@@ -1197,7 +1233,11 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
               }
             None =>
               match context.var_env.get(label.0.to_string()) {
-                Some(v) => v.ty
+                Some(v) =>
+                  match v.ty {
+                    Type::Function(_, ret_type) => ret_type
+                    _ => Type::Int // 默认返回Int
+                  }
                 None => Type::Int // 默认返回Int
               }
           }
@@ -1207,10 +1247,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         None => Opcode::Call(Func::Label(label.0), arg_values)
       }
       let result_value = Value::{ id: new_value_id(), ty: return_type }
-      let instruction = Instruction::{
-        result: result_value,
-        opcode: opcode,
-      }
+      let instruction = Instruction::{ result: result_value, opcode }
 
       // 更新当前块的指令列表
       current_context.current_block.instructions.push(instruction)

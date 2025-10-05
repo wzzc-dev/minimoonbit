@@ -47,8 +47,11 @@ pub(all) enum Opcode {
   Load(Value)
   Store(Value, Value)
 
+  
   // 函数调用
   Call(Func, Array[Value])
+  // 函数引用
+  CallRef(String, Array[Value])
 
   // 闭包操作
   MakeClosure(String, Array[Value]) // 创建闭包：变量名，函数名，自由变量列表
