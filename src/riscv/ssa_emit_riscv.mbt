@@ -556,7 +556,7 @@ fn emit_function_call_instruction(
       instrs.push(Comment("Call: moving return value to result register: " + result_reg.to_string() + ",result id " + result_val.id.to_string() + ",load: " + load_instrs.to_string()))
       instrs.append(load_instrs)
       if result_reg != A0 {
-        instrs.push(Mv(A0, result_reg))
+        instrs.push(Mv(result_reg, A0))
       }
       
       instrs
