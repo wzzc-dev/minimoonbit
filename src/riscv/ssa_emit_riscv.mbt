@@ -8,8 +8,8 @@
 // 导入所需的模块
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  println("emit riscv for ssa program: ")
-  println(input.to_json().stringify())
+  // println("emit riscv for ssa program: ")
+  // println(input.to_json().stringify())
 
   // 遍历所有SSA函数
   for func in input.program.functions {
@@ -24,9 +24,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
   let live_intervals = compute_live_intervals_for_function(func)
-  @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
+  // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(live_intervals)
-  @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
+  // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
   // 计算栈帧大小（包括溢出槽）

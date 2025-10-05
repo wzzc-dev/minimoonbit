@@ -30,7 +30,9 @@ struct RegisterAllocator {
 ///|
 
 ///| 计算SSA函数的活跃区间
-///| 跟踪每个值的实际最后一次使用位置，确保寄存器分配准确
+
+///|
+/// 跟踪每个值的实际最后一次使用位置，确保寄存器分配准确
 pub fn compute_live_intervals_for_function(
   func : @ssa.Function,
 ) -> Array[LiveInterval] {
@@ -49,7 +51,7 @@ pub fn compute_live_intervals_for_function(
       start: 0,
       end: 0,
       reg: None,
-      spill_slot: None
+      spill_slot: None,
     })
   }
 
@@ -63,7 +65,7 @@ pub fn compute_live_intervals_for_function(
         start: instruction_count,
         end: instruction_count,
         reg: None,
-        spill_slot: None
+        spill_slot: None,
       })
     }
     instruction_count = instruction_count + 1
@@ -78,15 +80,14 @@ pub fn compute_live_intervals_for_function(
 
         // 如果没有找到定义，可能是函数参数，创建一个区间
         match intervals.get(used_id) {
-          None => {
+          None =>
             intervals = intervals.add(used_id, {
               value_id: used_id,
-              start: 0,  // 对于参数，假设从位置0开始
-              end: instruction_count,  // 当前指令位置
+              start: 0, // 对于参数，假设从位置0开始
+              end: instruction_count, // 当前指令位置
               reg: None,
-              spill_slot: None
+              spill_slot: None,
             })
-          }
           Some(_) => () // 已存在的区间，稍后统一更新结束位置
         }
       }
@@ -98,9 +99,8 @@ pub fn compute_live_intervals_for_function(
         start: instruction_count,
         end: instruction_count,
         reg: None,
-        spill_slot: None
+        spill_slot: None,
       })
-
       instruction_count = instruction_count + 1
     }
 
@@ -112,15 +112,14 @@ pub fn compute_live_intervals_for_function(
 
       // 如果没有找到定义，可能是函数参数，创建一个区间
       match intervals.get(used_id) {
-        None => {
+        None =>
           intervals = intervals.add(used_id, {
             value_id: used_id,
-            start: 0,  // 对于参数，假设从位置0开始
-            end: instruction_count,  // 当前指令位置
+            start: 0, // 对于参数，假设从位置0开始
+            end: instruction_count, // 当前指令位置
             reg: None,
-            spill_slot: None
+            spill_slot: None,
           })
-        }
         Some(_) => () // 已存在的区间，稍后统一更新结束位置
       }
     }
@@ -132,17 +131,15 @@ pub fn compute_live_intervals_for_function(
   intervals.each(fn(value_id, interval) {
     // 检查该值是否有记录的最后使用位置
     let updated_end = match last_use_positions.get(value_id) {
-      Some(pos) => pos + 1  // 活跃区间应该包含最后使用的指令
+      Some(pos) => pos + 1 // 活跃区间应该包含最后使用的指令
       None => interval.end
     }
 
     // 对于函数参数，使用实际的最后使用位置，不延长生命周期
     // 这样可以避免寄存器被长时间占用
     let final_end = updated_end
-
-    result.push({..interval, end: final_end})
+    result.push({ ..interval, end: final_end })
   })
-
   result
 }
 
@@ -211,10 +208,15 @@ fn get_instruction_uses_ids(instr : @ssa.Instruction) -> Array[Int] {
       uses.push(lhs.id)
       uses.push(rhs.id)
     }
-    @ssa.Opcode::Call(_, args) =>
+    @ssa.Opcode::Call(func, args) => {
+      match func {
+        @ssa.Func::Call(callee) => uses.push(callee.id)
+        @ssa.Func::Label(_) => () // 直接函数标签不需要
+      }
       for arg in args {
         uses.push(arg.id)
       }
+    }
     @ssa.Opcode::Load(addr) => uses.push(addr.id)
     @ssa.Opcode::Store(addr, value) => {
       uses.push(addr.id)
@@ -329,16 +331,15 @@ fn expire_old_intervals(
     if interval.end < current_pos {
       // 区间已结束，释放寄存器
       match interval.reg {
-        Some(reg) => {
-          allocator.available_regs.push(reg)
-          // 注意：不要从value_to_reg映射中移除该值！
-          // 寄存器分配应该在整个函数期间保持有效
-          // 活跃区间只用于跟踪当前使用中的寄存器，不用于最终的分配映射
-        }
+        Some(reg) => allocator.available_regs.push(reg)
+        // 注意：不要从value_to_reg映射中移除该值！
+        // 寄存器分配应该在整个函数期间保持有效
+        // 活跃区间只用于跟踪当前使用中的寄存器，不用于最终的分配映射
         None => ()
       }
       // 从活跃列表中移除
       let _ = allocator.active_intervals.remove(i)
+
     } else {
       i += 1
     }
@@ -376,7 +377,9 @@ fn spill_at_interval(
       Some(reg) => {
         // 从value_to_reg中移除被溢出的值，避免寄存器冲突
         // 这样在生成代码时会正确地从内存加载被溢出的值
-        allocator.value_to_reg = allocator.value_to_reg.remove(spill_candidate.value_id)
+        allocator.value_to_reg = allocator.value_to_reg.remove(
+          spill_candidate.value_id,
+        )
 
         // 将寄存器分配给当前区间
         allocator.value_to_reg = allocator.value_to_reg.add(
@@ -439,12 +442,11 @@ pub fn get_register_or_spill_load(
   allocator : RegisterAllocator,
 ) -> (Reg, Array[RvAsm]) {
   match allocator.value_to_reg.get(value_id) {
-    Some(reg) => {
+    Some(reg) =>
       // @util.logger("Value " + value_id.to_string() + " has register " + reg.to_string())
       // 值有寄存器分配，直接使用
       // 即使值也被溢出，优先使用寄存器
       (reg, [])
-    }
     None =>
       // 值没有寄存器分配，检查是否被溢出
       match allocator.value_to_spill.get(value_id) {
@@ -458,7 +460,9 @@ pub fn get_register_or_spill_load(
           (temp_reg, [load_instr])
         }
         None => {
-          @util.logger("Value " + value_id.to_string() + " has no register or spill slot")
+          @util.logger(
+            "Value " + value_id.to_string() + " has no register or spill slot",
+          )
           // 如果都没有分配，说明这是一个错误情况
           // 在活跃区间计算正确的情况下，所有使用的值都应该有寄存器分配
           // 为了避免寄存器冲突，我们使用一个保守的策略：总是使用T0作为临时寄存器
