@@ -48,7 +48,7 @@ pub(all) enum Opcode {
   Store(Value, Value)
 
   // 函数调用
-  Call(String, Array[Value])
+  Call(Func, Array[Value])
 
   // 闭包操作
   MakeClosure(String, Array[Value]) // 创建闭包：变量名，函数名，自由变量列表
@@ -63,6 +63,10 @@ pub(all) enum Opcode {
   ArrayPut(Value, Value, Value)
 } derive(Show)
 
+pub(all) enum Func {
+  Label(String)
+  Call(Value)
+} derive(Show, Eq)
 
 ///|
 /// SSA指令

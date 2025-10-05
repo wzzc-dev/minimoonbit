@@ -134,9 +134,9 @@ fn SsaInterpreter::eval_instruction(self : SsaInterpreter, instr : @ssa.Instruct
       }
     }
     
-    @ssa.Opcode::Call(name, args) => {
+    @ssa.Opcode::Call(func, args) => {
       // 简化的函数调用处理 - 对于print_int直接打印
-      if name == "minimbt_print_int" && args.length() == 1 {
+      if func == @ssa.Func::Label("minimbt_print_int") && args.length() == 1 {
         let arg_val = match self.get_value(args[0]) {
           Ok(val) => val
           Err(e) => return Err(e)
@@ -149,7 +149,7 @@ fn SsaInterpreter::eval_instruction(self : SsaInterpreter, instr : @ssa.Instruct
           _ => return Err("Type error in print_int")
         }
       } else {
-        return Err("Unimplemented function call: " + name)
+        return Err("Unimplemented function call: " + func.to_string())
       }
     }
     

@@ -68,7 +68,7 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
     Opcode::Store(v1, v2) => ["Store", v1.to_json(), v2.to_json()]
     Opcode::Call(name, values) => {
       let values_json = values.map(Value::to_json)
-      ["Call", name, values_json]
+      ["Call", name.to_json(), values_json]
     }
     Opcode::Tuple(values) => {
       let values_json = values.map(Value::to_json)
@@ -121,7 +121,7 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
       for v in values {
         values_res.push(Value::from_json(v))
       }
-      Opcode::Call(name, values_res)
+      Opcode::Call(Func::Label(name), values_res)
     }
     ["Tuple", Array(values)] => {
       let values_res = []
@@ -160,6 +160,21 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
     _ => fail("invalid json for Opcode")
   }
 }
+
+pub fn Func::from_json(json : Json) -> Func raise {
+  match json {
+    String(name) => Func::Label(name)
+    value => Func::Call(Value::from_json(value))
+  }
+} 
+fn Func::to_json(self : Func) -> Json {
+  match self {
+    Func::Label(name) => name.to_json()
+    Func::Call(value) => value.to_json()
+  }
+}
+
+
 ///|
 /// Instruction结构体的JSON序列化
 pub fn Instruction::to_json(self : Instruction) -> Json {

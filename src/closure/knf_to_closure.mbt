@@ -362,7 +362,14 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
       // fve.remove(new_fv(x, Unit))
       fve.union(r)
     }
-    Var(x) => @hashset.of([new_fv(x, Unit)])
+    Var(x) => {
+      // 获取变量的实际类型，而不是默认为Unit
+      let ty = match env.get(x) {
+        Some(t) => t
+        None => Unit
+      }
+      @hashset.of([new_fv(x, ty)])
+    }
     LetRec({ name, ty: _, args, body }, cont) => {
       let x = fv(env, body)
       for i in args {
