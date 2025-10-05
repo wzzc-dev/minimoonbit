@@ -430,9 +430,57 @@ fn emit_call_direct(
   instrs : Array[RvAsm],
   env : Env,
 ) -> Unit {
+  let mut env = env
+  for arg in args {
+    // 如果是函数名，需要特殊处理
+    let def_index = env.fundefs.search_by(fn(fundef) {
+      fundef.name.0 == arg.to_string()
+    })
+    match def_index {
+      Some(index) => {
+        let fundef = env.fundefs.get(index).unwrap()
+        // instrs.push(La(reg_arg_list.get(i).unwrap(), fundef.name.0))
+        // 1. 计算需要的内存大小 (函数指针 + 自由变量)
+        let size = @cmp.maximum(16, 8 + fundef.formal_free_vars.length() * 8)
+
+        // 2. 调用 malloc 分配内存
+        instrs.push(Li(A0, size.to_string()))
+        instrs.push(Call(Label("minimbt_malloc")))
+
+        // 3. 存储函数指针
+        instrs.push(La(T0, fundef.name.0))
+        instrs.push(Sd(T0, { base: reg_ret, offset: 0 }))
+
+        // 4. 存储捕获的变量
+        for i, env_var in fundef.formal_free_vars {
+          match env.vars.get(env_var.to_string()) {
+            Some((offset, _)) => {
+              instrs.push(Ld(T0, { base: Fp, offset }))
+              instrs.push(Sd(T0, { base: reg_ret, offset: (i + 1) * 8 }))
+            }
+            None =>
+              @util.logger(
+                "Warning: Free variable not found in environment: " +
+                "name: " +
+                env_var.to_string() +
+                " env: " +
+                env_var.to_string(),
+              )
+          }
+        }
+        let offset = env.current_offset
+        instrs.push(Sd(reg_ret, { base: Fp, offset }))
+
+        // 更新环境
+        env = env.add(arg.to_string(), offset, fundef.ty)
+        env.current_offset -= 8
+      }
+      None => ()
+    }
+  }
   emit_args(args, env, instrs)
   match env.vars.get(label.0) {
-    Some((offset, ty)) => {
+    Some((offset, ty)) =>
       match ty {
         ClosureFn(_) => {
           instrs.push(Ld(S11, { base: Fp, offset }))
@@ -443,20 +491,19 @@ fn emit_call_direct(
           instrs.push(Ld(T1, { base: Fp, offset }))
           instrs.push(Jalr(T1))
         }
-        _ => {
-          @util.die("emit_call_direct: unknown " + label.0 + " type: " + ty.to_string())
-          // instrs.push(Ld(S11, { base: Fp, offset }))
-          // instrs.push(Ld(T1, { base: S11, offset: 0 }))
-          // instrs.push(Jalr(T1))
+        _ =>
+          @util.die(
+            "emit_call_direct: unknown " + label.0 + " type: " + ty.to_string(),
+          )
+        // instrs.push(Ld(S11, { base: Fp, offset }))
+        // instrs.push(Ld(T1, { base: S11, offset: 0 }))
+        // instrs.push(Jalr(T1))
 
-          // instrs.push(Ld(S11, { base: Fp, offset }))
-          // instrs.push(Jalr(S11))
-        }
+        // instrs.push(Ld(S11, { base: Fp, offset }))
+        // instrs.push(Jalr(S11))
       }
-    }
     None => instrs.push(Call(Label(label.0)))
   }
-
 
   // match env.vars.get(label.0) {
   //   Some((offset, _)) => {
@@ -466,7 +513,7 @@ fn emit_call_direct(
   //   }
   //   None => instrs.push(Call(Label(label.0)))
   // }
-  
+
 }
 
 ///|
@@ -626,6 +673,10 @@ fn emit_array_get(
     Double => instrs.push(Fld(freg_ret, { base: T0, offset: 0 }))
     Int => instrs.push(Lw(reg_ret, { base: T0, offset: 0 }))
     // DirectFn(_, _) | ClosureFn(_, _) => instrs.push(Mv(reg_ret, T0)) // 函数指针用 Mv
+    DirectFn(_, _) | ClosureFn(_, _) => {
+      instrs.push(Ld(reg_ret, { base: T0, offset: 0 }))
+      instrs.push(Ld(reg_ret, { base: reg_ret, offset: 0 }))
+    }
     _ => instrs.push(Ld(reg_ret, { base: T0, offset: 0 })) // 其他类型默认用 Ld
   }
   // @util.logger("emit_array_get end")
@@ -662,6 +713,54 @@ fn emit_array_put(
     Int => {
       instrs.push(Lw(T2, { base: Fp, offset: value_offset }))
       instrs.push(Sw(T2, { base: T0, offset: 0 }))
+    }
+    ClosureFn(_, _) | DirectFn(_, _) => {
+      let mut value_offset = value_offset
+      // 如果是函数名，需要特殊处理
+      let def_index = env.fundefs.search_by(fn(fundef) {
+        fundef.name.0 == value.to_string()
+      })
+      match def_index {
+        Some(index) => {
+          let fundef = env.fundefs.get(index).unwrap()
+          // instrs.push(La(reg_arg_list.get(i).unwrap(), fundef.name.0))
+          // 1. 计算需要的内存大小 (函数指针 + 自由变量)
+          let size = @cmp.maximum(16, 8 + fundef.formal_free_vars.length() * 8)
+
+          // 2. 调用 malloc 分配内存
+          instrs.push(Li(A0, size.to_string()))
+          instrs.push(Call(Label("minimbt_malloc")))
+
+          // 3. 存储函数指针
+          instrs.push(La(T2, fundef.name.0))
+          instrs.push(Sd(T2, { base: reg_ret, offset: 0 }))
+
+          // 4. 存储捕获的变量
+          for i, env_var in fundef.formal_free_vars {
+            match env.vars.get(env_var.to_string()) {
+              Some((offset, _)) => {
+                instrs.push(Ld(T3, { base: Fp, offset }))
+                instrs.push(Sd(T3, { base: reg_ret, offset: (i + 1) * 8 }))
+              }
+              None =>
+                @util.logger(
+                  "Warning: Free variable not found in environment: " +
+                  "name: " +
+                  env_var.to_string() +
+                  " env: " +
+                  env_var.to_string(),
+                )
+            }
+          }
+          let offset = env.current_offset
+          instrs.push(Sd(reg_ret, { base: Fp, offset }))
+
+          value_offset = offset
+        }
+        None => ()
+      }
+      instrs.push(Ld(T2, { base: Fp, offset: value_offset }))
+      instrs.push(Sd(T2, { base: T0, offset: 0 }))
     }
     _ => {
       instrs.push(Ld(T2, { base: Fp, offset: value_offset }))
@@ -701,21 +800,7 @@ fn emit_args(
           instrs.push(Fld(freg_arg_list.get(i).unwrap(), { base: Fp, offset }))
         Some((offset, _)) =>
           instrs.push(Ld(reg_arg_list.get(i).unwrap(), { base: Fp, offset }))
-        None => {
-          // 如果是函数名，需要特殊处理
-          let def_index = env.fundefs.search_by(fn(fundef) {
-            fundef.name.0 == arg.to_string()
-          })
-          match def_index {
-            Some(index) => {
-              let fundef = env.fundefs.get(index).unwrap()
-              instrs.push(La(reg_arg_list.get(i).unwrap(), fundef.name.0))
-            }
-            None =>
-              // 如果找不到函数定义，可能是外部函数
-              instrs.push(La(reg_arg_list.get(i).unwrap(), arg.to_string()))
-          }
-        }
+        None => @util.die("emit_args error: " + arg.to_string())
       }
     } else {
       let offset = env.vars.get(arg.to_string()).unwrap().0

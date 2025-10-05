@@ -88,27 +88,27 @@ fn knf_to_closure(
       let body = knf_to_closure(funcdefs, env, static_arrays, e)
       // @util.logger("name: " + (x, ty).to_string())
       let ty = match ty {
-        Fun(args_ty, ret_ty) =>
-          ClosureFn(args_ty.map(ty_to_low_type), ty_to_low_type(ret_ty))
-        //  Fun(_, ty) => gen_body_ret_type(ty, funcdefs, body)
+        // Fun(args_ty, ret_ty) =>
+          // ClosureFn(args_ty.map(ty_to_low_type), ty_to_low_type(ret_ty))
+        Fun(_, ty) => gen_body_ret_type(ty, funcdefs, env, body)
         _ => ty_to_low_type(ty)
       }
       let env = env.add(x, ty)
       let body = match body {
-        Var(n) => match funcdefs.search_by(fn(def) { def.old_name == n }) {
-          Some(index) => {
-            let def = funcdefs.get(index).unwrap()
-            MakeClosure(
-              (def.old_name, gen_cls_func_type(def.ty)),
-              {
-                name: def.old_name.to_string(),
-                actual_free_vars: def.formal_free_vars.map(fv => fv.0),
-              },
-              Var(n),
-            )
-          }
-          None => body
-        }
+        // Var(n) => match funcdefs.search_by(fn(def) { def.old_name == n }) {
+        //   Some(index) => {
+        //     let def = funcdefs.get(index).unwrap()
+        //     MakeClosure(
+        //       (def.old_name, gen_cls_func_type(def.ty)),
+        //       {
+        //         name: def.old_name.to_string(),
+        //         actual_free_vars: def.formal_free_vars.map(fv => fv.0),
+        //       },
+        //       Var(n),
+        //     )
+        //   }
+        //   None => body
+        // }
         _ => body
       }
       Let((x, ty), body, knf_to_closure(funcdefs, env, static_arrays, cont))
@@ -122,7 +122,7 @@ fn knf_to_closure(
       let mut env = env
       for arg in args {
         free_vars.remove(new_fv(arg.0, Unit))
-        env = env.add(arg.0, ty_to_low_type(arg.1))
+        env = env.add(arg.0, arr_ty_to_low_type(arg.1))
       }
       free_vars.remove(new_fv(name, Unit))
       let is_closure = not(free_vars.is_empty())
@@ -141,20 +141,20 @@ fn knf_to_closure(
       }
       funcdefs.push(make_def(Unit))
       let body = match body {
-        Var(n) => match funcdefs.search_by(fn(def) { def.old_name == n }) {
-          Some(index) => {
-            let def = funcdefs.get(index).unwrap()
-            MakeClosure(
-              (def.old_name, gen_cls_func_type(def.ty)),
-              {
-                name: def.old_name.to_string(),
-                actual_free_vars: def.formal_free_vars.map(fv => fv.0),
-              },
-              Var(n),
-            )
-          }
-          None => Var(n)
-        }
+        // Var(n) => match funcdefs.search_by(fn(def) { def.old_name == n }) {
+        //   Some(index) => {
+        //     let def = funcdefs.get(index).unwrap()
+        //     MakeClosure(
+        //       (def.old_name, gen_cls_func_type(def.ty)),
+        //       {
+        //         name: def.old_name.to_string(),
+        //         actual_free_vars: def.formal_free_vars.map(fv => fv.0),
+        //       },
+        //       Var(n),
+        //     )
+        //   }
+        //   None => Var(n)
+        // }
         _ => knf_to_closure(funcdefs, env, static_arrays, body)
       }
       let def = make_def(body)
@@ -195,27 +195,36 @@ fn knf_to_closure(
           }
       }
       let is_closure_var = match env.get(name) {
-        Some(_) => true
+        Some(ty) => match ty {
+          ClosureFn(_, _) => true
+          _ => false
+        }
         None => false
+        // _ => false
       }
       let result = match is_closure_func || is_closure_var {
-        true => CallClosure(name, args_name)
+        true => if is_closure_var {
+          CallClosure(name, args_name)
+        } else {
+          CallClosure(name, args_name)
+        }
         false => CallDirect(name.to_string(), args_name)
       }
       args_name.rev_fold(init=result, fn(acc, arg) {
         let func = funcdefs.search_by(fn(def) { def.old_name == arg })
         match func {
-          Some(index) => {
-            let def = funcdefs.get(index).unwrap()
-            MakeClosure(
-              (arg, def.ty),
-              {
-                name: arg.to_string(),
-                actual_free_vars: def.formal_free_vars.map(fv => fv.0),
-              },
-              acc,
-            )
-          }
+          // Some(index) => {
+          //   let def = funcdefs.get(index).unwrap()
+          //   MakeClosure(
+          //     (arg, def.ty),
+          //     {
+          //       name: arg.to_string(),
+          //       actual_free_vars: def.formal_free_vars.map(fv => fv.0),
+          //     },
+          //     acc,
+          //   )
+          // }
+          Some(_) => acc
           None => acc
         }
       })

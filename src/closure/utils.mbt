@@ -9,14 +9,14 @@ fn gen_func_type(ty : Type, is_closure : Bool, fundefs: Array[FuncDef], env : @i
   }
 }
 
-fn gen_cls_func_type(ty : LowType) -> LowType {
-  match ty {
-    ClosureFn(args, ty) | DirectFn(args, ty) => {
-      ClosureFn(args, ty)
-    }
-    _ => @util.die("gen_func_type: " + ty.to_string())
-  }
-}
+// fn gen_cls_func_type(ty : LowType) -> LowType {
+//   match ty {
+//     ClosureFn(args, ty) | DirectFn(args, ty) => {
+//       ClosureFn(args, ty)
+//     }
+//     _ => @util.die("gen_func_type: " + ty.to_string())
+//   }
+// }
 
 fn gen_body_ret_type(ty : Type, funcdefs: Array[FuncDef], env : @immut/hashmap.HashMap[Name, LowType], body: Expr) -> LowType {
   match body {
@@ -55,6 +55,15 @@ fn gen_body_ret_type(ty : Type, funcdefs: Array[FuncDef], env : @immut/hashmap.H
         None => ty_to_low_type(ty)
       }
       None => ty_to_low_type(ty)
+    }
+    ArrayGet(arr, _) => {
+      match env.get(arr) {
+        Some(ty) => match ty {
+          Array(ty) => ty
+          _ => @util.die("gen_body_ret_type arr: " + arr.name.unwrap() + " not found")
+        }
+        None => @util.die("gen_body_ret_type arr1: " + arr.name.unwrap() + " not found")
+      }
     }
     _ => {
       ty_to_low_type(ty)

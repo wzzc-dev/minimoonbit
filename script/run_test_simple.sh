@@ -6,7 +6,7 @@ OUT_PREFIX="out"
 # 初始化通过测试计数器和成功测试列表
 PASSED_COUNT=0
 PASSED_TESTS=()
-
+FAILED_TESTS=()
 # 找到所有 .mbt 结尾的文件并循环处理
 for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
   # 提取文件的基础名称（不带路径和扩展名），用于匹配 .ans 文件
@@ -36,6 +36,8 @@ for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
       echo "Test $MBT_FILE failed: Output differs from $ANS_FILE"
       echo "Differences:"
       diff --strip-trailing-cr output.txt "$ANS_FILE"
+      # 添加到失败测试列表
+      FAILED_TESTS+=("$BASE_NAME")
     fi
   else
     echo "Warning: No answer file found for $MBT_FILE. Expected at $ANS_FILE"
@@ -52,6 +54,10 @@ echo "All files processed. Total passed tests: $PASSED_COUNT"
 if [ $PASSED_COUNT -gt 0 ]; then
   echo "Successful test cases:"
   for test in "${PASSED_TESTS[@]}"; do
+    echo "  - $test"
+  done
+  echo "Failed test cases:"
+  for test in "${FAILED_TESTS[@]}"; do
     echo "  - $test"
   done
 else
