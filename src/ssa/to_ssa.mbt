@@ -1,6 +1,8 @@
 ///| 将闭包IR转换为SSA形式
 
-///| 使用基本块参数而非phi函数来实现SSA
+///| 使用基本块参数来实现SSA
+
+// ==================== 辅助函数 ====================
 
 ///|
 /// 将闭包IR程序转换为SSA程序
@@ -195,6 +197,120 @@ priv struct ExprResult {
   context : Context
 } derive(Show)
 
+// ==================== 辅助函数 ====================
+
+///| 更新当前块并返回新的上下文
+fn update_current_block(
+  context : Context,
+  instructions : Array[Instruction],
+  terminator : Terminator
+) -> Context {
+  let updated_block = BasicBlock::{
+    id: context.current_block.id,
+    params: context.current_block.params,
+    instructions,
+    terminator,
+  }
+
+  let updated_blocks = context.blocks.map(fn(b) {
+    if b.id == updated_block.id { updated_block } else { b }
+  })
+
+  Context::{
+    current_block: updated_block,
+    blocks: updated_blocks,
+    block_map: context.block_map,
+    var_env: context.var_env,
+    func_env: context.func_env,
+  }
+}
+
+///| 向当前块添加指令并更新上下文
+fn add_instruction(context : Context, instruction : Instruction) -> Context {
+  let new_instructions = []
+  for inst in context.current_block.instructions {
+    new_instructions.push(inst)
+  }
+  new_instructions.push(instruction)
+  update_current_block(context, new_instructions, context.current_block.terminator)
+}
+
+///| 创建常量值并添加到当前块
+fn create_const_int(context : Context, value : Int) -> (Value, Context) {
+  let const_value = Value::{ id: new_value_id(), ty: Type::Int }
+  let instruction = Instruction::{
+    result: const_value,
+    opcode: Opcode::ConstInt(value),
+  }
+  (const_value, add_instruction(context, instruction))
+}
+
+///| 创建浮点常量值并添加到当前块
+fn create_const_float(context : Context, value : Double) -> (Value, Context) {
+  let const_value = Value::{ id: new_value_id(), ty: Type::Float }
+  let instruction = Instruction::{
+    result: const_value,
+    opcode: Opcode::ConstFloat(value),
+  }
+  (const_value, add_instruction(context, instruction))
+}
+
+///| 创建二元运算指令
+fn create_binary_op(
+  context : Context,
+  op_type : BinaryOpType,
+  left : Value,
+  right : Value,
+  result_type : Type
+) -> (Value, Context) {
+  let result_value = Value::{ id: new_value_id(), ty: result_type }
+  let opcode = match op_type {
+    BinaryOpType::Add => Opcode::Add(left, right)
+    BinaryOpType::Sub => Opcode::Sub(left, right)
+    BinaryOpType::Mul => Opcode::Mul(left, right)
+    BinaryOpType::Div => Opcode::Div(left, right)
+    BinaryOpType::Mod => Opcode::Mod(left, right)
+    BinaryOpType::FAdd => Opcode::FAdd(left, right)
+    BinaryOpType::FSub => Opcode::FSub(left, right)
+    BinaryOpType::FMul => Opcode::FMul(left, right)
+    BinaryOpType::FDiv => Opcode::FDiv(left, right)
+    BinaryOpType::FMod => Opcode::FMod(left, right)
+  }
+
+  let instruction = Instruction::{ result: result_value, opcode }
+  (result_value, add_instruction(context, instruction))
+}
+
+///| 二元运算类型
+priv enum BinaryOpType {
+  Add
+  Sub
+  Mul
+  Div
+  Mod
+  FAdd
+  FSub
+  FMul
+  FDiv
+  FMod
+}
+
+///| 创建GetElement指令
+fn create_get_element(
+  context : Context,
+  tuple_value : Value,
+  index : Int,
+  element_type : Type
+) -> (Value, Context) {
+  let element_value = Value::{ id: new_value_id(), ty: element_type }
+  let instruction = Instruction::{
+    result: element_value,
+    opcode: Opcode::GetElement(tuple_value, index),
+  }
+  (element_value, add_instruction(context, instruction))
+}
+
+
 ///|
 /// 转换闭包IR表达式为SSA指令
 fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
@@ -323,37 +439,9 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         Type::Tuple(types) => types[index]
         _ => @util.die("Expected tuple type in TupleGet")
       }
-      let result_value = Value::{ id: new_value_id(), ty: element_type }
-      let instruction = Instruction::{
-        result: result_value,
-        opcode: Opcode::GetElement(tuple_value, index),
-      }
 
-      // 更新当前块的指令列表
-      context.current_block.instructions.push(instruction)
-      let updated_block = BasicBlock::{
-        id: context.current_block.id,
-        params: context.current_block.params,
-        instructions: context.current_block.instructions,
-        terminator: context.current_block.terminator,
-      }
-
-      // 更新上下文
-      let updated_blocks = context.blocks.map(fn(b) {
-        if b.id == updated_block.id {
-          updated_block
-        } else {
-          b
-        }
-      })
-      let updated_context = Context::{
-        current_block: updated_block,
-        blocks: updated_blocks,
-        block_map: context.block_map,
-        var_env: context.var_env,
-        func_env: context.func_env,
-      }
-      ExprResult::{ value: Some(result_value), context: updated_context }
+      let (result_value, new_context) = create_get_element(context, tuple_value, index, element_type)
+      ExprResult::{ value: Some(result_value), context: new_context }
     }
     ExternalArray(label) => {
       // 外部数组引用：创建一个指向外部数组的值
@@ -650,70 +738,12 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
     Int(i) => {
-      let value = Value::{ id: new_value_id(), ty: Type::Int }
-      let instruction = Instruction::{
-        result: value,
-        opcode: Opcode::ConstInt(i),
-      }
-
-      // 更新当前块的指令列表
-      context.current_block.instructions.push(instruction)
-      let updated_block = BasicBlock::{
-        id: context.current_block.id,
-        params: context.current_block.params,
-        instructions: context.current_block.instructions,
-        terminator: context.current_block.terminator,
-      }
-
-      // 更新上下文
-      let updated_blocks = context.blocks.map(fn(b) {
-        if b.id == updated_block.id {
-          updated_block
-        } else {
-          b
-        }
-      })
-      let updated_context = Context::{
-        current_block: updated_block,
-        blocks: updated_blocks,
-        block_map: context.block_map,
-        var_env: context.var_env, // 变量环境
-        func_env: context.func_env,
-      }
-      ExprResult::{ value: Some(value), context: updated_context }
+      let (value, new_context) = create_const_int(context, i)
+      ExprResult::{ value: Some(value), context: new_context }
     }
     Int64(i) => {
-      let value = Value::{ id: new_value_id(), ty: Type::Int }
-      let instruction = Instruction::{
-        result: value,
-        opcode: Opcode::ConstInt(i.to_int()),
-      }
-
-      // 更新当前块的指令列表
-      context.current_block.instructions.push(instruction)
-      let updated_block = BasicBlock::{
-        id: context.current_block.id,
-        params: context.current_block.params,
-        instructions: context.current_block.instructions,
-        terminator: context.current_block.terminator,
-      }
-
-      // 更新上下文
-      let updated_blocks = context.blocks.map(fn(b) {
-        if b.id == updated_block.id {
-          updated_block
-        } else {
-          b
-        }
-      })
-      let updated_context = Context::{
-        current_block: updated_block,
-        blocks: updated_blocks,
-        block_map: context.block_map,
-        var_env: context.var_env, // 变量环境
-        func_env: context.func_env,
-      }
-      ExprResult::{ value: Some(value), context: updated_context }
+      let (value, new_context) = create_const_int(context, i.to_int())
+      ExprResult::{ value: Some(value), context: new_context }
     }
     Neg(x) => {
       // 转换操作数
@@ -721,49 +751,10 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let context1 = result.context
       let operand_value = result.value.unwrap()
 
-      // 创建结果值和指令 (整数取负: 0 - x)
-      let result_value = Value::{ id: new_value_id(), ty: Type::Int }
-      let zero_value = Value::{ id: new_value_id(), ty: Type::Int }
-
-      // 先创建常量0
-      let zero_instruction = Instruction::{
-        result: zero_value,
-        opcode: Opcode::ConstInt(0),
-      }
-
-      // 然后执行减法 (0 - operand)
-      let neg_instruction = Instruction::{
-        result: result_value,
-        opcode: Opcode::Sub(zero_value, operand_value),
-      }
-
-      // 更新当前块的指令列表
-      context1.current_block.instructions.append([
-        zero_instruction, neg_instruction,
-      ])
-      let updated_block = BasicBlock::{
-        id: context1.current_block.id,
-        params: context1.current_block.params,
-        instructions: context1.current_block.instructions,
-        terminator: context1.current_block.terminator,
-      }
-
-      // 更新上下文
-      let updated_blocks = context1.blocks.map(fn(b) {
-        if b.id == updated_block.id {
-          updated_block
-        } else {
-          b
-        }
-      })
-      let updated_context = Context::{
-        current_block: updated_block,
-        blocks: updated_blocks,
-        block_map: context1.block_map,
-        var_env: context1.var_env,
-        func_env: context1.func_env,
-      }
-      ExprResult::{ value: Some(result_value), context: updated_context }
+      // 整数取负: 0 - x
+      let (zero_value, context2) = create_const_int(context1, 0)
+      let (result_value, final_context) = create_binary_op(context2, BinaryOpType::Sub, zero_value, operand_value, Type::Int)
+      ExprResult::{ value: Some(result_value), context: final_context }
     }
     FNeg(x) => {
       // 转换操作数
@@ -771,82 +762,14 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let context1 = result.context
       let operand_value = result.value.unwrap()
 
-      // 创建结果值和指令 (浮点取负: 0.0 - x)
-      let result_value = Value::{ id: new_value_id(), ty: Type::Float }
-      let zero_value = Value::{ id: new_value_id(), ty: Type::Float }
-
-      // 先创建浮点常量0.0
-      let zero_instruction = Instruction::{
-        result: zero_value,
-        opcode: Opcode::ConstFloat(0.0),
-      }
-
-      // 然后执行浮点减法 (0.0 - operand)
-      let neg_instruction = Instruction::{
-        result: result_value,
-        opcode: Opcode::FSub(zero_value, operand_value),
-      }
-
-      // 更新当前块的指令列表
-      context1.current_block.instructions.append([
-        zero_instruction, neg_instruction,
-      ])
-      let updated_block = BasicBlock::{
-        id: context1.current_block.id,
-        params: context1.current_block.params,
-        instructions: context1.current_block.instructions,
-        terminator: context1.current_block.terminator,
-      }
-
-      // 更新上下文
-      let updated_blocks = context1.blocks.map(fn(b) {
-        if b.id == updated_block.id {
-          updated_block
-        } else {
-          b
-        }
-      })
-      let updated_context = Context::{
-        current_block: updated_block,
-        blocks: updated_blocks,
-        block_map: context1.block_map,
-        var_env: context1.var_env,
-        func_env: context1.func_env,
-      }
-      ExprResult::{ value: Some(result_value), context: updated_context }
+      // 浮点取负: 0.0 - x
+      let (zero_value, context2) = create_const_float(context1, 0.0)
+      let (result_value, final_context) = create_binary_op(context2, BinaryOpType::FSub, zero_value, operand_value, Type::Float)
+      ExprResult::{ value: Some(result_value), context: final_context }
     }
     Double(d) => {
-      let value = Value::{ id: new_value_id(), ty: Type::Float }
-      let instruction = Instruction::{
-        result: value,
-        opcode: Opcode::ConstFloat(d),
-      }
-
-      // 更新当前块的指令列表
-      context.current_block.instructions.push(instruction)
-      let updated_block = BasicBlock::{
-        id: context.current_block.id,
-        params: context.current_block.params,
-        instructions: context.current_block.instructions,
-        terminator: context.current_block.terminator,
-      }
-
-      // 更新上下文
-      let updated_blocks = context.blocks.map(fn(b) {
-        if b.id == updated_block.id {
-          updated_block
-        } else {
-          b
-        }
-      })
-      let updated_context = Context::{
-        current_block: updated_block,
-        blocks: updated_blocks,
-        block_map: context.block_map,
-        var_env: context.var_env, // 变量环境
-        func_env: context.func_env,
-      }
-      ExprResult::{ value: Some(value), context: updated_context }
+      let (value, new_context) = create_const_float(context, d)
+      ExprResult::{ value: Some(value), context: new_context }
     }
     Add(x, y)
     | Sub(x, y)
@@ -862,58 +785,23 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let value1 = context.var_env.get(x.to_string()).unwrap()
       let value2 = context.var_env.get(y.to_string()).unwrap()
 
-      // 创建结果值和指令
-      let result_value = Value::{
-        id: new_value_id(),
-        ty: match expr {
-          Add(_, _) | Sub(_, _) | Mul(_, _) | Div(_, _) | Mod(_, _) => Type::Int
-          FAdd(_, _) | FSub(_, _) | FMul(_, _) | FDiv(_, _) | FMod(_, _) =>
-            Type::Float
-          _ => @util.die("unexpected expression type")
-        },
-      }
-      let instruction = Instruction::{
-        result: result_value,
-        opcode: match (expr, value1, value2) {
-          (Add(_, _), _, _) => Opcode::Add(value1, value2)
-          (Sub(_, _), _, _) => Opcode::Sub(value1, value2)
-          (Mul(_, _), _, _) => Opcode::Mul(value1, value2)
-          (Div(_, _), _, _) => Opcode::Div(value1, value2)
-          (Mod(_, _), _, _) => Opcode::Mod(value1, value2)
-          (FAdd(_, _), _, _) => Opcode::FAdd(value1, value2)
-          (FSub(_, _), _, _) => Opcode::FSub(value1, value2)
-          (FMul(_, _), _, _) => Opcode::FMul(value1, value2)
-          (FDiv(_, _), _, _) => Opcode::FDiv(value1, value2)
-          (FMod(_, _), _, _) => Opcode::FMod(value1, value2)
-          _ => @util.die("unexpected expression type")
-        },
+      // 确定运算类型和结果类型
+      let (op_type, result_type) = match expr {
+        Add(_, _) => (BinaryOpType::Add, Type::Int)
+        Sub(_, _) => (BinaryOpType::Sub, Type::Int)
+        Mul(_, _) => (BinaryOpType::Mul, Type::Int)
+        Div(_, _) => (BinaryOpType::Div, Type::Int)
+        Mod(_, _) => (BinaryOpType::Mod, Type::Int)
+        FAdd(_, _) => (BinaryOpType::FAdd, Type::Float)
+        FSub(_, _) => (BinaryOpType::FSub, Type::Float)
+        FMul(_, _) => (BinaryOpType::FMul, Type::Float)
+        FDiv(_, _) => (BinaryOpType::FDiv, Type::Float)
+        FMod(_, _) => (BinaryOpType::FMod, Type::Float)
+        _ => @util.die("unexpected expression type")
       }
 
-      // 更新当前块的指令列表
-      context.current_block.instructions.push(instruction)
-      let updated_block = BasicBlock::{
-        id: context.current_block.id,
-        params: context.current_block.params,
-        instructions: context.current_block.instructions,
-        terminator: context.current_block.terminator,
-      }
-
-      // 更新上下文
-      let updated_blocks = context.blocks.map(fn(b) {
-        if b.id == updated_block.id {
-          updated_block
-        } else {
-          b
-        }
-      })
-      let updated_context = Context::{
-        current_block: updated_block,
-        blocks: updated_blocks,
-        block_map: context.block_map,
-        var_env: context.var_env, // 变量环境
-        func_env: context.func_env,
-      }
-      ExprResult::{ value: Some(result_value), context: updated_context }
+      let (result_value, new_context) = create_binary_op(context, op_type, value1, value2, result_type)
+      ExprResult::{ value: Some(result_value), context: new_context }
     }
     IfEq(x, y, e1, e2) | IfLe(x, y, e1, e2) | IfLt(x, y, e1, e2) => {
       // 先转换条件表达式的左操作数

@@ -28,6 +28,15 @@ struct RegisterAllocator {
 } derive(Show)
 
 ///|
+///| 检查寄存器是否是被调用者保存寄存器（callee-saved）
+fn is_callee_saved(reg : Reg) -> Bool {
+  match reg {
+    S2 | S3 | S4 | S5 | S6 | S7 | S8 | S9 | S10 | S11 => true
+    _ => false
+  }
+}
+
+///|
 
 ///| 计算SSA函数的活跃区间
 
@@ -35,7 +44,7 @@ struct RegisterAllocator {
 /// 跟踪每个值的实际最后一次使用位置，确保寄存器分配准确
 pub fn compute_live_intervals_for_function(
   func : @ssa.Function,
-) -> Array[LiveInterval] {
+) -> (Array[LiveInterval], Array[Int]) {
   let mut intervals = @immut/hashmap.new()
   let mut last_use_positions = @immut/hashmap.new()
   let mut instruction_count = 0
@@ -140,7 +149,7 @@ pub fn compute_live_intervals_for_function(
     let final_end = updated_end
     result.push({ ..interval, end: final_end })
   })
-  result
+  (result, param_ids)
 }
 
 ///|
@@ -262,6 +271,7 @@ fn get_terminator_uses_ids(term : @ssa.Terminator) -> Array[Int] {
 /// 线性扫描寄存器分配算法
 pub fn linear_scan_register_allocation(
   intervals : Array[LiveInterval],
+  param_ids : Array[Int],
 ) -> RegisterAllocator {
   // 初始化寄存器分配器
   // 优先使用调用者保存寄存器（t0-t6），因为它们不需要在函数调用间保存
@@ -306,14 +316,24 @@ pub fn linear_scan_register_allocation(
     } else {
       // 分配寄存器
       let reg = allocator.available_regs.unsafe_pop()
-      allocator.value_to_reg = allocator.value_to_reg.add(
-        interval.value_id,
-        reg,
-      )
 
-      // 将区间添加到活跃列表（按结束位置排序）
-      let new_interval = { ..interval, reg: Some(reg) }
-      insert_active_interval(allocator, new_interval)
+      // 检查是否是函数参数，如果是且被分配到callee-saved寄存器，则强制溢出
+      let is_function_param = param_ids.contains(interval.value_id)
+      if is_function_param && is_callee_saved(reg) {
+        // 将寄存器放回可用列表
+        allocator.available_regs.push(reg)
+        // 强制溢出函数参数，避免递归调用时的覆盖问题
+        spill_at_interval(allocator, interval)
+      } else {
+        allocator.value_to_reg = allocator.value_to_reg.add(
+          interval.value_id,
+          reg,
+        )
+
+        // 将区间添加到活跃列表（按结束位置排序）
+        let new_interval = { ..interval, reg: Some(reg) }
+        insert_active_interval(allocator, new_interval)
+      }
     }
   }
   allocator
@@ -452,7 +472,16 @@ pub fn get_register_or_spill_load(
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
           // 值被溢出到内存，需要加载
-          let temp_reg = T0 // 使用临时寄存器
+          // 使用值ID来选择临时寄存器，避免冲突
+          let temp_reg = match value_id % 7 {
+            0 => T0
+            1 => T1
+            2 => T2
+            3 => T3
+            4 => T4
+            5 => T5
+            _ => T6
+          }
           let load_instr = Ld(temp_reg, {
             base: Fp,
             offset: -(24 + spill_offset),
@@ -465,8 +494,17 @@ pub fn get_register_or_spill_load(
           )
           // 如果都没有分配，说明这是一个错误情况
           // 在活跃区间计算正确的情况下，所有使用的值都应该有寄存器分配
-          // 为了避免寄存器冲突，我们使用一个保守的策略：总是使用T0作为临时寄存器
-          (T0, [])
+          // 为了避免寄存器冲突，使用值ID来选择临时寄存器
+          let temp_reg = match value_id % 7 {
+            0 => T0
+            1 => T1
+            2 => T2
+            3 => T3
+            4 => T4
+            5 => T5
+            _ => T6
+          }
+          (temp_reg, [])
         }
       }
   }

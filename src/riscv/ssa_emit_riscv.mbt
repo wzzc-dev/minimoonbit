@@ -23,9 +23,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 /// 生成函数的RISC-V汇编代码
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
-  let live_intervals = compute_live_intervals_for_function(func)
+  let (live_intervals, param_ids) = compute_live_intervals_for_function(func)
   // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
-  let allocator = linear_scan_register_allocation(live_intervals)
+  let allocator = linear_scan_register_allocation(live_intervals, param_ids)
   // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
