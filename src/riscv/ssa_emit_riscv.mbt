@@ -29,17 +29,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
-  // 计算栈帧大小（包括溢出槽）
-  let spill_size = allocator.next_spill_slot
-  let framesize = 24 + spill_size // 基础栈帧大小 + 溢出空间
-
-  // 函数序言
-  asm_instructions.push(Addi(Sp, Sp, -framesize)) // 分配栈帧
-  asm_instructions.push(Sd(Ra, { base: Sp, offset: framesize - 8 })) // 保存返回地址
-  asm_instructions.push(Sd(Fp, { base: Sp, offset: framesize - 16 })) // 保存帧指针
-  asm_instructions.push(Addi(Fp, Sp, framesize)) // 设置帧指针
-
-  // 保存函数中使用的被调用者保存寄存器（callee-saved registers）
+  // 确定需要保存的被调用者保存的寄存器
   let saved_callee_regs = []
   allocator.value_to_reg.each(fn(_, reg) {
     // 检查是否是被调用者保存的寄存器（s0-s11）
@@ -51,6 +41,16 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
       _ => ()
     }
   })
+
+  // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间
+  let spill_size = allocator.next_spill_slot
+  let framesize = 24 + spill_size + saved_callee_regs.length() * 8
+
+  // 函数序言
+  asm_instructions.push(Addi(Sp, Sp, -framesize)) // 分配栈帧
+  asm_instructions.push(Sd(Ra, { base: Sp, offset: framesize - 8 })) // 保存返回地址
+  asm_instructions.push(Sd(Fp, { base: Sp, offset: framesize - 16 })) // 保存帧指针
+  asm_instructions.push(Addi(Fp, Sp, framesize)) // 设置帧指针
 
   // 保存被调用者保存的寄存器到栈上
   let mut offset = 24
@@ -1111,9 +1111,7 @@ fn emit_terminator_with_regalloc(
           }
         None => result.push(Li(A0, "0"))
       }
-      let framesize = 24 + allocator.next_spill_slot
-
-      // 恢复被调用者保存的寄存器
+      // 确定需要保存的被调用者保存的寄存器
       let saved_callee_regs = []
       allocator.value_to_reg.each(fn(_, reg) {
         // 检查是否是被调用者保存的寄存器（s0-s11）
@@ -1125,6 +1123,9 @@ fn emit_terminator_with_regalloc(
           _ => ()
         }
       })
+
+      // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间
+      let framesize = 24 + allocator.next_spill_slot + saved_callee_regs.length() * 8
 
       // 恢复被调用者保存的寄存器从栈上
       let mut offset = 24
