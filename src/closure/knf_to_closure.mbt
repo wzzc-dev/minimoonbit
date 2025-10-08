@@ -32,9 +32,6 @@ pub fn knf_program_to_closure(
     static_arrays,
     prog,
   )
-  // println(
-  //   "closure ir: " + { fundefs, static_arrays, body }.to_json().stringify(),
-  // )
   { fundefs, static_arrays, body }
 }
 
@@ -94,23 +91,6 @@ fn knf_to_closure(
         _ => ty_to_low_type(ty)
       }
       let env = env.add(x, ty)
-      let body = match body {
-        // Var(n) => match funcdefs.search_by(fn(def) { def.old_name == n }) {
-        //   Some(index) => {
-        //     let def = funcdefs.get(index).unwrap()
-        //     MakeClosure(
-        //       (def.old_name, gen_cls_func_type(def.ty)),
-        //       {
-        //         name: def.old_name.to_string(),
-        //         actual_free_vars: def.formal_free_vars.map(fv => fv.0),
-        //       },
-        //       Var(n),
-        //     )
-        //   }
-        //   None => body
-        // }
-        _ => body
-      }
       Let((x, ty), body, knf_to_closure(funcdefs, env, static_arrays, cont))
     }
     LetRec({ name, ty, args, body }, cont) => {
@@ -140,23 +120,7 @@ fn knf_to_closure(
         }
       }
       funcdefs.push(make_def(Unit))
-      let body = match body {
-        // Var(n) => match funcdefs.search_by(fn(def) { def.old_name == n }) {
-        //   Some(index) => {
-        //     let def = funcdefs.get(index).unwrap()
-        //     MakeClosure(
-        //       (def.old_name, gen_cls_func_type(def.ty)),
-        //       {
-        //         name: def.old_name.to_string(),
-        //         actual_free_vars: def.formal_free_vars.map(fv => fv.0),
-        //       },
-        //       Var(n),
-        //     )
-        //   }
-        //   None => Var(n)
-        // }
-        _ => knf_to_closure(funcdefs, env, static_arrays, body)
-      }
+      let body = knf_to_closure(funcdefs, env, static_arrays, body)
       let def = make_def(body)
       let index = funcdefs.search_by(fn(def) { def.old_name == name }).unwrap()
       let _ = funcdefs.remove(index)
@@ -200,9 +164,8 @@ fn knf_to_closure(
           _ => false
         }
         None => false
-        // _ => false
       }
-      let result = match is_closure_func || is_closure_var {
+      match is_closure_func || is_closure_var {
         true => if is_closure_var {
           CallClosure(name, args_name)
         } else {
@@ -210,24 +173,7 @@ fn knf_to_closure(
         }
         false => CallDirect(name.to_string(), args_name)
       }
-      args_name.rev_fold(init=result, fn(acc, arg) {
-        let func = funcdefs.search_by(fn(def) { def.old_name == arg })
-        match func {
-          // Some(index) => {
-          //   let def = funcdefs.get(index).unwrap()
-          //   MakeClosure(
-          //     (arg, def.ty),
-          //     {
-          //       name: arg.to_string(),
-          //       actual_free_vars: def.formal_free_vars.map(fv => fv.0),
-          //     },
-          //     acc,
-          //   )
-          // }
-          Some(_) => acc
-          None => acc
-        }
-      })
+      
     }
     Var(n) => Var(n)
     Tuple(arr_name) => MakeTuple(arr_name)

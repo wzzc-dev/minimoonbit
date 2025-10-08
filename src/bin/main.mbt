@@ -113,6 +113,7 @@ fn CompileStatus::step(
       let source_code = self.source_code.unwrap()
       let parsed = @parser.parse_from_string(source_code)
       self.ast = Some(parsed)
+      // @util.logger("parsed ast: " + parsed.to_json().stringify())
     }
     Typecheck => {
       let typechecked = try? @typing.typing(self.ast.unwrap())

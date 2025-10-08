@@ -1627,7 +1627,7 @@ fn blockExpr(
           [] => @types.Syntax::Unit
           [single] => single
           [.. init, last] =>
-            init.rev_fold(init=last, fn(stmt, acc) {
+            init.rev_fold(init=last, fn(acc, stmt) {
               match stmt {
                 @types.Syntax::Let(binding, value, _) =>
                   @types.Syntax::Let(binding, value, acc)
