@@ -489,22 +489,11 @@ pub fn get_register_or_spill_load(
           (temp_reg, [load_instr])
         }
         None => {
-          @util.logger(
+          @util.die(
             "Value " + value_id.to_string() + " has no register or spill slot",
           )
           // 如果都没有分配，说明这是一个错误情况
           // 在活跃区间计算正确的情况下，所有使用的值都应该有寄存器分配
-          // 为了避免寄存器冲突，使用值ID来选择临时寄存器
-          let temp_reg = match value_id % 7 {
-            0 => T0
-            1 => T1
-            2 => T2
-            3 => T3
-            4 => T4
-            5 => T5
-            _ => T6
-          }
-          (temp_reg, [])
         }
       }
   }

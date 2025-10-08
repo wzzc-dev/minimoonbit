@@ -1,11 +1,7 @@
 ///| 将SSA中间表示转换为RISC-V汇编代码
 
-///| 使用基本块参数而非phi函数来实现SSA
-
 ///|
 /// 实现线性扫描寄存器分配算法
-
-// 导入所需的模块
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
   // println("emit riscv for ssa program: ")
@@ -64,9 +60,9 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
 
     // 1. 首先设置闭包参数（自由变量）
     let (param_reg, _) = get_register_or_spill_load(
-        func.closure_param[0].id,
-        allocator,
-      )
+      func.closure_param[0].id,
+      allocator,
+    )
     // 闭包参数从A0开始（闭包对象指针） ，不需要移动
     if param_reg != A0 {
       asm_instructions.push(Mv(param_reg, A0))
@@ -108,19 +104,21 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
     // 函数没有闭包参数，普通参数从A0开始
     for i, param in func.params {
       let (param_reg, _) = get_register_or_spill_load(param.id, allocator)
-      let input_reg = match i {
-        0 => A0
-        1 => A1
-        2 => A2
-        3 => A3
-        4 => A4
-        5 => A5
-        6 => A6
-        7 => A7
-        _ => @util.die("TODO")
-      }
-      if param_reg != input_reg {
-        asm_instructions.push(Mv(param_reg, input_reg))
+      if i < 8 {
+        let input_reg = match i {
+          0 => A0
+          1 => A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          7 => A7
+          _ => @util.die("TODO")
+        }
+        if param_reg != input_reg {
+          asm_instructions.push(Mv(param_reg, input_reg))
+        }
       }
       // 如果参数需要溢出，立即保存到栈槽
       let spill_instrs = generate_spill_store_if_needed(
@@ -512,113 +510,66 @@ fn emit_function_call_instruction(
   args : Array[@ssa.Value],
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
+  let instrs = []
   match func {
-    Label(name) => {
-      let instrs = []
-
-      // 将参数放入参数寄存器
-      for i, arg in args {
-        let (arg_reg, load_instrs) = get_register_or_spill_load(
-          arg.id,
-          allocator,
-        )
-        instrs.append(load_instrs)
-        let param_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          7 => A7
-          _ => A0 // 超过8个参数需要通过栈传递
-        }
-        if arg_reg != param_reg {
-          instrs.push(Mv(param_reg, arg_reg))
-        }
-      }
-
-      // 调用函数
-      instrs.push(Call(name))
-
-      // 将返回值移动到结果寄存器
-      let (result_reg, load_instrs) = get_register_or_spill_load(
-        result_val.id,
-        allocator,
-      )
-      instrs.push(
-        Comment(
-          "Call: moving return value to result register: " +
-          result_reg.to_string() +
-          ",result id " +
-          result_val.id.to_string() +
-          ",load: " +
-          load_instrs.to_string(),
-        ),
-      )
-      instrs.append(load_instrs)
-      if result_reg != A0 {
-        instrs.push(Mv(result_reg, A0))
-      }
-      instrs
-    }
+    Label(_) => ()
     Call(func) => {
-      let instrs = []
-      instrs.push(Comment("Call: setting up function call" + func.to_string()))
-      let (func_reg, load_func_instrs) = get_register_or_spill_load(
-        func.id,
-        allocator,
-      )
+      let (_, load_func_instrs) = get_register_or_spill_load(func.id, allocator)
       instrs.append(load_func_instrs)
-      instrs.push(Comment("Call: setting up function call" + func.to_string()))
-
-      // 3. 将显式参数放入参数寄存器（从A1开始）
-      for i, arg in args {
-        let (arg_reg, load_instrs) = get_register_or_spill_load(
-          arg.id,
-          allocator,
-        )
-        instrs.append(load_instrs)
-        let param_reg = match i {
-          0 => A0 // 第一个显式参数放到A0
-          1 => A1 // 第二个显式参数放到A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          _ => @util.die("TODO")
-        }
-        if arg_reg != param_reg {
-          instrs.push(Mv(param_reg, arg_reg))
-        }
-      }
-
-      // 4. 调用函数
-      instrs.push(Comment("Extract function pointer and call"))
-      instrs.push(Jalr(func_reg))
-
-      // 5. 将返回值移动到结果寄存器
-      let (result_reg, load_result_instrs) = get_register_or_spill_load(
-        result_val.id,
-        allocator,
-      )
-      instrs.append(load_result_instrs)
-      if result_reg != A0 {
-        instrs.push(Mv(result_reg, A0))
-      }
-
-      // 如果结果需要溢出，生成存储指令
-      let spill_instrs = generate_spill_store_if_needed(
-        result_val.id,
-        result_reg,
-        allocator,
-      )
-      instrs.append(spill_instrs)
-      instrs
     }
   }
+  for i, arg in args {
+    if i < 8 {
+      let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
+      instrs.append(load_instrs)
+      let param_reg = match i {
+        0 => A0 // 第一个显式参数放到A0
+        1 => A1 // 第二个显式参数放到A1
+        2 => A2
+        3 => A3
+        4 => A4
+        5 => A5
+        6 => A6
+        7 => A7
+        _ => @util.die("TODO")
+      }
+      if arg_reg != param_reg {
+        instrs.push(Mv(param_reg, arg_reg))
+      }
+    } else {
+      // 超过8个参数需要通过栈传递
+      let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
+      instrs.append(load_instrs)
+      instrs.push(
+        Sd(arg_reg, { base: Sp, offset: (i - reg_arg_list.length()) * 8 }),
+      )
+    }
+  }
+  match func {
+    Label(name) => instrs.push(Call(name))
+    Call(func) => {
+      let (func_reg, _) = get_register_or_spill_load(func.id, allocator)
+      instrs.push(Jalr(func_reg))
+    }
+  }
+  // 5. 将返回值移动到结果寄存器
+  let (result_reg, load_result_instrs) = get_register_or_spill_load(
+    result_val.id,
+    allocator,
+  )
+  instrs.append(load_result_instrs)
+  if result_reg != A0 {
+    instrs.push(Mv(result_reg, A0))
+  }
+
+  // 如果结果需要溢出，生成存储指令
+  let spill_instrs = generate_spill_store_if_needed(
+    result_val.id,
+    result_reg,
+    allocator,
+  )
+  instrs.append(spill_instrs)
+  instrs
 }
 
 ///|

@@ -495,25 +495,9 @@ fn emit_call_direct(
           @util.die(
             "emit_call_direct: unknown " + label.0 + " type: " + ty.to_string(),
           )
-        // instrs.push(Ld(S11, { base: Fp, offset }))
-        // instrs.push(Ld(T1, { base: S11, offset: 0 }))
-        // instrs.push(Jalr(T1))
-
-        // instrs.push(Ld(S11, { base: Fp, offset }))
-        // instrs.push(Jalr(S11))
       }
     None => instrs.push(Call(Label(label.0)))
   }
-
-  // match env.vars.get(label.0) {
-  //   Some((offset, _)) => {
-  //     instrs.push(Ld(S11, { base: Fp, offset }))
-  //     instrs.push(Ld(T1, { base: S11, offset: 0 }))
-  //     instrs.push(Jalr(T1))
-  //   }
-  //   None => instrs.push(Call(Label(label.0)))
-  // }
-
 }
 
 ///|
