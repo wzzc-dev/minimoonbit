@@ -63,27 +63,21 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
     // 闭包参数在A0，普通参数从A1开始
 
     // 1. 首先设置闭包参数（自由变量）
-    for i, closure_param in func.closure_param {
-      let (param_reg, _) = get_register_or_spill_load(
-        closure_param.id,
+    let (param_reg, _) = get_register_or_spill_load(
+        func.closure_param[0].id,
         allocator,
       )
-      // 闭包参数从A0开始（闭包对象指针）
-      let input_reg = match i {
-        0 => A0
-        _ => @util.die("Multiple closure parameters not supported")
-      }
-      if param_reg != input_reg {
-        asm_instructions.push(Mv(param_reg, input_reg))
-      }
-      // 如果参数需要溢出，立即保存到栈槽
-      let spill_instrs = generate_spill_store_if_needed(
-        closure_param.id,
-        param_reg,
-        allocator,
-      )
-      asm_instructions.append(spill_instrs)
+    // 闭包参数从A0开始（闭包对象指针） ，不需要移动
+    if param_reg != A0 {
+      asm_instructions.push(Mv(param_reg, A0))
     }
+    // 如果参数需要溢出，立即保存到栈槽
+    let spill_instrs = generate_spill_store_if_needed(
+      func.closure_param[0].id,
+      param_reg,
+      allocator,
+    )
+    asm_instructions.append(spill_instrs)
 
     // 2. 然后设置普通参数（从A1开始）
     for i, param in func.params {
@@ -480,29 +474,26 @@ fn emit_comparison_instruction(
     ComparisonType::Equal =>
       [
         Sub(rd, rs1, rs2), // rd = rs1 - rs2
-        Sltiu(rd, rd, 1), // rd = (rd == 0) ? 1 : 0
-      ]
+        Sltiu(rd, rd, 1),
+      ] // rd = (rd == 0) ? 1 : 0
     ComparisonType::NotEqual =>
       [
         Sub(rd, rs1, rs2), // rd = rs1 - rs2
-        Sltu(rd, Zero, rd), // rd = (rd != 0) ? 1 : 0
-      ]
+        Sltu(rd, Zero, rd),
+      ] // rd = (rd != 0) ? 1 : 0
     ComparisonType::LessThan => [Slt(rd, rs1, rs2)]
     ComparisonType::LessEqual =>
       [
         Slt(rd, rs2, rs1), // rd = rhs < lhs
-        Xori(rd, rd, 1), // rd = !rd
-      ]
-    ComparisonType::GreaterThan =>
-      [
-        Slt(rd, rs2, rs1), // rd = rhs < lhs
-      ]
+        Xori(rd, rd, 1),
+      ] // rd = !rd
+    ComparisonType::GreaterThan => [Slt(rd, rs2, rs1)] // rd = rhs < lhs
     ComparisonType::GreaterEqual =>
       [
         Slt(rd, rs1, rs2), // rd = lhs < rhs
-        Xori(rd, rd, 1), // rd = !rd
+        Xori(rd, rd, 1),
       ]
-  }
+  } // rd = !rd
   instrs.append(comparison_instrs)
   let spill_instrs = generate_spill_store_if_needed(
     result_val.id,
@@ -556,19 +547,25 @@ fn emit_function_call_instruction(
         result_val.id,
         allocator,
       )
-      instrs.push(Comment("Call: moving return value to result register: " + result_reg.to_string() + ",result id " + result_val.id.to_string() + ",load: " + load_instrs.to_string()))
+      instrs.push(
+        Comment(
+          "Call: moving return value to result register: " +
+          result_reg.to_string() +
+          ",result id " +
+          result_val.id.to_string() +
+          ",load: " +
+          load_instrs.to_string(),
+        ),
+      )
       instrs.append(load_instrs)
       if result_reg != A0 {
         instrs.push(Mv(result_reg, A0))
       }
-      
       instrs
     }
     Call(func) => {
       let instrs = []
-
       instrs.push(Comment("Call: setting up function call" + func.to_string()))
-
       let (func_reg, load_func_instrs) = get_register_or_spill_load(
         func.id,
         allocator,
@@ -600,7 +597,6 @@ fn emit_function_call_instruction(
 
       // 4. 调用函数
       instrs.push(Comment("Extract function pointer and call"))
-
       instrs.push(Jalr(func_reg))
 
       // 5. 将返回值移动到结果寄存器
@@ -628,16 +624,16 @@ fn emit_function_call_instruction(
 ///|
 /// 生成函数引用调用指令
 fn emit_function_ref_call_instruction(
-  result_val: @ssa.Value,
-  label: String,
-  _args: Array[@ssa.Value],
-  allocator: RegisterAllocator
+  result_val : @ssa.Value,
+  label : String,
+  _args : Array[@ssa.Value],
+  allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
   let instrs = []
   let (result_reg, load_instrs) = get_register_or_spill_load(
-        result_val.id,
-        allocator,
-      )
+    result_val.id,
+    allocator,
+  )
   instrs.push(La(T0, label))
   if result_reg != T0 {
     instrs.push(Mv(result_reg, T0))
@@ -1125,7 +1121,9 @@ fn emit_terminator_with_regalloc(
       })
 
       // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间
-      let framesize = 24 + allocator.next_spill_slot + saved_callee_regs.length() * 8
+      let framesize = 24 +
+        allocator.next_spill_slot +
+        saved_callee_regs.length() * 8
 
       // 恢复被调用者保存的寄存器从栈上
       let mut offset = 24
