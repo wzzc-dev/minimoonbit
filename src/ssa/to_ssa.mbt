@@ -80,7 +80,6 @@ fn convert_function(
     block_map: @immut/hashmap.new(), // 块映射，用于控制流
     var_env,
     func_env,
-    entry_var_env: var_env, // 入口环境与当前环境相同
   } // 包含参数和自由变量的环境
   let result = convert_expr(context, fundef.body)
   // @util.logger("convert_expr: " + result.to_string())
@@ -141,14 +140,12 @@ fn convert_main_function(
     func_env = func_env.add(func.name, func.return_type)
   }
   // 实现主函数体转换逻辑 这里需要将闭包IR表达式转换为SSA指令
-  let initial_var_env = @immut/hashmap.new()
   let context = {
     current_block: entry_block,
     blocks,
     block_map: @immut/hashmap.new(), // 块映射，用于控制流
-    var_env: initial_var_env, // 变量环境
+    var_env: @immut/hashmap.new(), // 变量环境
     func_env,
-    entry_var_env: initial_var_env, // 入口环境与当前环境相同
   } // 函数环境
   // 转换表达式
   let result = convert_expr(context, body)
@@ -191,8 +188,6 @@ priv struct Context {
   var_env : @immut/hashmap.HashMap[String, Value]
   // 添加函数环境：函数名到函数类型的映射
   func_env : @immut/hashmap.HashMap[String, Type]
-  // 记录分支入口时的变量环境（用于对比找出修改的变量）
-  entry_var_env : @immut/hashmap.HashMap[String, Value]
 } derive(Show)
 
 ///|
@@ -204,12 +199,11 @@ priv struct ExprResult {
 
 // ==================== 辅助函数 ====================
 
-///|
-/// 更新当前块并返回新的上下文
+///| 更新当前块并返回新的上下文
 fn update_current_block(
   context : Context,
   instructions : Array[Instruction],
-  terminator : Terminator,
+  terminator : Terminator
 ) -> Context {
   let updated_block = BasicBlock::{
     id: context.current_block.id,
@@ -217,40 +211,31 @@ fn update_current_block(
     instructions,
     terminator,
   }
+
   let updated_blocks = context.blocks.map(fn(b) {
-    if b.id == updated_block.id {
-      updated_block
-    } else {
-      b
-    }
+    if b.id == updated_block.id { updated_block } else { b }
   })
+
   Context::{
     current_block: updated_block,
     blocks: updated_blocks,
     block_map: context.block_map,
     var_env: context.var_env,
     func_env: context.func_env,
-    entry_var_env: context.entry_var_env,
   }
 }
 
-///|
-/// 向当前块添加指令并更新上下文
+///| 向当前块添加指令并更新上下文
 fn add_instruction(context : Context, instruction : Instruction) -> Context {
   let new_instructions = []
   for inst in context.current_block.instructions {
     new_instructions.push(inst)
   }
   new_instructions.push(instruction)
-  update_current_block(
-    context,
-    new_instructions,
-    context.current_block.terminator,
-  )
+  update_current_block(context, new_instructions, context.current_block.terminator)
 }
 
-///|
-/// 创建常量值并添加到当前块
+///| 创建常量值并添加到当前块
 fn create_const_int(context : Context, value : Int) -> (Value, Context) {
   let const_value = Value::{ id: new_value_id(), ty: Type::Int }
   let instruction = Instruction::{
@@ -260,8 +245,7 @@ fn create_const_int(context : Context, value : Int) -> (Value, Context) {
   (const_value, add_instruction(context, instruction))
 }
 
-///|
-/// 创建浮点常量值并添加到当前块
+///| 创建浮点常量值并添加到当前块
 fn create_const_float(context : Context, value : Double) -> (Value, Context) {
   let const_value = Value::{ id: new_value_id(), ty: Type::Float }
   let instruction = Instruction::{
@@ -271,14 +255,13 @@ fn create_const_float(context : Context, value : Double) -> (Value, Context) {
   (const_value, add_instruction(context, instruction))
 }
 
-///|
-/// 创建二元运算指令
+///| 创建二元运算指令
 fn create_binary_op(
   context : Context,
   op_type : BinaryOpType,
   left : Value,
   right : Value,
-  result_type : Type,
+  result_type : Type
 ) -> (Value, Context) {
   let result_value = Value::{ id: new_value_id(), ty: result_type }
   let opcode = match op_type {
@@ -293,12 +276,12 @@ fn create_binary_op(
     BinaryOpType::FDiv => Opcode::FDiv(left, right)
     BinaryOpType::FMod => Opcode::FMod(left, right)
   }
+
   let instruction = Instruction::{ result: result_value, opcode }
   (result_value, add_instruction(context, instruction))
 }
 
-///|
-/// 二元运算类型
+///| 二元运算类型
 priv enum BinaryOpType {
   Add
   Sub
@@ -312,13 +295,12 @@ priv enum BinaryOpType {
   FMod
 }
 
-///|
-/// 创建GetElement指令
+///| 创建GetElement指令
 fn create_get_element(
   context : Context,
   tuple_value : Value,
   index : Int,
-  element_type : Type,
+  element_type : Type
 ) -> (Value, Context) {
   let element_value = Value::{ id: new_value_id(), ty: element_type }
   let instruction = Instruction::{
@@ -327,6 +309,7 @@ fn create_get_element(
   }
   (element_value, add_instruction(context, instruction))
 }
+
 
 ///|
 /// 转换闭包IR表达式为SSA指令
@@ -385,7 +368,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         block_map: current_context.block_map,
         var_env: current_context.var_env,
         func_env: current_context.func_env,
-        entry_var_env: current_context.entry_var_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -442,7 +424,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
           block_map: current_context.block_map,
           var_env: updated_var_env,
           func_env: current_context.func_env,
-          entry_var_env: current_context.entry_var_env,
         }
       }
 
@@ -458,9 +439,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         Type::Tuple(types) => types[index]
         _ => @util.die("Expected tuple type in TupleGet")
       }
-      let (result_value, new_context) = create_get_element(
-        context, tuple_value, index, element_type,
-      )
+
+      let (result_value, new_context) = create_get_element(context, tuple_value, index, element_type)
       ExprResult::{ value: Some(result_value), context: new_context }
     }
     ExternalArray(label) => {
@@ -499,12 +479,10 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         block_map: context.block_map,
         var_env: context.var_env,
         func_env: context.func_env,
-        entry_var_env: context.entry_var_env,
       }
       ExprResult::{ value: Some(array_value), context: updated_context }
     }
     Assign(lhs_name, rhs_name) => {
-      // println("Assign: " + lhs_name.to_string() + " = " + rhs_name.to_string())
       // 变量赋值：lhs = rhs
       let rhs_value = context.var_env.get(rhs_name.to_string()).unwrap()
 
@@ -517,121 +495,152 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         block_map: context.block_map,
         var_env: updated_var_env,
         func_env: context.func_env,
-        entry_var_env: context.entry_var_env,
       }
 
       // 赋值表达式返回Unit类型
       ExprResult::{ value: None, context: updated_context }
     }
     While(cond_expr, body_expr) => {
-      // While循环：while condition { body }
+      // While循环：使用基本块参数实现SSA
+      @util.logger("While: cond=" + cond_expr.to_string() + " body=" + body_expr.to_string())
 
-      // 创建循环的基本块结构
-      let header_block_id = new_block_id()
+      // 创建新的块ID
+      let loop_header_id = new_block_id()
       let body_block_id = new_block_id()
       let exit_block_id = new_block_id()
 
-      // 创建循环头块（检查条件）
-      let header_block = BasicBlock::{
-        id: header_block_id,
-        params: [],
+      // 1. 创建循环头块 - 需要参数来接收循环变量
+      // 简化实现：暂时不处理循环变量，假设条件不依赖循环内修改的变量
+      let loop_header = BasicBlock::{
+        id: loop_header_id,
+        params: [], // TODO: 如果条件依赖循环变量，这里需要添加参数
         instructions: [],
-        terminator: Terminator::Jump(exit_block_id, []), // 临时设置
+        terminator: Terminator::Return(None),
       }
 
-      // 创建循环体块
-      let body_block = BasicBlock::{
+      // 2. 在循环头中转换条件表达式
+      let loop_header_context = Context::{
+        current_block: loop_header,
+        blocks: context.blocks,
+        block_map: context.block_map,
+        var_env: context.var_env, // 使用初始变量环境
+        func_env: context.func_env,
+      }
+
+      let cond_result = convert_expr(loop_header_context, cond_expr)
+      let cond_context = cond_result.context
+      @util.logger("While: cond_result.value=" + cond_result.value.to_string())
+
+      let cond_value = match cond_result.value {
+        Some(val) => val
+        None => {
+          let (default_val, _) = create_const_int(cond_context, 0)
+          default_val
+        }
+      }
+
+      // 3. 更新循环头块，包含条件分支
+      let updated_loop_header = BasicBlock::{
+        id: loop_header_id,
+        params: [],
+        instructions: cond_context.current_block.instructions,
+        terminator: Terminator::Branch(cond_value, body_block_id, exit_block_id),
+      }
+
+      // 4. 创建循环体块
+      let body_start_block = BasicBlock::{
         id: body_block_id,
         params: [],
         instructions: [],
-        terminator: Terminator::Jump(header_block_id, []), // 循环回到头块
+        terminator: Terminator::Jump(loop_header_id, []), // 跳回循环头
       }
 
-      // 创建退出块
+      // 5. 在循环体中转换body表达式
+      // 关键修复：确保body_context的blocks包含body_start_block
+      let body_blocks = {
+        let blocks = []
+        for block in cond_context.blocks {
+          blocks.push(block)
+        }
+        blocks.push(body_start_block) // 添加循环体块
+        blocks
+      }
+
+      let body_context = Context::{
+        current_block: body_start_block,
+        blocks: body_blocks,
+        block_map: cond_context.block_map,
+        var_env: cond_context.var_env, // 继承条件评估后的环境
+        func_env: cond_context.func_env,
+      }
+      let body_result = convert_expr(body_context, body_expr)
+      let body_final_context = body_result.context
+
+      // 6. 更新循环体块
+      let updated_body_block = BasicBlock::{
+        id: body_block_id,
+        params: [],
+        instructions: body_final_context.current_block.instructions,
+        terminator: Terminator::Jump(loop_header_id, []), // 跳回循环头，不传参数
+      }
+
+      // 7. 创建循环退出块
       let exit_block = BasicBlock::{
         id: exit_block_id,
         params: [],
         instructions: [],
-        terminator: Terminator::Jump(context.current_block.id, []), // 跳回原来的控制流
+        terminator: Terminator::Return(None), // 临时终止符
       }
 
-      // 当前块跳转到循环头块
+      // 8. 更新当前块，跳转到循环头
       let updated_current_block = BasicBlock::{
         id: context.current_block.id,
         params: context.current_block.params,
         instructions: context.current_block.instructions,
-        terminator: Terminator::Jump(header_block_id, []),
+        terminator: Terminator::Jump(loop_header_id, []),
       }
 
-      // 更新块列表
-      let updated_blocks = context.blocks.map(fn(b) {
-        if b.id == updated_current_block.id {
-          updated_current_block
-        } else {
-          b
+      // 9. 构建最终块列表 - 确保包含所有块且不重复
+      let final_blocks = {
+        let blocks = []
+
+        // 首先添加原始上下文中的块（替换当前块）
+        for block in context.blocks {
+          if block.id == context.current_block.id {
+            blocks.push(updated_current_block)
+          } else {
+            blocks.push(block)
+          }
         }
-      })
-      updated_blocks.append([header_block, body_block, exit_block])
 
-      // 更新块映射
-      let updated_block_map = context.block_map
-        .add(header_block_id.id, header_block)
-        .add(body_block_id.id, body_block)
-        .add(exit_block_id.id, exit_block)
+        // 添加循环头块
+        blocks.push(updated_loop_header)
 
-      // 在循环头块中转换条件表达式
-      let header_context = Context::{
-        current_block: header_block,
-        blocks: updated_blocks,
-        block_map: updated_block_map,
-        var_env: context.var_env,
-        func_env: context.func_env,
-        entry_var_env: context.entry_var_env,
-      }
-      let cond_result = convert_expr(header_context, cond_expr)
-      let cond_context = cond_result.context
-      let cond_value = match cond_result.value {
-        Some(v) => v
-        None => @util.die("While condition has no value")
-      }
+        // 关键修复：添加body_final_context中的新块，但避免重复
+        // 收集已存在的块ID以避免重复
+        let existing_block_ids = blocks.map(fn(b) { b.id })
 
-      // 更新头块：条件跳转到循环体或退出块
-      let updated_header_block = BasicBlock::{
-        id: header_block_id,
-        params: header_block.params,
-        instructions: header_block.instructions,
-        terminator: Terminator::Branch(cond_value, body_block_id, exit_block_id),
-      }
-
-      // 在循环体块中转换body表达式
-      let body_context = Context::{
-        current_block: body_block,
-        blocks: cond_context.blocks,
-        block_map: cond_context.block_map,
-        var_env: context.var_env, // 循环体不改变变量环境
-        func_env: context.func_env,
-        entry_var_env: context.entry_var_env,
-      }
-      let body_result = convert_expr(body_context, body_expr)
-      let final_body_context = body_result.context
-
-      // 更新所有块
-      let final_blocks = final_body_context.blocks.map(fn(b) {
-        if b.id == updated_header_block.id {
-          updated_header_block
-        } else if b.id == final_body_context.current_block.id {
-          final_body_context.current_block
-        } else {
-          b
+        for block in body_final_context.blocks {
+          if block.id == body_block_id {
+            blocks.push(updated_body_block) // 使用我们更新的版本
+          } else if not(existing_block_ids.contains(block.id)) {
+            blocks.push(block) // 只添加新创建的块
+          }
         }
-      })
+
+        // 添加退出块
+        blocks.push(exit_block)
+        blocks
+      }
+
+      // 10. 创建最终上下文
+      // 注意：如果循环修改了变量，需要通过块参数正确处理
       let final_context = Context::{
-        current_block: exit_block, // 当前块设置为退出块
+        current_block: exit_block,
         blocks: final_blocks,
-        block_map: final_body_context.block_map,
-        var_env: context.var_env, // 保持原始变量环境
+        block_map: context.block_map,
+        var_env: context.var_env, // 暂时保持原有环境
         func_env: context.func_env,
-        entry_var_env: context.entry_var_env,
       }
 
       // While循环返回Unit类型
@@ -673,7 +682,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         block_map: context.block_map,
         var_env: context.var_env,
         func_env: context.func_env,
-        entry_var_env: context.entry_var_env,
       }
       ExprResult::{ value: Some(array_value), context: updated_context }
     }
@@ -719,7 +727,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         block_map: context.block_map,
         var_env: context.var_env,
         func_env: context.func_env,
-        entry_var_env: context.entry_var_env,
       }
 
       // ArrayPut是表达式，返回Unit类型
@@ -765,7 +772,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         block_map: context.block_map,
         var_env: context.var_env,
         func_env: context.func_env,
-        entry_var_env: context.entry_var_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -781,44 +787,22 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 转换操作数
       let result = convert_expr(context, @closure.Expr::Var(x))
       let context1 = result.context
-
-      // 检查操作数值是否存在
-      let operand_value = match result.value {
-        Some(v) => v
-        None => @util.die("Neg: variable '" + x.to_string() + "' has no value")
-      }
+      let operand_value = result.value.unwrap()
 
       // 整数取负: 0 - x
       let (zero_value, context2) = create_const_int(context1, 0)
-      let (result_value, final_context) = create_binary_op(
-        context2,
-        BinaryOpType::Sub,
-        zero_value,
-        operand_value,
-        Type::Int,
-      )
+      let (result_value, final_context) = create_binary_op(context2, BinaryOpType::Sub, zero_value, operand_value, Type::Int)
       ExprResult::{ value: Some(result_value), context: final_context }
     }
     FNeg(x) => {
       // 转换操作数
       let result = convert_expr(context, @closure.Expr::Var(x))
       let context1 = result.context
-
-      // 检查操作数值是否存在
-      let operand_value = match result.value {
-        Some(v) => v
-        None => @util.die("FNeg: variable '" + x.to_string() + "' has no value")
-      }
+      let operand_value = result.value.unwrap()
 
       // 浮点取负: 0.0 - x
       let (zero_value, context2) = create_const_float(context1, 0.0)
-      let (result_value, final_context) = create_binary_op(
-        context2,
-        BinaryOpType::FSub,
-        zero_value,
-        operand_value,
-        Type::Float,
-      )
+      let (result_value, final_context) = create_binary_op(context2, BinaryOpType::FSub, zero_value, operand_value, Type::Float)
       ExprResult::{ value: Some(result_value), context: final_context }
     }
     Double(d) => {
@@ -836,14 +820,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
     | FDiv(x, y)
     | FMod(x, y) => {
       // 获取两个操作数的值
-      let value1 = match context.var_env.get(x.to_string()) {
-        Some(v) => v
-        None => @util.die("Variable '" + x.to_string() + "' not found in var_env")
-      }
-      let value2 = match context.var_env.get(y.to_string()) {
-        Some(v) => v
-        None => @util.die("Variable '" + y.to_string() + "' not found in var_env")
-      }
+      let value1 = context.var_env.get(x.to_string()).unwrap()
+      let value2 = context.var_env.get(y.to_string()).unwrap()
 
       // 确定运算类型和结果类型
       let (op_type, result_type) = match expr {
@@ -859,15 +837,11 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         FMod(_, _) => (BinaryOpType::FMod, Type::Float)
         _ => @util.die("unexpected expression type")
       }
-      let (result_value, new_context) = create_binary_op(
-        context, op_type, value1, value2, result_type,
-      )
+
+      let (result_value, new_context) = create_binary_op(context, op_type, value1, value2, result_type)
       ExprResult::{ value: Some(result_value), context: new_context }
     }
     IfEq(x, y, e1, e2) | IfLe(x, y, e1, e2) | IfLt(x, y, e1, e2) => {
-      // 条件表达式：如果比较条件成立则执行e1，否则执行e2
-      // 支持基础块参数合并，正确处理分支中的变量赋值
-
       // 先转换条件表达式的左操作数
       let result1 = convert_expr(context, @closure.Expr::Var(x))
       let context1 = result1.context
@@ -915,10 +889,10 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         terminator: Terminator::Jump(merge_block_id, []),
       }
 
-      // 创建合并块（稍后会设置参数）
+      // 创建合并块 - 修复无限循环问题，应该返回到调用者
       let merge_block = BasicBlock::{
         id: merge_block_id,
-        params: [], // 稍后根据需要设置参数
+        params: [],
         instructions: [],
         terminator: Terminator::Return(None), // 临时设置，后续会被正确的终止指令替换
       }
@@ -950,139 +924,77 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         .add(else_block_id.id, else_block)
         .add(merge_block_id.id, merge_block)
 
-      // 记录分支开始前的变量环境（用于对比找出修改的变量）
-      let entry_var_env = context2.var_env
-
-      // 转换then分支 - 从入口环境开始
-      let then_context = Context::{
+      // 更新上下文
+      let context_with_blocks = Context::{
         current_block: then_block,
         blocks: updated_blocks,
         block_map: updated_block_map,
-        var_env: entry_var_env,
+        var_env: context2.var_env, // 保持变量环境
         func_env: context2.func_env,
-        entry_var_env: entry_var_env,
       }
-      let then_result = convert_expr(then_context, e1)
-      let then_final_context = then_result.context
+
+      // 转换then分支
+      let then_result = convert_expr(context_with_blocks, e1)
+      let then_context = then_result.context
       let then_value = then_result.value
 
-      // 转换else分支 - 从入口环境开始
-      let else_context = Context::{
-        current_block: else_block,
-        blocks: then_final_context.blocks,
-        block_map: then_final_context.block_map,
-        var_env: entry_var_env,
-        func_env: context2.func_env,
-        entry_var_env: entry_var_env,
+      // 更新then块的终止指令，跳转到合并块并传递值
+      let then_args = match then_value {
+        Some(v) => [v]
+        None => []
       }
-      let else_result = convert_expr(else_context, e2)
-      let else_final_context = else_result.context
-      let else_value = else_result.value
-
-      // 计算then分支修改的变量
-      let then_modified_vars = find_modified_variables(then_final_context.var_env, entry_var_env)
-
-      // 计算else分支修改的变量
-      let else_modified_vars = find_modified_variables(else_final_context.var_env, entry_var_env)
-
-      // 找出需要合并的变量（在任一分支中被修改的变量）
-      let vars_to_merge = union_string_arrays(then_modified_vars, else_modified_vars)
-
-      // 为合并块创建参数（用于接收修改的变量）
-      let merge_params = []
-      for var_name in vars_to_merge {
-        // 从入口环境获取变量的类型信息
-        let var_type = match entry_var_env.get(var_name) {
-          Some(entry_value) => entry_value.ty
-          None => Type::Int  // 默认类型
-        }
-        let param_value = Value::{ id: new_value_id(), ty: var_type }
-        merge_params.push(param_value)
-      }
-
-      // 如果表达式有返回值，也添加到参数中
-      let (merge_params_with_result, result_param_index) = match (then_value, else_value) {
-        (Some(_), Some(_)) => {
-          let result_param = Value::{ id: new_value_id(), ty: Type::Int }
-          merge_params.push(result_param)
-          (merge_params, merge_params.length() - 1) // 返回结果参数的索引
-        }
-        _ => (merge_params, -1)
-      }
-
-      // 更新then分支：传递修改的变量值和表达式返回值
-      let then_args = []
-      for var_name in vars_to_merge {
-        match then_final_context.var_env.get(var_name) {
-          Some(var_value) => then_args.push(var_value)
-          None => {
-            // 如果在then分支中没有找到该变量，使用入口环境中的值
-            match entry_var_env.get(var_name) {
-              Some(entry_value) => then_args.push(entry_value)
-              None => @util.die("Variable '" + var_name + "' not found in then branch or entry environment")
-            }
-          }
-        }
-      }
-      // 添加表达式返回值
-      match then_value {
-        Some(v) => then_args.push(v)
-        None => ()
-      }
-
-      // 更新else分支：传递修改的变量值和表达式返回值
-      let else_args = []
-      for var_name in vars_to_merge {
-        match else_final_context.var_env.get(var_name) {
-          Some(var_value) => else_args.push(var_value)
-          None => {
-            // 如果在else分支中没有找到该变量，使用入口环境中的值
-            match entry_var_env.get(var_name) {
-              Some(entry_value) => else_args.push(entry_value)
-              None => @util.die("Variable '" + var_name + "' not found in else branch or entry environment")
-            }
-          }
-        }
-      }
-      // 添加表达式返回值
-      match else_value {
-        Some(v) => else_args.push(v)
-        None => ()
-      }
-
-      // 更新then块的终止指令
       let updated_then_block = BasicBlock::{
-        id: then_final_context.current_block.id,
-        params: then_final_context.current_block.params,
-        instructions: then_final_context.current_block.instructions,
+        id: then_context.current_block.id,
+        params: then_context.current_block.params,
+        instructions: then_context.current_block.instructions,
         terminator: Terminator::Jump(merge_block_id, then_args),
       }
 
-      // 更新else块的终止指令
+      // 更新上下文，切换到else块
+      let else_context = Context::{
+        current_block: else_block,
+        blocks: then_context.blocks,
+        block_map: then_context.block_map,
+        var_env: context2.var_env, // 保持变量环境
+        func_env: context2.func_env,
+      }
+
+      // 转换else分支
+      let else_result = convert_expr(else_context, e2)
+      let final_else_context = else_result.context
+      let else_value = else_result.value
+
+      // 更新else块的终止指令，跳转到合并块并传递值
+      let else_args = match else_value {
+        Some(v) => [v]
+        None => []
+      }
       let updated_else_block = BasicBlock::{
-        id: else_final_context.current_block.id,
-        params: else_final_context.current_block.params,
-        instructions: else_final_context.current_block.instructions,
+        id: final_else_context.current_block.id,
+        params: final_else_context.current_block.params,
+        instructions: final_else_context.current_block.instructions,
         terminator: Terminator::Jump(merge_block_id, else_args),
       }
 
-      // 创建合并后的变量环境
-      let mut final_var_env = entry_var_env
-      for i, var_name in vars_to_merge {
-        let param_value = merge_params[i]
-        final_var_env = final_var_env.add(var_name, param_value)
+      // 创建合并块的参数（用于接收then/else分支的值）
+      let merge_param = match (then_value, else_value) {
+        (Some(_), Some(_)) => {
+          let param_value = Value::{ id: new_value_id(), ty: Type::Int }
+          [param_value]
+        } // 假设类型为Int，实际应该根据表达式类型推断
+        _ => []
       }
 
       // 更新合并块设置参数
       let updated_merge_block = BasicBlock::{
         id: merge_block_id,
-        params: merge_params_with_result,
+        params: merge_param,
         instructions: [],
         terminator: Terminator::Return(None), // 临时设置
       }
 
       // 更新块列表
-      let final_blocks = else_final_context.blocks.map(fn(b) {
+      let final_blocks = final_else_context.blocks.map(fn(b) {
         if b.id == updated_then_block.id {
           updated_then_block
         } else if b.id == updated_else_block.id {
@@ -1094,21 +1006,19 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         }
       })
 
-      // 获取合并后的结果值（如果有表达式返回值）
-      let result_value = if result_param_index >= 0 {
-        Some(merge_params_with_result[result_param_index])
-      } else {
-        None
+      // 获取合并后的结果值
+      let result_value = match merge_param {
+        [param_val] => Some(param_val)
+        _ => None
       }
 
-      // 更新最终上下文
+      // 更新上下文
       let final_context = Context::{
         current_block: updated_merge_block,
         blocks: final_blocks,
-        block_map: else_final_context.block_map,
-        var_env: final_var_env, // 使用合并后的变量环境
+        block_map: final_else_context.block_map,
+        var_env: context2.var_env, // 保持变量环境
         func_env: context2.func_env,
-        entry_var_env: final_var_env,
       }
       ExprResult::{ value: result_value, context: final_context }
     }
@@ -1152,7 +1062,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
                 block_map: context.block_map,
                 var_env: context.var_env,
                 func_env: context.func_env,
-                entry_var_env: context.entry_var_env,
               }
               ExprResult::{ value: Some(result_value), context: updated_context }
             }
@@ -1189,7 +1098,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
             block_map: context1.block_map,
             var_env: updated_var_env,
             func_env: context1.func_env,
-            entry_var_env: context1.entry_var_env,
           }
 
           // 计算e2，使用更新后的环境
@@ -1290,7 +1198,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         block_map: current_context.block_map,
         var_env: current_context.var_env, // 变量环境
         func_env: current_context.func_env,
-        entry_var_env: current_context.entry_var_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -1305,10 +1212,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         opcode: Opcode::MakeClosure(
           name.to_string(),
           c.actual_free_vars.map(fn(fv) {
-            match context.var_env.get(fv.to_string()) {
-              Some(v) => v
-              None => @util.die("Free variable '" + fv.to_string() + "' not found in var_env")
-            }
+            context.var_env.get(fv.to_string()).unwrap()
           }),
         ),
       }
@@ -1339,7 +1243,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         block_map: context.block_map,
         var_env: updated_var_env, // 包含新绑定的变量环境
         func_env: context.func_env,
-        entry_var_env: context.entry_var_env,
       }
       let result = convert_expr(intermediate_context, e)
       ExprResult::{ value: result.value, context: result.context }
@@ -1362,10 +1265,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
 
       // 获取闭包值
-      let closure_value = match closure_result.value {
-        Some(v) => v
-        None => @util.die("Closure value not found")
-      }
+      let closure_value = closure_result.value.unwrap()
 
       // 闭包调用时，需要先传递捕获的变量（自由变量），然后传递调用时的参数
       // 但在当前的CallClosure实现中，我们只需要传递调用参数
@@ -1399,7 +1299,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         block_map: current_context.block_map,
         var_env: current_context.var_env, // 变量环境
         func_env: current_context.func_env,
-        entry_var_env: current_context.entry_var_env,
       }
       ExprResult::{ value: Some(result_value), context: updated_context }
     }
@@ -1449,6 +1348,7 @@ fn convert_type_from_types(ty : @types.Type) -> Type {
   }
 }
 
+
 ///|
 /// 全局值ID计数器
 let global_value_counter : Ref[Int] = Ref::new(0)
@@ -1469,44 +1369,4 @@ let global_block_counter : Ref[Int] = Ref::new(0)
 fn new_block_id() -> Block {
   global_block_counter.val = global_block_counter.val + 1
   Block::{ id: global_block_counter.val }
-}
-
-///|
-/// 找出相对于入口环境被修改的变量（只包含在入口环境中已存在的变量）
-fn find_modified_variables(
-  current_env : @immut/hashmap.HashMap[String, Value],
-  entry_env : @immut/hashmap.HashMap[String, Value]
-) -> Array[String] {
-  let modified_vars = []
-
-  // 只遍历入口环境中已存在的变量
-  for var_name in entry_env.keys() {
-    match current_env.get(var_name) {
-      Some(current_value) => {
-        let entry_value = entry_env.get(var_name).unwrap()
-        // 如果变量在当前环境中存在，但值不同，则被修改了
-        if current_value.id != entry_value.id {
-          modified_vars.push(var_name)
-        }
-      }
-      None => {
-        // 如果变量在当前环境中不存在，说明在某个分支中被删除了（不应该发生）
-        modified_vars.push(var_name)
-      }
-    }
-  }
-
-  modified_vars
-}
-
-///|
-/// 合并两个变量数组并去重
-fn union_string_arrays(arr1 : Array[String], arr2 : Array[String]) -> Array[String] {
-  let result = arr1
-  for item in arr2 {
-    if not(result.contains(item)) {
-      result.push(item)
-    }
-  }
-  result
 }
