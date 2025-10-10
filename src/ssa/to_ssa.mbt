@@ -106,9 +106,9 @@ fn convert_function(
     params: regular_params,
     closure_param: free_var_params,
     return_type: match fundef.ty {
-      // @closure.LowType::DirectFn(_, ret) => convert_type(ret)
-      // @closure.LowType::ClosureFn(_, ret) => convert_type(ret)
-      _ => convert_type(fundef.ty)
+      @closure.LowType::DirectFn(_, ret) => convert_type(ret)
+      @closure.LowType::ClosureFn(_, ret) => convert_type(ret)
+      _ => @util.die("unexpected fundef type: " + fundef.ty.to_string())
     },
     blocks: updated_blocks,
   }

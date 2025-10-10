@@ -367,16 +367,91 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           )
       }
     }
-    Eq(syn1, syn2) =>
-      KnfEnv::to_knf(self, If(Eq(syn1, syn2), Bool(true), Bool(false)))
-    LE(syn1, syn2) =>
-      KnfEnv::to_knf(self, If(LE(syn1, syn2), Bool(true), Bool(false)))
-    LT(syn1, syn2) =>
-      KnfEnv::to_knf(self, If(LT(syn1, syn2), Bool(true), Bool(false)))
+    Eq(lhs, rhs) => {
+      let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
+      match l_ty {
+        UserDefineType(_, fields) =>
+          for field in fields.val {
+            self.externals = self.externals.add(field.0, l_ty)
+          }
+        _ => ()
+      }
+      let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
+      match lhs {
+        Var(_) =>
+          match rhs {
+            Var(_) => IfEq(l_name, r_name, Int(1), Int(0))
+            _ => Let((r_name, r_ty), rknf, IfEq(l_name, r_name, Int(1), Int(0)))
+          }
+        _ =>
+          match rhs {
+            Var(_) =>
+              Let((l_name, l_ty), lknf, IfEq(l_name, r_name, Int(1), Int(0)))
+            _ =>
+              Let(
+                (l_name, l_ty),
+                lknf,
+                Let((r_name, r_ty), rknf, IfEq(l_name, r_name, Int(1), Int(0))),
+              )
+          }
+      }
+    }
+    LE(lhs, rhs) => {
+      let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
+      let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
+      // println("LE: " + (l_name, l_ty, lknf).to_string())
+      // println("LE: " + (r_name, r_ty, rknf).to_string())
+      match lhs {
+        Var(_) =>
+          match rhs {
+            Var(_) => IfLe(l_name, r_name, Int(1), Int(0))
+            _ =>
+              // println("LE: rhs is  a variable" + r_name.to_string())
+              Let((r_name, r_ty), rknf, IfLe(l_name, r_name, Int(1), Int(0)))
+          }
+        _ =>
+          match rhs {
+            Var(_) =>
+              Let((l_name, l_ty), lknf, IfLe(l_name, r_name, Int(1), Int(0)))
+            _ =>
+              Let(
+                (l_name, l_ty),
+                lknf,
+                Let((r_name, r_ty), rknf, IfLe(l_name, r_name, Int(1), Int(0))),
+              )
+          }
+      }
+    }
+    LT(lhs, rhs) => {
+      let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
+      let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
+      // println("LE: " + (l_name, l_ty, lknf).to_string())
+      // println("LE: " + (r_name, r_ty, rknf).to_string())
+      match lhs {
+        Var(_) =>
+          match rhs {
+            Var(_) => IfLt(l_name, r_name, Int(1), Int(0))
+            _ =>
+              // println("LE: rhs is  a variable" + r_name.to_string())
+              Let((r_name, r_ty), rknf, IfLt(l_name, r_name, Int(1), Int(0)))
+          }
+        _ =>
+          match rhs {
+            Var(_) =>
+              Let((l_name, l_ty), lknf, IfLt(l_name, r_name, Int(1), Int(0)))
+            _ =>
+              Let(
+                (l_name, l_ty),
+                lknf,
+                Let((r_name, r_ty), rknf, IfLt(l_name, r_name, Int(1), Int(0))),
+              )
+          }
+      }
+    }
     GT(syn1, syn2) =>
-      KnfEnv::to_knf(self, If(LE(syn1, syn2), Bool(false), Bool(true)))
+      KnfEnv::to_knf(self, LT(syn2, syn1))
     GE(syn1, syn2) =>
-      KnfEnv::to_knf(self, If(LT(syn1, syn2), Bool(false), Bool(true)))
+      KnfEnv::to_knf(self, LE(syn2, syn1))
     Let((name, ty), syn, rest) => {
       let mut env = self.externals
       match ty.repr() {
