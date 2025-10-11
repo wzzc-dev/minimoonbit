@@ -1024,7 +1024,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
           // 尝试从函数环境中查找
           match safe_get_func_type(context.func_env, var_name) {
             Ok(func_type) => {
-              // 找到函数，创建一个函数引用值
+              // 找到函数，创建函数引用指令
               let result_value = Value::{ id: new_value_id(), ty: func_type }
               let instruction = Instruction::{
                 result: result_value,
@@ -1146,11 +1146,27 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
     }
     CallClosure(n, xs) => {
       // 闭包调用
-      // 先转换闭包引用
-      let closure_result = convert_expr(context, @closure.Expr::Var(n))
-      let mut current_context = closure_result.context
+      // 特殊处理：如果n是已定义的函数，直接创建函数引用
+      let func_name = n.to_string()
+      let closure_value = match safe_get_var(context.var_env, func_name) {
+        Ok(value) => value // 变量环境中找到，直接使用
+        Err(_) => {
+          // 尝试从函数环境中查找
+          match safe_get_func_type(context.func_env, func_name) {
+            Ok(func_type) => {
+              // 对于闭包调用，直接创建函数引用值，不创建CallRef指令
+              Value::{ id: new_value_id(), ty: func_type }
+            }
+            Err(_) => {
+              @util.logger("Error: Function not found for CallClosure: " + func_name)
+              Value::{ id: new_value_id(), ty: Type::Int }
+            }
+          }
+        }
+      }
 
       // 转换所有参数，正确链式传递上下文
+      let mut current_context = context
       let call_arg_values = []
       for x in xs {
         let arg_result = convert_expr(current_context, @closure.Expr::Var(x))
@@ -1160,9 +1176,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
           None => () // 参数可能为Unit类型
         }
       }
-
-      // 获取闭包值
-      let closure_value = closure_result.value.unwrap()
 
       // 闭包调用时，需要先传递捕获的变量（自由变量），然后传递调用时的参数
       // 但在当前的CallClosure实现中，我们只需要传递调用参数
