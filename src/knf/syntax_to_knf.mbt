@@ -34,19 +34,20 @@ fn KnfEnv::new_name(self : KnfEnv, name : String) -> Name {
   temp
 }
 
+pub fn gen_name_from_string(name : String) -> Name  raise KnfErr {
+  try @types.Name::from_string(name) catch {
+    InvalidSlotNumber(name, slot) => raise KnfErr("KNF gen_name_from_string error: invalid slot number for name " + name + " slot " + slot.to_string())
+  }
+}
 ///|
 pub fn KnfEnv::get_knf(
   self : KnfEnv,
   syn : @types.Syntax,
 ) -> (Name, Type, Knf) raise KnfErr {
-  // println("externals: " + self.externals.to_string())
-  // println("syn: " + syn.to_string())
-  let ty = KnfEnv::get_type(self.externals, syn) catch {
-    KnfErr(s) => raise KnfErr("KNF get_knf error: " + s)
-  }
+  let ty = KnfEnv::get_type(self.externals, syn)
   match syn {
     Var(name) => {
-      let name = (try? @types.Name::from_string(name)).unwrap()
+      let name = gen_name_from_string(name)
       (name, ty, Var(name))
     }
     _ => {
@@ -165,7 +166,7 @@ fn process_negation(
 ) -> Knf raise KnfErr {
   match expr {
     Var(name_str) => {
-      let name = (try? @types.Name::from_string(name_str)).unwrap()
+      let name = gen_name_from_string(name_str)
       match kind {
         Int => Neg(name)
         Double => FNeg(name)
@@ -191,9 +192,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     Int(i) => Int(i)
     Int64(i) => Int64(i)
     Double(d) => Double(d)
-    Var(name) =>
-      // @util.logger("var: " + name)
-      Var((try? @types.Name::from_string(name)).unwrap())
+    Var(name) => Var(gen_name_from_string(name))
     Bool(b) => if b { Int(1) } else { Int(0) }
     Not(syn) => KnfEnv::to_knf(self, If(syn, Int(0), Int(1)))
     If(condition_expr, then_expr, else_expr) => {
@@ -280,7 +279,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     }
     LetRec({ name: (func_name_str, func_type), args: param_list, body: func_body }, rest_expr) => {
       // Convert function name to Name type
-      let func_name = (try? @types.Name::from_string(func_name_str)).unwrap()
+      let func_name = gen_name_from_string(func_name_str)
 
       // Build environment for function body (including function name and parameters)
       let mut func_body_env = self.externals.add(func_name_str, func_type)
@@ -288,7 +287,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         // Add parameter to environment for subsequent parameters and body
         func_body_env = func_body_env.add(param.0, param.1)
         // Convert parameter name to Name type
-        let param_name = (try? @types.Name::from_string(param.0)).unwrap()
+        let param_name = gen_name_from_string(param.0)
         (param_name, param.1)
       })
 
@@ -329,7 +328,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
             let arg_type = KnfEnv::get_type(env.externals, next_arg)
             match next_arg {
               Var(var_str) => {
-                let arg_name = (try? @types.Name::from_string(var_str)).unwrap()
+                let arg_name = gen_name_from_string(var_str)
                 processed_args.insert(0, arg_name)
                 build_application(env, func_name, processed_args, remaining_args)
               }
@@ -354,7 +353,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         let expr_type = KnfEnv::get_type(env.externals, first_expr)
         match first_expr {
           Var(var_str) => {
-            let func_name = (try? @types.Name::from_string(var_str)).unwrap()
+            let func_name = gen_name_from_string(var_str)
             build_application(env, func_name, [], remaining_exprs)
           }
           _ => {
@@ -369,7 +368,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       // Handle function expression (may be external function or regular function)
       match func_expr {
         Var(func_name_str) if @typing.extenv.contains(func_name_str) =>
-          build_application(self, (try? @types.Name::from_string(func_name_str)).unwrap(), [], arg_exprs)
+          build_application(self, gen_name_from_string(func_name_str), [], arg_exprs)
         _ => start_processing(self, func_expr, arg_exprs)
       }
     }
@@ -396,7 +395,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       // Handle tuple expression (variable vs complex expression)
       match tuple_expr {
         Var(tuple_var_str) => {
-          let tuple_name = (try? @types.Name::from_string(tuple_var_str)).unwrap()
+          let tuple_name = gen_name_from_string(tuple_var_str)
           LetTuple(name_type_pairs, tuple_name, rest_knf)
         }
         _ => {
@@ -529,20 +528,13 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       let x = variant.fold(init=Tuple(result), (acc, variant) => {
         let (name, variant_ty, knf) = KnfEnv::get_knf(self, variant)
         result.push(name)
-        // @util.logger("EnumConstruct acc: " + acc.to_string())
         Let((name, variant_ty), knf, acc)
       })
-      // @util.logger("EnumConstruct x: " + x.to_string())
-      // @util.logger("EnumConstruct i: " + Let((i.0, i.1), i.2, x).to_string())
       Let((i.0, i.1), i.2, x)
     }
     Match(expr, arms) => {
-      // @util.logger("Match expr: " + expr.to_string())
-      // @util.logger("Match e'nüenü: " + self.externals.to_string())
       let tag = KnfEnv::new_name(self, "match_tag")
       let (name, _expr_ty, _knf) = KnfEnv::get_knf(self, expr)
-      // @util.logger("Match expr: " + expr.to_string() + " name:" + name.to_string() + " expr_ty:" + _expr_ty.to_string())
-      // @util.logger("arms: " + arms.to_string())
       fn gen_match(arm : (@types.Pattern, @types.Syntax)) raise KnfErr {
         let (pat, body) = arm
         // @util.logger("Match arm: " + pat.to_string())
@@ -648,7 +640,6 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
         _knf,
         Let((tag, Int), FieldAccess(name, _expr_ty, 0), arms_knf),
       )
-      // @util.die("not support match: expr: " + expr.to_string() + "; arms: " + arms.to_string())
     }
     ExternalArray(label) => ExternalArray(label)
     ArrayData(label, data) =>
