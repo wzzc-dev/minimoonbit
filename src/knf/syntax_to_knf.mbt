@@ -76,6 +76,114 @@ fn KnfEnv::get_type(
   }
 }
 
+
+// Helper function to process comparison operations with consistent pattern
+fn process_comparison(
+  env : KnfEnv,
+  left_expr : @types.Syntax,
+  right_expr : @types.Syntax,
+  then_expr : @types.Syntax,
+  else_expr : @types.Syntax,
+  comparison_fn : (Name, Name, Knf, Knf) -> Knf,
+) -> Knf raise KnfErr {
+  let (left_name, left_ty, left_knf) = KnfEnv::get_knf(env, left_expr)
+
+  // Add fields to externals for user-defined types
+  match left_ty {
+    UserDefineType(_, fields) =>
+      for field in fields.val {
+        env.externals = env.externals.add(field.0, left_ty)
+      }
+    _ => ()
+  }
+
+  let (right_name, right_ty, right_knf) = KnfEnv::get_knf(env, right_expr)
+  let then_knf = KnfEnv::to_knf(env, then_expr)
+  let else_knf = KnfEnv::to_knf(env, else_expr)
+
+  let body = comparison_fn(left_name, right_name, then_knf, else_knf)
+
+  match (left_expr, right_expr) {
+    (Var(_), Var(_)) => body
+    (Var(_), _) => Let((right_name, right_ty), right_knf, body)
+    (_, Var(_)) => Let((left_name, left_ty), left_knf, body)
+    (_, _) => Let((left_name, left_ty), left_knf,
+                  Let((right_name, right_ty), right_knf, body))
+  }
+}
+
+// Helper function to process arithmetic operations
+fn process_arithmetic(
+  env : KnfEnv,
+  left_expr : @types.Syntax,
+  right_expr : @types.Syntax,
+  op : @types.Op,
+  kind : Type,
+) -> Knf raise KnfErr {
+  let (left_name, _, left_knf) = KnfEnv::get_knf(env, left_expr)
+  let (right_name, _, right_knf) = KnfEnv::get_knf(env, right_expr)
+
+  let operation = match kind {
+    Int => {
+      match op {
+        Add => Add(left_name, right_name)
+        Sub => Sub(left_name, right_name)
+        Mul => Mul(left_name, right_name)
+        Div => Div(left_name, right_name)
+        Mod => Mod(left_name, right_name)
+      }
+    }
+    Double => {
+      match op {
+        Add => FAdd(left_name, right_name)
+        Sub => FSub(left_name, right_name)
+        Mul => FMul(left_name, right_name)
+        Div => FDiv(left_name, right_name)
+        Mod => FMod(left_name, right_name)
+      }
+    }
+    _ => raise KnfErr(
+      "Unsupported arithmetic type: " + kind.to_string() +
+      ", expression: " + left_expr.to_string()
+    )
+  }
+
+  match (left_expr, right_expr) {
+    (Var(_), Var(_)) => operation
+    (Var(_), _) => Let((right_name, kind), right_knf, operation)
+    (_, Var(_)) => Let((left_name, kind), left_knf, operation)
+    (_, _) => Let((left_name, kind), left_knf,
+                  Let((right_name, kind), right_knf, operation))
+  }
+}
+
+// Helper function to process negation operations
+fn process_negation(
+  env : KnfEnv,
+  expr : @types.Syntax,
+  kind : Type,
+) -> Knf raise KnfErr {
+  match expr {
+    Var(name_str) => {
+      let name = (try? @types.Name::from_string(name_str)).unwrap()
+      match kind {
+        Int => Neg(name)
+        Double => FNeg(name)
+        _ => raise KnfErr("Unsupported negation type: " + kind.to_string())
+      }
+    }
+    _ => {
+      let temp_name = env.new_temp()
+      let expr_knf = KnfEnv::to_knf(env, expr)
+      match kind {
+        Int => Let((temp_name, Int), expr_knf, Neg(temp_name))
+        Double => Let((temp_name, Double), expr_knf, FNeg(temp_name))
+        _ => raise KnfErr("Unsupported negation type: " + kind.to_string())
+      }
+    }
+  }
+}
+
 ///|
 pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { // !Failure
   match s {
@@ -88,634 +196,306 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       Var((try? @types.Name::from_string(name)).unwrap())
     Bool(b) => if b { Int(1) } else { Int(0) }
     Not(syn) => KnfEnv::to_knf(self, If(syn, Int(0), Int(1)))
-    If(syn1, syn2, syn3) =>
-      // println("if: " + syn1.to_string())
-      match syn1 {
-        Eq(lhs, rhs) => {
-          let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
-          match l_ty {
-            UserDefineType(_, fields) =>
-              for field in fields.val {
-                self.externals = self.externals.add(field.0, l_ty)
-              }
-            _ => ()
-          }
-          let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
-          match lhs {
-            Var(_) =>
-              match rhs {
-                Var(_) =>
-                  IfEq(
-                    l_name,
-                    r_name,
-                    KnfEnv::to_knf(self, syn2),
-                    KnfEnv::to_knf(self, syn3),
-                  )
-                _ =>
-                  Let(
-                    (r_name, r_ty),
-                    rknf,
-                    IfEq(
-                      l_name,
-                      r_name,
-                      KnfEnv::to_knf(self, syn2),
-                      KnfEnv::to_knf(self, syn3),
-                    ),
-                  )
-              }
-            _ =>
-              match rhs {
-                Var(_) =>
-                  Let(
-                    (l_name, l_ty),
-                    lknf,
-                    IfEq(
-                      l_name,
-                      r_name,
-                      KnfEnv::to_knf(self, syn2),
-                      KnfEnv::to_knf(self, syn3),
-                    ),
-                  )
-                _ =>
-                  Let(
-                    (l_name, l_ty),
-                    lknf,
-                    Let(
-                      (r_name, r_ty),
-                      rknf,
-                      IfEq(
-                        l_name,
-                        r_name,
-                        KnfEnv::to_knf(self, syn2),
-                        KnfEnv::to_knf(self, syn3),
-                      ),
-                    ),
-                  )
-              }
-          }
-        }
-        LE(lhs, rhs) => {
-          let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
-          let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
-          // println("LE: " + (l_name, l_ty, lknf).to_string())
-          // println("LE: " + (r_name, r_ty, rknf).to_string())
-          match lhs {
-            Var(_) =>
-              match rhs {
-                Var(_) =>
-                  IfLe(
-                    l_name,
-                    r_name,
-                    KnfEnv::to_knf(self, syn2),
-                    KnfEnv::to_knf(self, syn3),
-                  )
-                _ =>
-                  // println("LE: rhs is  a variable" + r_name.to_string())
-                  Let(
-                    (r_name, r_ty),
-                    rknf,
-                    IfLe(
-                      l_name,
-                      r_name,
-                      KnfEnv::to_knf(self, syn2),
-                      KnfEnv::to_knf(self, syn3),
-                    ),
-                  )
-              }
-            _ =>
-              match rhs {
-                Var(_) =>
-                  Let(
-                    (l_name, l_ty),
-                    lknf,
-                    IfLe(
-                      l_name,
-                      r_name,
-                      KnfEnv::to_knf(self, syn2),
-                      KnfEnv::to_knf(self, syn3),
-                    ),
-                  )
-                _ =>
-                  Let(
-                    (l_name, l_ty),
-                    lknf,
-                    Let(
-                      (r_name, r_ty),
-                      rknf,
-                      IfLe(
-                        l_name,
-                        r_name,
-                        KnfEnv::to_knf(self, syn2),
-                        KnfEnv::to_knf(self, syn3),
-                      ),
-                    ),
-                  )
-              }
-          }
-        }
-        LT(lhs, rhs) => {
-          let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
-          let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
-          // println("LE: " + (l_name, l_ty, lknf).to_string())
-          // println("LE: " + (r_name, r_ty, rknf).to_string())
-          match lhs {
-            Var(_) =>
-              match rhs {
-                Var(_) =>
-                  IfLt(
-                    l_name,
-                    r_name,
-                    KnfEnv::to_knf(self, syn2),
-                    KnfEnv::to_knf(self, syn3),
-                  )
-                _ =>
-                  // println("LE: rhs is  a variable" + r_name.to_string())
-                  Let(
-                    (r_name, r_ty),
-                    rknf,
-                    IfLt(
-                      l_name,
-                      r_name,
-                      KnfEnv::to_knf(self, syn2),
-                      KnfEnv::to_knf(self, syn3),
-                    ),
-                  )
-              }
-            _ =>
-              match rhs {
-                Var(_) =>
-                  Let(
-                    (l_name, l_ty),
-                    lknf,
-                    IfLt(
-                      l_name,
-                      r_name,
-                      KnfEnv::to_knf(self, syn2),
-                      KnfEnv::to_knf(self, syn3),
-                    ),
-                  )
-                _ =>
-                  Let(
-                    (l_name, l_ty),
-                    lknf,
-                    Let(
-                      (r_name, r_ty),
-                      rknf,
-                      IfLt(
-                        l_name,
-                        r_name,
-                        KnfEnv::to_knf(self, syn2),
-                        KnfEnv::to_knf(self, syn3),
-                      ),
-                    ),
-                  )
-              }
-          }
-        }
-        Not(b) => KnfEnv::to_knf(self, If(b, syn3, syn2))
-        Bool(b) =>
-          if b {
-            KnfEnv::to_knf(self, syn2)
+    If(condition_expr, then_expr, else_expr) => {
+      match condition_expr {
+        Eq(lhs, rhs) =>
+          process_comparison(self, lhs, rhs, then_expr, else_expr,
+                            (l_name, r_name, then_knf, else_knf) =>
+                             IfEq(l_name, r_name, then_knf, else_knf))
+        LE(lhs, rhs) =>
+          process_comparison(self, lhs, rhs, then_expr, else_expr,
+                           (l_name, r_name, then_knf, else_knf) =>
+                             IfLe(l_name, r_name, then_knf, else_knf))
+        LT(lhs, rhs) =>
+          process_comparison(self, lhs, rhs, then_expr, else_expr,
+                           (l_name, r_name, then_knf, else_knf) =>
+                             IfLt(l_name, r_name, then_knf, else_knf))
+        Not(negated_expr) =>
+          KnfEnv::to_knf(self, If(negated_expr, else_expr, then_expr))
+        Bool(bool_value) =>
+          if bool_value {
+            KnfEnv::to_knf(self, then_expr)
           } else {
-            KnfEnv::to_knf(self, syn3)
+            KnfEnv::to_knf(self, else_expr)
           }
-        _ => KnfEnv::to_knf(self, If(Eq(syn1, Bool(false)), syn3, syn2))
+        _ =>
+          // Convert arbitrary expression to boolean comparison
+          KnfEnv::to_knf(self, If(Eq(condition_expr, Bool(false)), else_expr, then_expr))
       }
-    Neg(syn, kind~) =>
-      // let knf = KnfEnv::get_knf!(self, syn)
+    }
+    Neg(expr, kind~) =>
       match kind {
-        Some(Int) =>
-          // Knf::Let((knf.0, Int), knf.1, Neg(knf.0))
-          match syn {
-            Var(str) => {
-              let name = (try? @types.Name::from_string(str)).unwrap()
-              Neg(name)
-            }
-            _ => {
-              let name = self.new_temp()
-              let k = KnfEnv::to_knf(self, syn)
-              Let((name, Int), k, Neg(name))
-            }
-          }
-        Some(Double) =>
-          match syn {
-            Var(str) => {
-              let name = (try? @types.Name::from_string(str)).unwrap()
-              FNeg(name)
-            }
-            _ => {
-              let name = self.new_temp()
-              let k = KnfEnv::to_knf(self, syn)
-              Let((name, Double), k, FNeg(name))
-            }
-          }
-        _ => raise KnfErr("the type of negation is unknown")
+        Some(Int) => process_negation(self, expr, Int)
+        Some(Double) => process_negation(self, expr, Double)
+        _ => raise KnfErr("Unsupported negation type: " + kind.to_string())
       }
-    Prim(lsyn, rsyn, op, kind~) => {
-      let (l_name, _, l) = KnfEnv::get_knf(self, lsyn)
-      let (r_name, _, r) = KnfEnv::get_knf(self, rsyn)
-      let mut opty : Knf = Unit
+    Prim(left_expr, right_expr, operation, kind~) => {
       match kind {
-        Some(Int) => {
-          match op {
-            Add => opty = Add(l_name, r_name)
-            Sub => opty = Sub(l_name, r_name)
-            Mul => opty = Mul(l_name, r_name)
-            Div => opty = Div(l_name, r_name)
-            Mod => opty = Mod(l_name, r_name)
-          }
-          match lsyn {
-            Var(_) =>
-              match rsyn {
-                Var(_) => opty
-                _ => Let((r_name, Int), r, opty)
-              }
-            _ =>
-              match rsyn {
-                Var(_) => Let((l_name, Int), l, opty)
-                _ => Let((l_name, Int), l, Let((r_name, Int), r, opty))
-              }
-          }
-        }
-        Some(Double) => {
-          match op {
-            Add => opty = FAdd(l_name, r_name)
-            Sub => opty = FSub(l_name, r_name)
-            Mul => opty = FMul(l_name, r_name)
-            Div => opty = FDiv(l_name, r_name)
-            Mod => opty = FMod(l_name, r_name)
-          }
-          match lsyn {
-            Var(_) =>
-              match rsyn {
-                Var(_) => opty
-                _ => Let((r_name, Double), r, opty)
-              }
-            _ =>
-              match rsyn {
-                Var(_) => Let((l_name, Double), l, opty)
-                _ => Let((l_name, Double), l, Let((r_name, Double), r, opty))
-              }
-          }
-        }
-        _ =>
-          raise KnfErr(
-            "the type of prim is unknown, s: " +
-            s.to_string() +
-            ", \n\t kind: " +
-            kind.to_string(),
-          )
+        Some(Int) => process_arithmetic(self, left_expr, right_expr, operation, Int)
+        Some(Double) => process_arithmetic(self, left_expr, right_expr, operation, Double)
+        _ => raise KnfErr(
+          "Unsupported arithmetic type: " + kind.to_string() +
+          ", expression: " + s.to_string()
+        )
       }
     }
-    Eq(lhs, rhs) => {
-      let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
-      match l_ty {
-        UserDefineType(_, fields) =>
-          for field in fields.val {
-            self.externals = self.externals.add(field.0, l_ty)
-          }
-        _ => ()
-      }
-      let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
-      match lhs {
-        Var(_) =>
-          match rhs {
-            Var(_) => IfEq(l_name, r_name, Int(1), Int(0))
-            _ => Let((r_name, r_ty), rknf, IfEq(l_name, r_name, Int(1), Int(0)))
-          }
-        _ =>
-          match rhs {
-            Var(_) =>
-              Let((l_name, l_ty), lknf, IfEq(l_name, r_name, Int(1), Int(0)))
-            _ =>
-              Let(
-                (l_name, l_ty),
-                lknf,
-                Let((r_name, r_ty), rknf, IfEq(l_name, r_name, Int(1), Int(0))),
-              )
-          }
-      }
-    }
-    LE(lhs, rhs) => {
-      let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
-      let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
-      // println("LE: " + (l_name, l_ty, lknf).to_string())
-      // println("LE: " + (r_name, r_ty, rknf).to_string())
-      match lhs {
-        Var(_) =>
-          match rhs {
-            Var(_) => IfLe(l_name, r_name, Int(1), Int(0))
-            _ =>
-              // println("LE: rhs is  a variable" + r_name.to_string())
-              Let((r_name, r_ty), rknf, IfLe(l_name, r_name, Int(1), Int(0)))
-          }
-        _ =>
-          match rhs {
-            Var(_) =>
-              Let((l_name, l_ty), lknf, IfLe(l_name, r_name, Int(1), Int(0)))
-            _ =>
-              Let(
-                (l_name, l_ty),
-                lknf,
-                Let((r_name, r_ty), rknf, IfLe(l_name, r_name, Int(1), Int(0))),
-              )
-          }
-      }
-    }
-    LT(lhs, rhs) => {
-      let (l_name, l_ty, lknf) = KnfEnv::get_knf(self, lhs)
-      let (r_name, r_ty, rknf) = KnfEnv::get_knf(self, rhs)
-      // println("LE: " + (l_name, l_ty, lknf).to_string())
-      // println("LE: " + (r_name, r_ty, rknf).to_string())
-      match lhs {
-        Var(_) =>
-          match rhs {
-            Var(_) => IfLt(l_name, r_name, Int(1), Int(0))
-            _ =>
-              // println("LE: rhs is  a variable" + r_name.to_string())
-              Let((r_name, r_ty), rknf, IfLt(l_name, r_name, Int(1), Int(0)))
-          }
-        _ =>
-          match rhs {
-            Var(_) =>
-              Let((l_name, l_ty), lknf, IfLt(l_name, r_name, Int(1), Int(0)))
-            _ =>
-              Let(
-                (l_name, l_ty),
-                lknf,
-                Let((r_name, r_ty), rknf, IfLt(l_name, r_name, Int(1), Int(0))),
-              )
-          }
-      }
-    }
+    Eq(lhs, rhs) =>
+      process_comparison(self, lhs, rhs, Int(1), Int(0),
+                       (l_name, r_name, _, _) => IfEq(l_name, r_name, Int(1), Int(0)))
+    LE(lhs, rhs) =>
+      process_comparison(self, lhs, rhs, Int(1), Int(0),
+                       (l_name, r_name, _, _) => IfLe(l_name, r_name, Int(1), Int(0)))
+    LT(lhs, rhs) =>
+      process_comparison(self, lhs, rhs, Int(1), Int(0),
+                       (l_name, r_name, _, _) => IfLt(l_name, r_name, Int(1), Int(0)))
     GT(syn1, syn2) =>
       KnfEnv::to_knf(self, LT(syn2, syn1))
     GE(syn1, syn2) =>
       KnfEnv::to_knf(self, LE(syn2, syn1))
-    Let((name, ty), syn, rest) => {
-      let mut env = self.externals
-      match ty.repr() {
+    Let((var_name, var_type), var_expr, rest_expr) => {
+      // Create environment with user-defined type fields
+      let mut env_with_fields = self.externals
+      match var_type.repr() {
         UserDefineType(_, fields) =>
           for field in fields.val {
-            env = env.add(field.0, ty)
+            env_with_fields = env_with_fields.add(field.0, var_type)
           }
         _ => ()
       }
-      let knf = KnfEnv::to_knf({ counter: self.counter, externals: env }, syn)
-      let new_env = {
+
+      // Process the binding expression
+      let binding_knf = KnfEnv::to_knf({ counter: self.counter, externals: env_with_fields }, var_expr)
+
+      // Create environment with the bound variable
+      let env_with_binding = {
         counter: self.counter,
-        externals: self.externals.add(name, ty),
+        externals: self.externals.add(var_name, var_type),
       }
-      let rest_knf = KnfEnv::to_knf(new_env, rest)
-      let name = @types.Name::name_only(name)
-      Let((name, ty), knf, rest_knf)
+
+      // Process the rest expression with the new environment
+      let rest_knf = KnfEnv::to_knf(env_with_binding, rest_expr)
+      let final_name = @types.Name::name_only(var_name)
+
+      Let((final_name, var_type), binding_knf, rest_knf)
     }
-    LetRec({ name: (name, ty), args, body }, rest) => {
-      // @util.logger("let_rec: name = " + name.to_string())
-      // @util.logger("let_rec: type " + @typing.extenv.to_string())
-      let fun_name = (try? @types.Name::from_string(name)).unwrap()
-      let mut env_body = self.externals.add(name, ty)
-      let fun_args = args.map(t => {
-        env_body = env_body.add(t.0, t.1)
-        let x = (try? @types.Name::from_string(t.0)).unwrap()
-        (x, t.1)
+    LetRec({ name: (func_name_str, func_type), args: param_list, body: func_body }, rest_expr) => {
+      // Convert function name to Name type
+      let func_name = (try? @types.Name::from_string(func_name_str)).unwrap()
+
+      // Build environment for function body (including function name and parameters)
+      let mut func_body_env = self.externals.add(func_name_str, func_type)
+      let processed_params = param_list.map(param => {
+        // Add parameter to environment for subsequent parameters and body
+        func_body_env = func_body_env.add(param.0, param.1)
+        // Convert parameter name to Name type
+        let param_name = (try? @types.Name::from_string(param.0)).unwrap()
+        (param_name, param.1)
       })
-      let fun_body = KnfEnv::to_knf(
-        { counter: self.counter, externals: env_body },
-        body,
+
+      // Process function body with function and parameters in scope
+      let processed_func_body = KnfEnv::to_knf(
+        { counter: self.counter, externals: func_body_env },
+        func_body,
       )
-      let env_fun = self.externals.add(name, ty)
-      let rest = KnfEnv::to_knf(
-        { counter: self.counter, externals: env_fun },
-        rest,
+
+      // Build environment for rest expression (function is in scope)
+      let rest_env = self.externals.add(func_name_str, func_type)
+      let processed_rest = KnfEnv::to_knf(
+        { counter: self.counter, externals: rest_env },
+        rest_expr,
       )
-      LetRec({ name: fun_name, ty, args: fun_args, body: fun_body }, rest)
+
+      LetRec({ name: func_name, ty: func_type, args: processed_params, body: processed_func_body }, processed_rest)
     }
-    App(syn, args_syns) => {
-      fn let_app(
-        self : KnfEnv,
-        f : Name,
-        args_names : Array[Name],
-        s : Array[@types.Syntax],
+    App(func_expr, arg_exprs) => {
+      // Helper function to build function application recursively
+      fn build_application(
+        env : KnfEnv,
+        func_name : Name,
+        processed_args : Array[Name],
+        remaining_args : Array[@types.Syntax],
       ) -> Knf raise KnfErr {
-        let ss = s.pop()
-        match ss {
-          None =>
-            if f.name is Some(_) && @typing.extenv.contains(f.name.unwrap()) {
-              ExternalFunctionApplication(
-                "minimbt_" + f.name.unwrap(),
-                args_names,
-              )
-            } else {
-              Apply(f, args_names)
+        match remaining_args.pop() {
+          None => {
+            // No more arguments to process - create final application
+            match func_name.name {
+              Some(name_str) if @typing.extenv.contains(name_str) =>
+                ExternalFunctionApplication("minimbt_" + name_str, processed_args)
+              _ => Apply(func_name, processed_args)
             }
-          Some(ss) => {
-            // @util.logger("let_app: ss = Some(ss): " + ss.to_string())
-            let ty = KnfEnv::get_type(self.externals, ss)
-            match ss {
-              Var(str) => {
-                let x = (try? @types.Name::from_string(str)).unwrap()
-                args_names.insert(0, x)
-                let_app(self, f, args_names, s)
+          }
+          Some(next_arg) => {
+            // Process next argument recursively
+            let arg_type = KnfEnv::get_type(env.externals, next_arg)
+            match next_arg {
+              Var(var_str) => {
+                let arg_name = (try? @types.Name::from_string(var_str)).unwrap()
+                processed_args.insert(0, arg_name)
+                build_application(env, func_name, processed_args, remaining_args)
               }
               _ => {
-                let x = self.new_temp()
-                let k = KnfEnv::to_knf(self, ss)
-                args_names.insert(0, x)
-                Let((x, ty), k, let_app(self, f, args_names, s))
+                let temp_name = env.new_temp()
+                let arg_knf = KnfEnv::to_knf(env, next_arg)
+                processed_args.insert(0, temp_name)
+                Let((temp_name, arg_type), arg_knf,
+                    build_application(env, func_name, processed_args, remaining_args))
               }
             }
           }
         }
       }
 
-      fn let_args(
-        self : KnfEnv,
-        syn : @types.Syntax,
-        syns : Array[@types.Syntax],
+      // Helper function to start processing function and first argument
+      fn start_processing(
+        env : KnfEnv,
+        first_expr : @types.Syntax,
+        remaining_exprs : Array[@types.Syntax],
       ) -> Knf raise KnfErr {
-        let ty_s = KnfEnv::get_type(self.externals, syn)
-        match syn {
-          Var(str) => {
-            let x = (try? @types.Name::from_string(str)).unwrap()
-            let_app(self, x, [], syns)
+        let expr_type = KnfEnv::get_type(env.externals, first_expr)
+        match first_expr {
+          Var(var_str) => {
+            let func_name = (try? @types.Name::from_string(var_str)).unwrap()
+            build_application(env, func_name, [], remaining_exprs)
           }
           _ => {
-            let x = self.new_temp()
-            let k = KnfEnv::to_knf(self, syn)
-            Let((x, ty_s), k, let_app(self, x, [], syns))
+            let temp_name = env.new_temp()
+            let expr_knf = KnfEnv::to_knf(env, first_expr)
+            Let((temp_name, expr_type), expr_knf,
+                build_application(env, temp_name, [], remaining_exprs))
           }
         }
       }
 
-      match syn {
-        Var(f) =>
-          if @typing.extenv.contains(f) {
-            let_app(
-              self,
-              (try? @types.Name::from_string(f)).unwrap(),
-              [],
-              args_syns,
-            )
-          } else {
-            let_args(self, syn, args_syns)
-          }
-        _ => let_args(self, syn, args_syns)
+      // Handle function expression (may be external function or regular function)
+      match func_expr {
+        Var(func_name_str) if @typing.extenv.contains(func_name_str) =>
+          build_application(self, (try? @types.Name::from_string(func_name_str)).unwrap(), [], arg_exprs)
+        _ => start_processing(self, func_expr, arg_exprs)
       }
     }
     Tuple(syns) => make_tuple(self, syns)
-    LetTuple(args, syn, rest) => {
-      // println("Enter LetTuple")
-      let mut env_tuple = self.externals
-      for i in args {
-        env_tuple = env_tuple.add(i.0, i.1)
+    LetTuple(pattern_vars, tuple_expr, rest_expr) => {
+      // Create environment with tuple pattern variables
+      let mut pattern_env = self.externals
+      for pattern_var in pattern_vars {
+        pattern_env = pattern_env.add(pattern_var.0, pattern_var.1)
       }
-      let after = KnfEnv::to_knf(
-        { counter: self.counter, externals: env_tuple },
-        rest,
+
+      // Process rest expression with pattern variables in scope
+      let rest_knf = KnfEnv::to_knf(
+        { counter: self.counter, externals: pattern_env },
+        rest_expr,
       )
-      let arr_nm_ty = args.map(t => {
-        let nm = @types.Name::name_only(t.0)
-        (nm, t.1.repr())
+
+      // Convert pattern variables to Name objects with their types
+      let name_type_pairs = pattern_vars.map(pattern_var => {
+        let var_name = @types.Name::name_only(pattern_var.0)
+        (var_name, pattern_var.1.repr())
       })
-      match syn {
-        Var(str) => {
-          let x = (try? @types.Name::from_string(str)).unwrap()
-          LetTuple(arr_nm_ty, x, after)
+
+      // Handle tuple expression (variable vs complex expression)
+      match tuple_expr {
+        Var(tuple_var_str) => {
+          let tuple_name = (try? @types.Name::from_string(tuple_var_str)).unwrap()
+          LetTuple(name_type_pairs, tuple_name, rest_knf)
         }
         _ => {
-          let k = KnfEnv::get_knf(self, syn)
-          Let((k.0, k.1), k.2, LetTuple(arr_nm_ty, k.0, after))
+          let (temp_name, temp_type, tuple_knf) = KnfEnv::get_knf(self, tuple_expr)
+          Let((temp_name, temp_type), tuple_knf,
+              LetTuple(name_type_pairs, temp_name, rest_knf))
         }
       }
     }
-    Get(e1, e2) => {
-      let (name1, e1_ty, knf1) = KnfEnv::get_knf(self, e1)
-      let (name2, e2_ty, knf2) = KnfEnv::get_knf(self, e2)
-      match e1 {
-        Var(_) =>
-          match e2 {
-            Var(_) => Get(name1, name2)
-            _ => Let((name2, e2_ty), knf2, Get(name1, name2))
-          }
-        _ =>
-          match e2 {
-            Var(_) => Let((name1, e1_ty), knf1, Get(name1, name2))
-            _ =>
-              Let(
-                (name1, e1_ty),
-                knf1,
-                Let((name2, e2_ty), knf2, Get(name1, name2)),
-              )
-          }
+    Get(array_expr, index_expr) => {
+      let (array_name, array_type, array_knf) = KnfEnv::get_knf(self, array_expr)
+      let (index_name, index_type, index_knf) = KnfEnv::get_knf(self, index_expr)
+
+      let get_operation = Get(array_name, index_name)
+      match (array_expr, index_expr) {
+        (Var(_), Var(_)) => get_operation
+        (Var(_), _) => Let((index_name, index_type), index_knf, get_operation)
+        (_, Var(_)) => Let((array_name, array_type), array_knf, get_operation)
+        (_, _) => Let((array_name, array_type), array_knf,
+                      Let((index_name, index_type), index_knf, get_operation))
       }
     }
-    Put(syn1, syn2, syn3) => {
-      let (name1, s1_ty, knf1) = KnfEnv::get_knf(self, syn1)
-      let (name2, s2_ty, knf2) = KnfEnv::get_knf(self, syn2)
-      let (name3, s3_ty, knf3) = KnfEnv::get_knf(self, syn3)
-      match syn1 {
+    Put(array_expr, index_expr, value_expr) => {
+      let (array_name, array_type, array_knf) = KnfEnv::get_knf(self, array_expr)
+      let (index_name, index_type, index_knf) = KnfEnv::get_knf(self, index_expr)
+      let (value_name, value_type, value_knf) = KnfEnv::get_knf(self, value_expr)
+
+      let put_operation = Put(array_name, index_name, value_name)
+      match array_expr {
         Var(_) =>
-          Let(
-            (name2, s2_ty),
-            knf2,
-            Let((name3, s3_ty), knf3, Put(name1, name2, name3)),
-          )
+          Let((index_name, index_type), index_knf,
+              Let((value_name, value_type), value_knf, put_operation))
         _ =>
-          Let(
-            (name1, s1_ty),
-            knf1,
-            Let(
-              (name2, s2_ty),
-              knf2,
-              Let((name3, s3_ty), knf3, Put(name1, name2, name3)),
-            ),
-          )
+          Let((array_name, array_type), array_knf,
+              Let((index_name, index_type), index_knf,
+                  Let((value_name, value_type), value_knf, put_operation)))
       }
     }
-    Array(e1, e2) => {
-      let (name1, e1_ty, knf1) = KnfEnv::get_knf(self, e1)
-      let (name2, e2_ty, knf2) = KnfEnv::get_knf(self, e2)
-      fn genArray(name1 : Name, name2 : Name) {
-        match e2_ty {
-          Int =>
-            ExternalFunctionApplication("minimbt_create_array", [name1, name2])
-          Double =>
-            ExternalFunctionApplication("minimbt_create_float_array", [
-              name1, name2,
-            ])
-          _ =>
-            ExternalFunctionApplication("minimbt_create_ptr_array", [
-              name1, name2,
-            ])
+    Array(size_expr, init_value_expr) => {
+      let (size_name, size_type, size_knf) = KnfEnv::get_knf(self, size_expr)
+      let (init_name, init_type, init_knf) = KnfEnv::get_knf(self, init_value_expr)
+
+      // Generate appropriate array creation function based on element type
+      fn create_array_operation(size_name : Name, init_name : Name, element_type : Type) -> Knf {
+        match element_type {
+          Int => ExternalFunctionApplication("minimbt_create_array", [size_name, init_name])
+          Double => ExternalFunctionApplication("minimbt_create_float_array", [size_name, init_name])
+          _ => ExternalFunctionApplication("minimbt_create_ptr_array", [size_name, init_name])
         }
       }
 
-      // match e1 {
-      //   Var(_) =>
-      //     match e2 {
-      //       Var(_) => genArray(name1, name2)
-      //       _ => Let((name2, e2_ty), knf2, genArray(name1, name2))
-      //     }
-      //   _ =>
-      //     match e2 {
-      //       Var(_) => Let((name1, e1_ty), knf1, genArray(name1, name2))
-      //       _ =>
-      //         Let(
-      //           (name1, e1_ty),
-      //           knf1,
-      //           Let((name2, e2_ty), knf2, genArray(name1, name2)),
-      //         )
-      //     }
-      // }
-      Let(
-        (name1, e1_ty),
-        knf1,
-        Let((name2, e2_ty), knf2, genArray(name1, name2)),
-      )
+      let array_operation = create_array_operation(size_name, init_name, init_type)
+
+      // Always use Let bindings for array creation for consistency
+      Let((size_name, size_type), size_knf,
+          Let((init_name, init_type), init_knf, array_operation))
     }
-    While(e1, e2) =>
-      // Process the array of syntax elements into a single KNF expression
-      While(KnfEnv::to_knf(self, e1), KnfEnv::to_knf(self, e2))
-    Assign(e1, e2) => {
-      let (name1, e1_ty, knf1) = KnfEnv::get_knf(self, e1)
-      let (name2, e2_ty, knf2) = KnfEnv::get_knf(self, e2)
-      match e1 {
-        Var(_) =>
-          match e2 {
-            Var(_) => Assign(name1, name2)
-            _ => Let((name2, e2_ty), knf2, Assign(name1, name2))
-          }
-        _ =>
-          match e2 {
-            Var(_) => Let((name1, e1_ty), knf1, Assign(name1, name2))
-            _ =>
-              Let(
-                (name1, e1_ty),
-                knf1,
-                Let((name2, e2_ty), knf2, Assign(name1, name2)),
-              )
-          }
+    While(condition_expr, body_expr) =>
+      // Convert while loop to KNF while with processed condition and body
+      While(KnfEnv::to_knf(self, condition_expr), KnfEnv::to_knf(self, body_expr))
+    Assign(target_expr, value_expr) => {
+      let (target_name, target_type, target_knf) = KnfEnv::get_knf(self, target_expr)
+      let (value_name, value_type, value_knf) = KnfEnv::get_knf(self, value_expr)
+
+      let assign_operation = Assign(target_name, value_name)
+      match (target_expr, value_expr) {
+        (Var(_), Var(_)) => assign_operation
+        (Var(_), _) => Let((value_name, value_type), value_knf, assign_operation)
+        (_, Var(_)) => Let((target_name, target_type), target_knf, assign_operation)
+        (_, _) => Let((target_name, target_type), target_knf,
+                      Let((value_name, value_type), value_knf, assign_operation))
       }
     }
-    And(e1, e2) => KnfEnv::to_knf(self, If(e1, e2, Bool(false)))
+    And(left_expr, right_expr) =>
+      // Convert logical AND to conditional: if left then right else false
+      KnfEnv::to_knf(self, If(left_expr, right_expr, Bool(false)))
     // Struct(name, _, fields, rest) => {
     //   let env_fun = self.externals.add(name, UserDefineType(name, fields))
     //   KnfEnv::to_knf({ counter: self.counter, externals: env_fun }, rest)
     // }
-    FieldAccess(e, field) => {
-      let (name, e_ty, knf) = KnfEnv::get_knf(self, e)
-      // @util.logger("(name, e_ty, knf)"  + (name, e_ty, knf).to_string())
-      let index = match e_ty {
+    FieldAccess(struct_expr, field_name) => {
+      let (struct_name, struct_type, struct_knf) = KnfEnv::get_knf(self, struct_expr)
+
+      // Find field index in struct type definition
+      let field_index = match struct_type {
         UserDefineType(_, fields) => {
-          let index = fields.val.search_by(fn(f) { f.0 == field })
-          index.unwrap()
+          match fields.val.search_by(fn(field) { field.0 == field_name }) {
+            Some(index) => index
+            None => @util.die("Field '" + field_name + "' not found in struct type: " + struct_type.to_string())
+          }
         }
-        _ => @util.die("not support field access")
+        _ => @util.die("Field access only supported for user-defined types, got: " + struct_type.to_string())
       }
-      // let index_name = (try? @types.Name::from_string(name.name.unwrap() + "_" + field + "_index")).unwrap()
-      // let let_index = Let((index_name, Int), index, FieldAccess(name, index_name))
-      Let((name, e_ty), knf, FieldAccess(name, e_ty, index))
+
+      // Create field access with Let binding for non-variable expressions
+      match struct_expr {
+        Var(_) => FieldAccess(struct_name, struct_type, field_index)
+        _ => Let((struct_name, struct_type), struct_knf, FieldAccess(struct_name, struct_type, field_index))
+      }
     }
     Enum(name, _, variants, cont) => {
       let variants = variants.map(fn(variant) {
@@ -894,27 +674,30 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
 }
 
 ///|
-fn make_tuple(env : KnfEnv, syns : Array[@types.Syntax]) -> Knf raise KnfErr {
-  let syns_names = Array::new()
-  let lets = Array::new()
+fn make_tuple(env : KnfEnv, element_exprs : Array[@types.Syntax]) -> Knf raise KnfErr {
+  let element_names = Array::new()
+  let non_variable_bindings = Array::new()
 
-  // Process all syntax elements first
-  for syn in syns {
-    let (name, ty, knf) = KnfEnv::get_knf(env, syn)
-    syns_names.push(name)
-    match syn {
-      Var(_) => () // No Let needed for variables
-      _ => lets.push((name, ty, knf))
+  // Process all tuple elements
+  for element_expr in element_exprs {
+    let (element_name, element_type, element_knf) = KnfEnv::get_knf(env, element_expr)
+    element_names.push(element_name)
+
+    // Track non-variable expressions that need Let bindings
+    match element_expr {
+      Var(_) => () // Variables don't need Let bindings
+      _ => non_variable_bindings.push((element_name, element_type, element_knf))
     }
   }
 
-  // Build the result by nesting Let expressions from inside out
-  let mut result = Tuple(syns_names)
-  for i = lets.length() - 1; i >= 0; i = i - 1 {
-    let (name, ty, knf) = lets[i]
-    result = Let((name, ty), knf, result)
+  // Build nested Let expressions from inside out, ending with tuple
+  let mut tuple_result = Tuple(element_names)
+  for binding_index = non_variable_bindings.length() - 1; binding_index >= 0; binding_index = binding_index - 1 {
+    let (name, ty, knf) = non_variable_bindings[binding_index]
+    tuple_result = Let((name, ty), knf, tuple_result)
   }
-  result
+
+  tuple_result
 }
 
 ///|
