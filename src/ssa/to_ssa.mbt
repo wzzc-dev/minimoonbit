@@ -5,7 +5,7 @@
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
 
-  // @util.logger("closure ir: " + input.to_json().stringify())
+  @util.logger("closure ir: " + input.to_json().stringify())
   // 初始化SSA程序
   let functions = []
 
@@ -147,9 +147,12 @@ priv struct Context {
 
 ///| 更新上下文中的当前块
 fn update_current_block(context : Context, block : BasicBlock) -> Context {
+  let updated_blocks = context.blocks.map(fn(b) {
+      if b.id == block.id { block } else { b }
+    })
   Context::{
     current_block: block,
-    blocks: context.blocks,
+    blocks: updated_blocks,
     block_map: context.block_map,
     var_env: context.var_env,
     func_env: context.func_env,
@@ -204,6 +207,15 @@ fn add_blocks_to_context(context : Context, blocks : Array[BasicBlock]) -> Conte
   result_context
 }
 
+fn update_current_terminator(context : Context, terminator : Terminator) -> Context {
+  let updated_current_block = BasicBlock::{
+    id: context.current_block.id,
+    params: context.current_block.params,
+    instructions: context.current_block.instructions,
+    terminator,
+  }
+  update_current_block(context, updated_current_block)
+}
 ///| SSA转换错误类型
 priv enum SsaError {
   VariableNotFound(String)
@@ -582,12 +594,15 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
     While(cond_expr, body_expr) => {
       // While循环：使用基本块参数实现SSA
       @util.logger("While: cond=" + cond_expr.to_string() + " body=" + body_expr.to_string())
-
       // 分析循环体内修改的变量
       let modified_vars = analyze_modified_variables(body_expr, context.var_env)
 
       // 创建新的块ID
-      let loop_header_id = new_block_id()
+      let cond_block_id = new_block_id()
+
+      let terminator = Terminator::Jump(cond_block_id, modified_vars.values().to_array())
+      let context = update_current_terminator(context, terminator)
+
       let body_block_id = new_block_id()
       let exit_block_id = new_block_id()
 
@@ -603,26 +618,27 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         updated_var_env = updated_var_env.add(var_name, loop_params[i])
       }
 
-      let loop_header = BasicBlock::{
-        id: loop_header_id,
+      let cond_block = BasicBlock::{
+        id: cond_block_id,
         params: loop_params,
         instructions: [],
         terminator: Terminator::Return(None),
       }
 
       // 2. 在循环头中转换条件表达式
-      let loop_header_context = Context::{
-        current_block: loop_header,
+      let cond_block_context = Context::{
+        current_block: cond_block,
         blocks: context.blocks,
         block_map: context.block_map,
         var_env: updated_var_env, // 使用包含循环参数的环境
         func_env: context.func_env,
       }
 
-      let cond_result = convert_expr(loop_header_context, cond_expr)
-      let cond_context = cond_result.context
-      @util.logger("While: cond_result.value=" + cond_result.value.to_string())
 
+      let cond_result = convert_expr(cond_block_context, cond_expr)
+      let cond_context = cond_result.context
+
+    
       let cond_value = match cond_result.value {
         Some(val) => val
         None => {
@@ -632,35 +648,26 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
 
       // 3. 更新循环头块，包含条件分支
-      let updated_loop_header = BasicBlock::{
-        id: loop_header_id,
+      let updated_cond_block = BasicBlock::{
+        id: cond_block_id,  
         params: [],
         instructions: cond_context.current_block.instructions,
         terminator: Terminator::Branch(cond_value, body_block_id, exit_block_id),
       }
 
       // 4. 创建循环体块
-      let body_start_block = BasicBlock::{
+      let body_block = BasicBlock::{
         id: body_block_id,
         params: [],
         instructions: [],
-        terminator: Terminator::Jump(loop_header_id, []), // 跳回循环头
+        terminator: Terminator::Return(None), // 后续块将被替换
       }
+      println("While: body_block=" + body_block.to_string())
 
-      // 5. 在循环体中转换body表达式
-      // 关键修复：确保body_context的blocks包含body_start_block
-      let body_blocks = {
-        let blocks = []
-        for block in cond_context.blocks {
-          blocks.push(block)
-        }
-        blocks.push(body_start_block) // 添加循环体块
-        blocks
-      }
-
+    
       let body_context = Context::{
-        current_block: body_start_block,
-        blocks: body_blocks,
+        current_block: body_block,
+        blocks: cond_context.blocks,
         block_map: cond_context.block_map,
         var_env: cond_context.var_env, // 继承条件评估后的环境
         func_env: cond_context.func_env,
@@ -681,7 +688,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         id: body_block_id,
         params: [],
         instructions: body_final_context.current_block.instructions,
-        terminator: Terminator::Jump(loop_header_id, loop_args), // 传递循环变量值
+        terminator: Terminator::Jump(cond_block_id, loop_args), // 传递循环变量值
       }
 
       // 7. 创建循环退出块
@@ -691,6 +698,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         instructions: [],
         terminator: Terminator::Return(None), // 临时终止符
       }
+      println("While: exit_block=" + exit_block.to_string())
 
       // 8. 更新当前块，跳转到循环头
       let initial_loop_args = []
@@ -705,19 +713,19 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         id: context.current_block.id,
         params: context.current_block.params,
         instructions: context.current_block.instructions,
-        terminator: Terminator::Jump(loop_header_id, initial_loop_args),
+        terminator: Terminator::Jump(cond_block_id, initial_loop_args),
       }
 
         // 9. 使用辅助函数构建最终块列表
-      let mut final_context = add_block_to_context(context, updated_current_block)
-      final_context = add_block_to_context(final_context, updated_loop_header)
+      let mut final_context = add_block_to_context(body_final_context, updated_current_block)
+      final_context = add_block_to_context(final_context, updated_cond_block)
       final_context = add_block_to_context(final_context, updated_body_block)
       final_context = add_block_to_context(final_context, exit_block)
 
-      // 添加body_final_context中的新块
-      for block in body_final_context.blocks {
-        final_context = add_block_to_context(final_context, block)
-      }
+      // // 添加body_final_context中的新块
+      // for block in body_final_context.blocks {
+      //   final_context = add_block_to_context(final_context, block)
+      // }
 
       let final_blocks = final_context.blocks
 
@@ -740,6 +748,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         func_env: context.func_env,
       }
 
+      
       // While循环返回Unit类型
       ExprResult::{ value: None, context: final_context }
     }

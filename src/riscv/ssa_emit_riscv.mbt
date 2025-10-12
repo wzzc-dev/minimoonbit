@@ -4,8 +4,8 @@
 /// 实现线性扫描寄存器分配算法
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  // println("emit riscv for ssa program: ")
-  // println(input.to_json().stringify())
+  println("emit riscv for ssa program: ")
+  println(input.to_json().stringify())
 
   // 遍历所有SSA函数
   for func in input.program.functions {
