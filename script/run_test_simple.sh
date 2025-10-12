@@ -5,6 +5,7 @@ OUT_PREFIX="out"
 
 # 初始化通过测试计数器和成功测试列表
 PASSED_COUNT=0
+FAILED_COUNT=0
 PASSED_TESTS=()
 FAILED_TESTS=()
 # 找到所有 .mbt 结尾的文件并循环处理
@@ -25,8 +26,12 @@ for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
 
   # 检查对应的 .ans 文件是否存在
   if [[ -f "$ANS_FILE" ]]; then
-    # 比较运行结果和 .ans 文件的内容（忽略行尾差异和 ans 文件末尾换行符）
-    if cmp -s <(tr -d '\r' < output.txt) <(tr -d '\r' < "$ANS_FILE" | sed '$ { /^$/ d; }' | perl -pe 'chomp if eof'); then
+    # 比较运行结果和 .ans 文件的内容，忽略行尾差异、output.txt 和 ans 文件末尾换行符。
+    # 使用 tr 命令去除文件中的 \r 字符，sed 命令删除 ans 文件末尾的空行，perl 命令去除 ans 文件末尾的换行符，
+    # 最后使用 cmp 命令静默比较两个处理后的文件内容是否一致。
+    if cmp -s \
+        <(tr -d '\r' < output.txt | sed '$ { /^$/ d; }' | perl -pe 'chomp if eof') \
+        <(tr -d '\r' < "$ANS_FILE" | sed '$ { /^$/ d; }' | perl -pe 'chomp if eof'); then
       echo "Test $MBT_FILE passed: Output matches $ANS_FILE"
       # 增加通过测试计数器
       ((PASSED_COUNT++))
@@ -36,6 +41,8 @@ for MBT_FILE in contest-2025-data/test_cases/mbt/*.mbt; do
       echo "Test $MBT_FILE failed: Output differs from $ANS_FILE"
       echo "Differences:"
       diff --strip-trailing-cr output.txt "$ANS_FILE"
+      # 增加失败测试计数器
+      ((FAILED_COUNT++))
       # 添加到失败测试列表
       FAILED_TESTS+=("$BASE_NAME")
     fi
@@ -63,3 +70,6 @@ if [ $PASSED_COUNT -gt 0 ]; then
 else
   echo "No tests passed."
 fi
+
+echo "passed tests: $PASSED_COUNT"
+echo "failed tests: $FAILED_COUNT"

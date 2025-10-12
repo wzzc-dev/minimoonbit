@@ -205,10 +205,18 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           process_comparison(self, lhs, rhs, then_expr, else_expr,
                            (l_name, r_name, then_knf, else_knf) =>
                              IfLe(l_name, r_name, then_knf, else_knf))
+        GE(lhs, rhs) =>
+          process_comparison(self, lhs, rhs, then_expr, else_expr,
+                           (l_name, r_name, then_knf, else_knf) =>
+                             IfLe(r_name, l_name, then_knf, else_knf))
         LT(lhs, rhs) =>
           process_comparison(self, lhs, rhs, then_expr, else_expr,
                            (l_name, r_name, then_knf, else_knf) =>
                              IfLt(l_name, r_name, then_knf, else_knf))
+        GT(lhs, rhs) =>
+          process_comparison(self, lhs, rhs, then_expr, else_expr,
+                           (l_name, r_name, then_knf, else_knf) =>
+                             IfLt(r_name, l_name, then_knf, else_knf))
         Not(negated_expr) =>
           KnfEnv::to_knf(self, If(negated_expr, else_expr, then_expr))
         Bool(bool_value) =>
@@ -217,6 +225,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           } else {
             KnfEnv::to_knf(self, else_expr)
           }
+        
         _ =>
           // Convert arbitrary expression to boolean comparison
           KnfEnv::to_knf(self, If(Eq(condition_expr, Bool(false)), else_expr, then_expr))
