@@ -217,18 +217,31 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
           process_comparison(self, lhs, rhs, then_expr, else_expr,
                            (l_name, r_name, then_knf, else_knf) =>
                              IfLt(r_name, l_name, then_knf, else_knf))
-        Not(negated_expr) =>
-          KnfEnv::to_knf(self, If(negated_expr, else_expr, then_expr))
+        Not(negated_expr) => 
+          process_comparison(self, negated_expr, Bool(false), then_expr, else_expr,
+                            (l_name, r_name, then_knf, else_knf) =>
+                             IfEq(l_name, r_name, then_knf, else_knf))
         Bool(bool_value) =>
-          if bool_value {
-            KnfEnv::to_knf(self, then_expr)
-          } else {
-            KnfEnv::to_knf(self, else_expr)
-          }
-        
-        _ =>
-          // Convert arbitrary expression to boolean comparison
-          KnfEnv::to_knf(self, If(Eq(condition_expr, Bool(false)), else_expr, then_expr))
+          KnfEnv::to_knf(self, If(Eq(Bool(bool_value), Bool(true)), then_expr, else_expr))
+        And(left_expr, right_expr) => {
+          let cond = @types.Syntax::If(left_expr, right_expr, Bool(false))
+          process_comparison(self, cond, Bool(true), then_expr, else_expr,
+                            (l_name, r_name, then_knf, else_knf) =>
+                             IfEq(l_name, r_name, then_knf, else_knf))
+          
+        }
+        Or(left_expr, right_expr) => {
+          let cond = @types.Syntax::If(left_expr, Bool(true), right_expr)
+          process_comparison(self, cond, Bool(true), then_expr, else_expr,
+                            (l_name, r_name, then_knf, else_knf) =>
+                             IfEq(l_name, r_name, then_knf, else_knf))
+        }
+        App(_) => {
+          process_comparison(self, condition_expr, Bool(true), then_expr, else_expr,
+                            (l_name, r_name, then_knf, else_knf) =>
+                             IfEq(l_name, r_name, then_knf, else_knf))
+        }
+        _ => raise KnfErr("Unsupported boolean expression: " + s.to_string())
       }
     }
     Neg(expr, kind~) =>
@@ -481,10 +494,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     And(left_expr, right_expr) =>
       // Convert logical AND to conditional: if left then right else false
       KnfEnv::to_knf(self, If(left_expr, right_expr, Bool(false)))
-    // Struct(name, _, fields, rest) => {
-    //   let env_fun = self.externals.add(name, UserDefineType(name, fields))
-    //   KnfEnv::to_knf({ counter: self.counter, externals: env_fun }, rest)
-    // }
+    
     FieldAccess(struct_expr, field_name) => {
       let (struct_name, struct_type, struct_knf) = KnfEnv::get_knf(self, struct_expr)
 
