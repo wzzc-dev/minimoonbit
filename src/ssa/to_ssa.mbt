@@ -641,7 +641,10 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 转换条件表达式
       let cond_result = convert_expr(header_context_with_var_env, cond_expr)
       let header_context_final = cond_result.context
-      let cond_value = cond_result.value.unwrap()
+      let cond_value = match cond_result.value {
+        Some(v) => v
+        None => @util.die("Condition expression has no value")
+      }
       
       // 更新循环头块的终止指令，使其根据条件跳转到循环体或退出块
       // 当跳转到退出块时，需要传递当前的循环变量值
@@ -841,7 +844,10 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 转换操作数
       let result = convert_expr(context, @closure.Expr::Var(x))
       let context1 = result.context
-      let operand_value = result.value.unwrap()
+      let operand_value = match result.value {
+        Some(v) => v
+        None => @util.die("Operand of negation has no value")
+      }
 
       // 整数取负: 0 - x
       let (zero_value, context2) = create_const_int(context1, 0)
@@ -852,7 +858,10 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 转换操作数
       let result = convert_expr(context, @closure.Expr::Var(x))
       let context1 = result.context
-      let operand_value = result.value.unwrap()
+      let operand_value = match result.value {
+        Some(v) => v
+        None => @util.die("Operand of float negation has no value")
+      }
 
       // 浮点取负: 0.0 - x
       let (zero_value, context2) = create_const_float(context1, 0.0)
@@ -904,8 +913,14 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let context2 = result2.context
 
       // 获取两个操作数的值
-      let value1 = result1.value.unwrap()
-      let value2 = result2.value.unwrap()
+      let value1 = match result1.value {
+        Some(v) => v
+        None => @util.die("Left operand of comparison has no value")
+      }
+      let value2 = match result2.value {
+        Some(v) => v
+        None => @util.die("Right operand of comparison has no value")
+      }
 
       // 创建比较指令的结果值
       let cmp_result = Value::{ id: new_value_id(), ty: Type::Bool }
@@ -927,15 +942,39 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let else_block_id = new_block_id()
       let merge_block_id = new_block_id()
 
-      // 预先创建合并块的参数（用于接收then/else分支的值）
-      let merge_param = Value::{ id: new_value_id(), ty: Type::Int } // 假设Int类型，稍后会根据实际类型调整
+      // 创建合并值 - 用于接收两个分支的返回值
+      let merge_value = Value::{ id: new_value_id(), ty: Type::Int }
+
+      // 分析两个分支中修改的变量
+      let then_modified_vars = analyze_modified_variables(e1, context2.var_env)
+      let else_modified_vars = analyze_modified_variables(e2, context2.var_env)
+
+      // 如果有变量修改，创建合并块的参数
+      let merge_params = []
+      let all_modified_vars = merge_modified_vars(then_modified_vars, else_modified_vars)
+      for var_name in all_modified_vars.keys() {
+        match all_modified_vars.get(var_name) {
+          Some(original_value) => {
+            let param_value = Value::{ id: new_value_id(), ty: original_value.ty }
+            merge_params.push(param_value)
+          }
+          None => ()
+        }
+      }
+
+      // 如果有变量修改，将合并值作为第一个参数
+      let final_merge_params = if merge_params.length() > 0 {
+        [merge_value] + merge_params
+      } else {
+        [merge_value]
+      }
 
       // 创建then块
       let then_block = BasicBlock::{
         id: then_block_id,
         params: [],
         instructions: [],
-        terminator: Terminator::Jump(merge_block_id, [merge_param]), // 稍后更新为正确的值
+        terminator: Terminator::Jump(merge_block_id, []), // 稍后更新
       }
 
       // 创建else块
@@ -943,18 +982,18 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         id: else_block_id,
         params: [],
         instructions: [],
-        terminator: Terminator::Jump(merge_block_id, [merge_param]), // 稍后更新为正确的值
+        terminator: Terminator::Jump(merge_block_id, []), // 稍后更新
       }
 
-      // 创建合并块 - 接收参数
+      // 创建合并块
       let merge_block = BasicBlock::{
         id: merge_block_id,
-        params: [merge_param], // 接收来自分支的参数
+        params: final_merge_params,
         instructions: [],
-        terminator: Terminator::Return(None), // 临时设置，后续会被正确的终止指令替换
+        terminator: Terminator::Return(None), // 临时设置
       }
 
-      // 更新当前块的终止指令 - 使用比较结果作为分支条件
+      // 更新当前块的终止指令
       let terminator = Terminator::Branch(
         cmp_result, then_block_id, [], else_block_id, [],
       )
@@ -974,27 +1013,41 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 转换then分支
       let then_result = convert_expr(context_with_blocks, e1)
       let then_context = then_result.context
-      let then_value = then_result.value
-
-      // 对于If表达式中的赋值，需要检查修改的变量并传递正确的值
-      let then_modified_vars = analyze_modified_variables(e1, context2.var_env)
-      let then_args = match then_value {
-        Some(v) => [v]
+      let then_branch_value = match then_result.value {
+        Some(v) => v
         None => {
-          // 如果then分支没有直接返回值，查找第一个被修改的变量的值
-          let then_var_names = then_modified_vars.keys().to_array()
-          if then_var_names.length() > 0 {
-            // 获取第一个被修改变量的值作为分支返回值
-            let first_var_name = then_var_names[0]
+          // 如果分支没有返回值，但有修改变量，使用第一个修改变量的值
+          let var_names = then_modified_vars.keys().to_array()
+          if var_names.length() > 0 {
+            let first_var_name = var_names[0]
             match then_context.var_env.get(first_var_name) {
-              Some(var_val) => [var_val]
-              None => [merge_param] // 使用默认值
+              Some(var_val) => var_val
+              None => @util.die("Failed to get modified variable value in then branch")
             }
           } else {
-            [merge_param] // 使用默认值
+            @util.die("Then branch has no return value and no modified variables")
           }
         }
       }
+
+      // 为then分支准备参数
+      let then_args = [then_branch_value]
+      // 添加修改变量的值
+      let var_names = all_modified_vars.keys().to_array()
+      for i = 0; i < var_names.length(); i = i + 1 {
+        let var_name = var_names[i]
+        let var_value = match then_context.var_env.get(var_name) {
+          Some(current_val) => current_val
+          None => {
+            match all_modified_vars.get(var_name) {
+              Some(original_val) => original_val
+              None => merge_params[i]
+            }
+          }
+        }
+        then_args.push(var_value)
+      }
+
       let updated_then_block = BasicBlock::{
         id: then_context.current_block.id,
         params: then_context.current_block.params,
@@ -1009,27 +1062,40 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 转换else分支
       let else_result = convert_expr(else_context, e2)
       let final_else_context = else_result.context
-      let else_value = else_result.value
-
-      // 对于If表达式中的赋值，需要检查修改的变量并传递正确的值
-      let else_modified_vars = analyze_modified_variables(e2, context2.var_env)
-      let else_args = match else_value {
-        Some(v) => [v]
+      let else_branch_value = match else_result.value {
+        Some(v) => v
         None => {
-          // 如果else分支没有直接返回值，查找第一个被修改的变量的值
-          let else_var_names = else_modified_vars.keys().to_array()
-          if else_var_names.length() > 0 {
-            // 获取第一个被修改变量的值作为分支返回值
-            let first_var_name = else_var_names[0]
+          // 如果分支没有返回值，但有修改变量，使用第一个修改变量的值
+          let var_names = else_modified_vars.keys().to_array()
+          if var_names.length() > 0 {
+            let first_var_name = var_names[0]
             match final_else_context.var_env.get(first_var_name) {
-              Some(var_val) => [var_val]
-              None => [merge_param] // 使用默认值
+              Some(var_val) => var_val
+              None => @util.die("Failed to get modified variable value in else branch")
             }
           } else {
-            [merge_param] // 使用默认值
+            @util.die("Else branch has no return value and no modified variables")
           }
         }
       }
+
+      // 为else分支准备参数
+      let else_args = [else_branch_value]
+      // 添加修改变量的值
+      for i = 0; i < var_names.length(); i = i + 1 {
+        let var_name = var_names[i]
+        let var_value = match final_else_context.var_env.get(var_name) {
+          Some(current_val) => current_val
+          None => {
+            match all_modified_vars.get(var_name) {
+              Some(original_val) => original_val
+              None => merge_params[i]
+            }
+          }
+        }
+        else_args.push(var_value)
+      }
+
       let updated_else_block = BasicBlock::{
         id: final_else_context.current_block.id,
         params: final_else_context.current_block.params,
@@ -1037,53 +1103,26 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         terminator: Terminator::Jump(merge_block_id, else_args),
       }
 
-      // 更新合并块的参数类型（根据实际分支结果）
-      let final_merge_param = match (then_value, else_value) {
-        (Some(t_val), _) => {
-          // 使用then分支的类型更新参数类型
-          Value::{ id: merge_param.id, ty: t_val.ty }
-        }
-        (None, Some(e_val)) => {
-          // 使用else分支的类型更新参数类型
-          Value::{ id: merge_param.id, ty: e_val.ty }
-        }
-        (None, None) => {
-          // 都没有值，保持Int类型
-          Value::{ id: merge_param.id, ty: merge_param.ty }
-        }
-      }
-
-      // 更新合并块设置参数
-      let updated_merge_block = BasicBlock::{
-        id: merge_block_id,
-        params: [final_merge_param],
-        instructions: [],
-        terminator: Terminator::Return(None), // 临时设置
-      }
-
       // 使用辅助函数更新最终块
       let mut final_context = add_block_to_context(final_else_context, updated_then_block)
       final_context = add_block_to_context(final_context, updated_else_block)
-      final_context = add_block_to_context(final_context, updated_merge_block)
-      final_context = update_current_block(final_context, updated_merge_block)
+      final_context = add_block_to_context(final_context, merge_block)
+      final_context = update_current_block(final_context, merge_block)
 
       // 更新变量环境，使合并后的值可以被访问
-      // 分析If表达式中修改的变量
-      let modified_vars_in_if = analyze_modified_variables(expr, context2.var_env)
-
-      // 为每个修改的变量更新环境，使其指向合并块的参数
       let mut updated_var_env = context2.var_env
-      for var_name in modified_vars_in_if.keys().to_array() {
-        // 对于被修改的变量，将它们映射到合并后的参数
-        // 这样在If表达式之后访问这些变量时，会获得合并后的值
-        updated_var_env = updated_var_env.add(var_name, final_merge_param)
+      for i = 0; i < var_names.length(); i = i + 1 {
+        let var_name = var_names[i]
+        let param_index = if merge_params.length() > 0 { i + 1 } else { 0 }
+        if param_index < final_merge_params.length() {
+          updated_var_env = updated_var_env.add(var_name, final_merge_params[param_index])
+        }
       }
 
       final_context = update_var_env(final_context, updated_var_env)
 
-      // 获取合并后的结果值
-      let result_value = Some(final_merge_param)
-      ExprResult::{ value: result_value, context: final_context }
+      // 返回合并值作为结果
+      ExprResult::{ value: Some(merge_value), context: final_context }
     }
     Var(name) => {
       let var_name = name.to_string()
