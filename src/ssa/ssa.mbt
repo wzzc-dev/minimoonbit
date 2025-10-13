@@ -94,7 +94,7 @@ pub(all) struct BasicBlock {
 /// 终止指令
 pub(all) enum Terminator {
   Jump(Block, Array[Value]) // 无条件跳转
-  Branch(Value, Block, Block) // 条件分支
+  Branch(Value, Block, Array[Value], Block, Array[Value]) // 条件分支，支持为每个目标传递参数
   Return(Value?) // 函数返回
 } derive(Show)
 

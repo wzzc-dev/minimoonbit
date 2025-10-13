@@ -261,7 +261,15 @@ fn get_terminator_uses_ids(term : @ssa.Terminator) -> Array[Int] {
       for arg in args {
         uses.push(arg.id)
       }
-    @ssa.Terminator::Branch(cond, _, _) => uses.push(cond.id)
+    @ssa.Terminator::Branch(cond, _, true_args, _, false_args) => {
+      uses.push(cond.id)
+      for arg in true_args {
+        uses.push(arg.id)
+      }
+      for arg in false_args {
+        uses.push(arg.id)
+      }
+    }
     _ => ()
   }
   uses

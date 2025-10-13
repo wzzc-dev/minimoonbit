@@ -248,8 +248,11 @@ pub fn Terminator::to_json(self : Terminator) -> Json {
       let values_json = values.map(Value::to_json)
       ["Jump", block.to_json(), values_json]
     }
-    Terminator::Branch(value, block1, block2) =>
-      ["Branch", value.to_json(), block1.to_json(), block2.to_json()]
+    Terminator::Branch(value, block1, values1, block2, values2) => {
+      let values1_json = values1.map(Value::to_json)
+      let values2_json = values2.map(Value::to_json)
+      ["Branch", value.to_json(), block1.to_json(), values1_json, block2.to_json(), values2_json]
+    }
     Terminator::Return(value) =>
       match value {
         Some(v) => ["Return", v.to_json()]
@@ -269,11 +272,31 @@ pub fn Terminator::from_json(json : Json) -> Terminator raise {
       }
       Terminator::Jump(Block::from_json(block), values_res)
     }
+    ["Branch", value, block1, Array(values1), block2, Array(values2)] => {
+      let values1_res = []
+      for v in values1 {
+        values1_res.push(Value::from_json(v))
+      }
+      let values2_res = []
+      for v in values2 {
+        values2_res.push(Value::from_json(v))
+      }
+      Terminator::Branch(
+        Value::from_json(value),
+        Block::from_json(block1),
+        values1_res,
+        Block::from_json(block2),
+        values2_res,
+      )
+    }
+    // 为了向后兼容，也支持旧的格式
     ["Branch", value, block1, block2] =>
       Terminator::Branch(
         Value::from_json(value),
         Block::from_json(block1),
+        [], // 空参数列表
         Block::from_json(block2),
+        [], // 空参数列表
       )
     ["Return", "None"] => Terminator::Return(None)
     ["Return", value] => Terminator::Return(Some(Value::from_json(value)))

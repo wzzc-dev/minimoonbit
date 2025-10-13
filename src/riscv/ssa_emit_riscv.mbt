@@ -1110,13 +1110,79 @@ fn emit_terminator_with_regalloc(
       }
       result.push(J("block_" + target.id.to_string()))
     }
-    @ssa.Terminator::Branch(cond, true_block, false_block) => {
+    @ssa.Terminator::Branch(cond, true_block, true_args, false_block, false_args) => {
       let (cond_reg, load_instrs) = get_register_or_spill_load(
         cond.id,
         allocator,
       )
       result.append(load_instrs)
+
+      // 加载true分支的参数到寄存器
+      for i, arg in true_args {
+        let (src_reg, load_instrs) = get_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        let dest_reg = match i {
+          0 => A0
+          1 => A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          _ => A0
+        }
+        result.append(load_instrs)
+        if src_reg != dest_reg {
+          result.push(Mv(dest_reg, src_reg))
+        }
+      }
+
+      // 保存false分支的参数到临时寄存器（因为我们需要先设置true参数）
+      let false_param_regs = []
+      for i, arg in false_args {
+        let (src_reg, load_instrs) = get_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        let temp_reg = match i {
+          0 => T0
+          1 => T1
+          2 => T2
+          3 => T3
+          4 => T4
+          5 => T5
+          _ => T6
+        }
+        result.append(load_instrs)
+        if src_reg != temp_reg {
+          result.push(Mv(temp_reg, src_reg))
+        }
+        false_param_regs.push(temp_reg)
+      }
+
+      // 生成分支指令
       result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
+
+      // 设置false分支的参数
+      for i = 0; i < false_param_regs.length(); i = i + 1 {
+        let temp_reg = false_param_regs[i]
+        let dest_reg = match i {
+          0 => A0
+          1 => A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          _ => A0
+        }
+        if temp_reg != dest_reg {
+          result.push(Mv(dest_reg, temp_reg))
+        }
+      }
+
       result.push(J("block_" + false_block.id.to_string()))
     }
   }
