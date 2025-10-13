@@ -5,7 +5,7 @@
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
 
-  @util.logger("closure ir: " + input.to_json().stringify())
+  // @util.logger("closure ir: " + input.to_json().stringify())
   // 初始化SSA程序
   let functions = []
 
@@ -1122,6 +1122,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       final_context = update_var_env(final_context, updated_var_env)
 
       // 返回合并值作为结果
+      // @util.logger("IfExpr result: " + merge_value.to_string())
       ExprResult::{ value: Some(merge_value), context: final_context }
     }
     Var(name) => {

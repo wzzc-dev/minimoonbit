@@ -4,8 +4,8 @@
 /// 实现线性扫描寄存器分配算法
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  println("emit riscv for ssa program: ")
-  println(input.to_json().stringify())
+  // println("emit riscv for ssa program: ")
+  // println(input.to_json().stringify())
 
   // 遍历所有SSA函数
   for func in input.program.functions {
@@ -482,9 +482,9 @@ fn emit_comparison_instruction(
     ComparisonType::LessThan => [Slt(rd, rs1, rs2)]
     ComparisonType::LessEqual =>
       [
-        Slt(rd, rs2, rs1), // rd = rhs < lhs
-        Xori(rd, rd, 1),
-      ] // rd = !rd
+        Slt(rd, rs2, rs1), // rd = rhs < lhs (检查rhs是否严格小于lhs)
+        Xori(rd, rd, 1),   // rd = !rd (如果rhs不严格小于lhs，则lhs <= rhs)
+      ] // rd = !(rhs < lhs) = (lhs <= rhs)
     ComparisonType::GreaterThan => [Slt(rd, rs2, rs1)] // rd = rhs < lhs
     ComparisonType::GreaterEqual =>
       [
@@ -541,7 +541,7 @@ fn emit_function_call_instruction(
       let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
       instrs.append(load_instrs)
       instrs.push(
-        Sd(arg_reg, { base: Sp, offset: (i - reg_arg_list.length()) * 8 }),
+        Sd(arg_reg, { base: Sp, offset: (i - 8) * 8 }),
       )
     }
   }
@@ -1117,29 +1117,7 @@ fn emit_terminator_with_regalloc(
       )
       result.append(load_instrs)
 
-      // 加载true分支的参数到寄存器
-      for i, arg in true_args {
-        let (src_reg, load_instrs) = get_register_or_spill_load(
-          arg.id,
-          allocator,
-        )
-        let dest_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          _ => A0
-        }
-        result.append(load_instrs)
-        if src_reg != dest_reg {
-          result.push(Mv(dest_reg, src_reg))
-        }
-      }
-
-      // 保存false分支的参数到临时寄存器（因为我们需要先设置true参数）
+      // 保存false分支的参数到临时寄存器（避免与true参数冲突）
       let false_param_regs = []
       for i, arg in false_args {
         let (src_reg, load_instrs) = get_register_or_spill_load(
@@ -1162,10 +1140,32 @@ fn emit_terminator_with_regalloc(
         false_param_regs.push(temp_reg)
       }
 
+      // 加载true分支的参数到寄存器（在分支指令之前）
+      for i, arg in true_args {
+        let (src_reg, load_instrs) = get_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        let dest_reg = match i {
+          0 => A0
+          1 => A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          _ => A0
+        }
+        result.append(load_instrs)
+        if src_reg != dest_reg {
+          result.push(Mv(dest_reg, src_reg))
+        }
+      }
+
       // 生成分支指令
       result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
 
-      // 设置false分支的参数
+      // 设置false分支的参数（在分支指令之后）
       for i = 0; i < false_param_regs.length(); i = i + 1 {
         let temp_reg = false_param_regs[i]
         let dest_reg = match i {
