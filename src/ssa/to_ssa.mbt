@@ -592,165 +592,95 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
     }
     While(cond_expr, body_expr) => {
-      // While循环：使用基本块参数实现SSA
-      @util.logger("While: cond=" + cond_expr.to_string() + " body=" + body_expr.to_string())
-      // 分析循环体内修改的变量
+      // 创建While循环需要的块
+      let loop_header_block_id = new_block_id()  // 循环头块（条件检查）
       let modified_vars = analyze_modified_variables(body_expr, context.var_env)
 
-      // 创建新的块ID
-      let cond_block_id = new_block_id()
-
-      let terminator = Terminator::Jump(cond_block_id, modified_vars.values().to_array())
+      let terminator = Terminator::Jump(loop_header_block_id, modified_vars.values().to_array())
       let context = update_current_terminator(context, terminator)
 
-      let body_block_id = new_block_id()
-      let exit_block_id = new_block_id()
 
-      // 1. 创建循环头块参数 - 使用优化的批量创建
-      let var_names_array = []
-      for var_name in modified_vars.keys() {
-        var_names_array.push(var_name)
-      }
-      let loop_params = create_block_params_with_types(var_names_array, context.var_env)
-
-      let mut updated_var_env = context.var_env
-      for i, var_name in var_names_array {
-        updated_var_env = updated_var_env.add(var_name, loop_params[i])
-      }
-
-      let cond_block = BasicBlock::{
-        id: cond_block_id,
-        params: loop_params,
+      let loop_body_block_id = new_block_id()    // 循环体块
+      let loop_exit_block_id = new_block_id()    // 循环退出块
+      
+      // 创建循环头块，用于判断循环条件
+      let loop_header_block = BasicBlock::{
+        id: loop_header_block_id,
+        params: [],  // 循环头块开始没有参数
         instructions: [],
-        terminator: Terminator::Return(None),
+        terminator: Terminator::Return(None), // 临时设置
       }
-
-      // 2. 在循环头中转换条件表达式
-      let cond_block_context = Context::{
-        current_block: cond_block,
-        blocks: context.blocks,
-        block_map: context.block_map,
-        var_env: updated_var_env, // 使用包含循环参数的环境
-        func_env: context.func_env,
+      
+      // 将循环头块添加到上下文
+      let context_with_header = add_block_to_context(context, loop_header_block)
+      
+      // 切换到循环头块进行条件表达式的转换
+      let header_context = update_current_block(context_with_header, loop_header_block)
+      let header_context_with_var_env = update_var_env(header_context, context.var_env) // 确保循环头块有正确的变量环境
+      
+      // 转换条件表达式
+      let cond_result = convert_expr(header_context_with_var_env, cond_expr)
+      let header_context_final = cond_result.context
+      let cond_value = cond_result.value.unwrap()
+      
+      // 更新循环头块的终止指令，使其根据条件跳转到循环体或退出块
+      let updated_loop_header_block = BasicBlock::{
+        id: header_context_final.current_block.id,
+        params: header_context_final.current_block.params,
+        instructions: header_context_final.current_block.instructions,
+        terminator: Terminator::Branch(cond_value, loop_body_block_id, loop_exit_block_id),
       }
-
-
-      let cond_result = convert_expr(cond_block_context, cond_expr)
-      let cond_context = cond_result.context
-
-    
-      let cond_value = match cond_result.value {
-        Some(val) => val
-        None => {
-          let (default_val, _) = create_const_int(cond_context, 0)
-          default_val
-        }
-      }
-
-      // 3. 更新循环头块，包含条件分支
-      let updated_cond_block = BasicBlock::{
-        id: cond_block_id,  
-        params: [],
-        instructions: cond_context.current_block.instructions,
-        terminator: Terminator::Branch(cond_value, body_block_id, exit_block_id),
-      }
-
-      // 4. 创建循环体块
-      let body_block = BasicBlock::{
-        id: body_block_id,
+      
+      // 将更新后的循环头块添加回上下文
+      let context_with_updated_header = add_block_to_context(header_context_final, updated_loop_header_block)
+      
+      // 创建循环体块
+      let loop_body_block = BasicBlock::{
+        id: loop_body_block_id,
         params: [],
         instructions: [],
-        terminator: Terminator::Return(None), // 后续块将被替换
+        terminator: Terminator::Jump(loop_header_block_id, []), // 跳回循环头块进行条件检查
       }
-      println("While: body_block=" + body_block.to_string())
-
-    
-      let body_context = Context::{
-        current_block: body_block,
-        blocks: cond_context.blocks,
-        block_map: cond_context.block_map,
-        var_env: cond_context.var_env, // 继承条件评估后的环境
-        func_env: cond_context.func_env,
+      
+      // 将循环体块添加到上下文
+      let context_with_body = add_block_to_context(context_with_updated_header, loop_body_block)
+      
+      // 切换到循环体块进行转换
+      let body_context = update_current_block(context_with_body, loop_body_block)
+      let body_context_with_var_env = update_var_env(body_context, context.var_env)  // 使用进入循环前的变量环境
+      
+      // 转换循环体
+      let body_result = convert_expr(body_context_with_var_env, body_expr)
+      let body_context_final = body_result.context
+      
+      // 更新循环体块的终止指令，使其跳回循环头块
+      let updated_loop_body_block = BasicBlock::{
+        id: body_context_final.current_block.id,
+        params: body_context_final.current_block.params,
+        instructions: body_context_final.current_block.instructions,
+        terminator: Terminator::Jump(loop_header_block_id, []), // 跳回循环头块
       }
-      let body_result = convert_expr(body_context, body_expr)
-      let body_final_context = body_result.context
-
-      // 6. 收集循环变量的最终值并更新循环体块
-      let loop_args = []
-      for var_name in var_names_array {
-        match body_final_context.var_env.get(var_name) {
-          Some(value) => loop_args.push(value)
-          None => loop_args.push(context.var_env.get(var_name).unwrap())
-        }
-      }
-
-      let updated_body_block = BasicBlock::{
-        id: body_block_id,
-        params: [],
-        instructions: body_final_context.current_block.instructions,
-        terminator: Terminator::Jump(cond_block_id, loop_args), // 传递循环变量值
-      }
-
-      // 7. 创建循环退出块
-      let exit_block = BasicBlock::{
-        id: exit_block_id,
+      
+      // 将更新后的循环体块添加回上下文
+      let context_with_updated_body = add_block_to_context(body_context_final, updated_loop_body_block)
+      
+      // 创建循环退出块
+      let loop_exit_block = BasicBlock::{
+        id: loop_exit_block_id,
         params: [],
         instructions: [],
-        terminator: Terminator::Return(None), // 临时终止符
+        terminator: Terminator::Return(None), // 临时设置
       }
-      println("While: exit_block=" + exit_block.to_string())
-
-      // 8. 更新当前块，跳转到循环头
-      let initial_loop_args = []
-      for var_name in var_names_array {
-        match context.var_env.get(var_name) {
-          Some(value) => initial_loop_args.push(value)
-          None => initial_loop_args.push(Value::{ id: new_value_id(), ty: Type::Int }) // 默认值
-        }
-      }
-
-      let updated_current_block = BasicBlock::{
-        id: context.current_block.id,
-        params: context.current_block.params,
-        instructions: context.current_block.instructions,
-        terminator: Terminator::Jump(cond_block_id, initial_loop_args),
-      }
-
-        // 9. 使用辅助函数构建最终块列表
-      let mut final_context = add_block_to_context(body_final_context, updated_current_block)
-      final_context = add_block_to_context(final_context, updated_cond_block)
-      final_context = add_block_to_context(final_context, updated_body_block)
-      final_context = add_block_to_context(final_context, exit_block)
-
-      // // 添加body_final_context中的新块
-      // for block in body_final_context.blocks {
-      //   final_context = add_block_to_context(final_context, block)
-      // }
-
-      let final_blocks = final_context.blocks
-
-      // 10. 创建最终上下文
-      // 循环退出后，循环变量保持最后一次迭代的值
-      let final_var_env = context.var_env
-      let mut updated_final_var_env = final_var_env
-      for var_name in var_names_array {
-        match body_final_context.var_env.get(var_name) {
-          Some(value) => updated_final_var_env = updated_final_var_env.add(var_name, value)
-          None => ()
-        }
-      }
-
-      let final_context = Context::{
-        current_block: exit_block,
-        blocks: final_blocks,
-        block_map: context.block_map,
-        var_env: updated_final_var_env, // 包含循环修改后的值
-        func_env: context.func_env,
-      }
-
+      
+      // 将循环退出块添加到上下文
+      let context_with_exit = add_block_to_context(context_with_updated_body, loop_exit_block)
+      
+      // 切换到循环退出块，准备继续后续代码
+      let final_context = update_current_block(context_with_exit, loop_exit_block)
+      let final_context_with_var_env = update_var_env(final_context, context_with_updated_body.var_env) // 使用循环体后的变量环境
       
       // While循环返回Unit类型
-      ExprResult::{ value: None, context: final_context }
+      ExprResult::{ value: None, context: final_context_with_var_env }
     }
     StaticArrayRef(label) => {
       // 静态数组引用：类似于ExternalArray，但引用的是静态数据段中的数组
@@ -1315,17 +1245,6 @@ fn new_block_id() -> Block {
   Block::{ id: global_block_counter.val }
 }
 
-///| 批量生成值ID以提高性能
-fn new_value_ids(count : Int) -> Array[Int] {
-  let start_id = global_value_counter.val + 1
-  global_value_counter.val = start_id + count - 1
-  let ids = []
-  for i = 0; i < count; i = i + 1 {
-    ids.push(start_id + i)
-  }
-  ids
-}
-
 ///| 简单的LRU类型缓存，避免重复类型推断
 let type_cache : Ref[@immut/hashmap.HashMap[String, Type]] = Ref::new(@immut/hashmap.new())
 
@@ -1340,18 +1259,4 @@ fn cached_infer_type(expr : @closure.Expr, context : Context) -> Type {
       inferred_type
     }
   }
-}
-
-///| 优化的块参数创建
-fn create_block_params_with_types(var_names : Array[String], var_env : @immut/hashmap.HashMap[String, Value]) -> Array[Value] {
-  let ids = new_value_ids(var_names.length())
-  let params = []
-  for i, var_name in var_names {
-    let var_type = match var_env.get(var_name) {
-      Some(value) => value.ty
-      None => Type::Int // 默认类型
-    }
-    params.push(Value::{ id: ids[i], ty: var_type })
-  }
-  params
 }
