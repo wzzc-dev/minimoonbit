@@ -1222,8 +1222,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let instruction = Instruction::{ result: result_value, opcode }
 
       // 更新当前块的指令列表
-      context.current_block.instructions.push(instruction)
-      ExprResult::{ value: Some(result_value), context }
+      current_context.current_block.instructions.push(instruction)
+      ExprResult::{ value: Some(result_value), context: current_context }
     }
     MakeClosure((name, ty), c, e) => {
       // 闭包创建
