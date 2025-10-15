@@ -4,8 +4,8 @@
 /// 实现线性扫描寄存器分配算法
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  println("emit riscv for ssa program: ")
-  println(input.to_json().stringify())
+  // println("emit riscv for ssa program: ")
+  // println(input.to_json().stringify())
 
   // 遍历所有SSA函数
   for func in input.program.functions {
@@ -20,9 +20,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
   let (live_intervals, param_ids) = compute_live_intervals_for_function(func)
-  @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
+  // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(live_intervals, param_ids)
-  @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
+  // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
   // 确定需要保存的被调用者保存的寄存器
@@ -472,7 +472,7 @@ fn emit_comparison_instruction(
     ComparisonType::Equal =>
       [
         Sub(rd, rs1, rs2), // rd = rs1 - rs2
-        Slti(rd, rd, 1),  // Use signed comparison instead of unsigned
+        Sltiu(rd, rd, 1),  // rd = (rd < 1) ? 1 : 0
       ] // rd = (rd == 0) ? 1 : 0
     ComparisonType::NotEqual =>
       [

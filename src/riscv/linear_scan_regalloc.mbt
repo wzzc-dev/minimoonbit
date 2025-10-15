@@ -285,6 +285,15 @@ pub fn linear_scan_register_allocation(
   // 优先使用调用者保存寄存器（t0-t6），因为它们不需要在函数调用间保存
   let allocator = {
     available_regs: [
+      A0,
+      A1,
+      A2,
+      A3,
+      A4,
+      A5,
+      A6,
+      A7,
+      
       T0,
       T1,
       T2,
