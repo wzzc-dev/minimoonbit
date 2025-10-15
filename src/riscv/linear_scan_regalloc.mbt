@@ -67,6 +67,7 @@ pub fn compute_live_intervals_for_function(
   // 遍历所有基本块和指令，计算每个值的定义和使用位置
   for block in func.blocks {
     // 基本块参数在块开始时定义
+    // 不需要额外增加instruction_count，因为基本块参数应该与跳转指令在同一位置
     for param in block.params {
       let value_id = param.id
       intervals = intervals.add(value_id, {
@@ -282,9 +283,11 @@ pub fn linear_scan_register_allocation(
   param_ids : Array[Int],
 ) -> RegisterAllocator {
   // 初始化寄存器分配器
-  // 优先使用调用者保存寄存器（t0-t6），因为它们不需要在函数调用间保存
+  // 优先使用调用者保存寄存器（t0-t5），因为它们不需要在函数调用间保存
+  // 注意：T6在RV64中通常是线程指针，不用于通用分配
   let allocator = {
     available_regs: [
+      // 参数寄存器（调用者保存）
       A0,
       A1,
       A2,
@@ -293,7 +296,8 @@ pub fn linear_scan_register_allocation(
       A5,
       A6,
       A7,
-      
+
+      // 临时寄存器（调用者保存）
       T0,
       T1,
       T2,
@@ -312,6 +316,7 @@ pub fn linear_scan_register_allocation(
       S8,
       S9,
       S10,
+      S11, // 添加缺失的S11寄存器
     ],
     active_intervals: [],
     value_to_reg: @immut/hashmap.new(),
@@ -365,13 +370,16 @@ fn expire_old_intervals(
   let mut i = 0
   while i < allocator.active_intervals.length() {
     let interval = allocator.active_intervals[i]
-    if interval.end < current_pos {
+    if interval.end <= current_pos {
       // 区间已结束，释放寄存器
       match interval.reg {
-        Some(reg) => allocator.available_regs.push(reg)
-        // 注意：不要从value_to_reg映射中移除该值！
-        // 寄存器分配应该在整个函数期间保持有效
-        // 活跃区间只用于跟踪当前使用中的寄存器，不用于最终的分配映射
+        Some(reg) => {
+          // 将寄存器放回可用池
+          allocator.available_regs.push(reg)
+          // 注意：不要从value_to_reg映射中移除该值！
+          // 寄存器分配应该在整个函数期间保持有效
+          // 活跃区间只用于跟踪当前使用中的寄存器，不用于最终的分配映射
+        }
         None => ()
       }
       // 从活跃列表中移除
@@ -399,15 +407,11 @@ fn spill_at_interval(
     return
   }
 
-  // 找到结束最晚的活跃区间
-  let mut spill_candidate = allocator.active_intervals[0]
-  let mut spill_index = 0
-  for i in 1..<allocator.active_intervals.length() {
-    if allocator.active_intervals[i].end > spill_candidate.end {
-      spill_candidate = allocator.active_intervals[i]
-      spill_index = i
-    }
-  }
+  // 使用智能算法找到最优的溢出候选
+  let (spill_candidate, spill_index) = find_best_spill_candidate(
+    allocator.active_intervals,
+    interval,
+  )
   if spill_candidate.end > interval.end {
     // 溢出候选区间，将其寄存器分配给当前区间
     match spill_candidate.reg {
@@ -473,6 +477,50 @@ fn insert_active_interval(
 }
 
 ///|
+/// 检查两个活跃区间是否重叠
+fn intervals_overlap(a : LiveInterval, b : LiveInterval) -> Bool {
+  not(a.end <= b.start || b.end <= a.start)
+}
+
+///|
+/// 查找最优的溢出候选（考虑区间长度和重叠情况）
+fn find_best_spill_candidate(
+  active_intervals : Array[LiveInterval],
+  current_interval : LiveInterval,
+) -> (LiveInterval, Int) {
+  if active_intervals.length() == 0 {
+    @util.die("Cannot find spill candidate from empty active intervals")
+  }
+
+  let mut best_candidate = active_intervals[0]
+  let mut best_index = 0
+  let mut best_score = calculate_spill_score(best_candidate, current_interval)
+
+  for i in 1..<active_intervals.length() {
+    let candidate = active_intervals[i]
+    let score = calculate_spill_score(candidate, current_interval)
+    if score > best_score {
+      best_score = score
+      best_candidate = candidate
+      best_index = i
+    }
+  }
+
+  (best_candidate, best_index)
+}
+
+///|
+/// 计算溢出分数（分数越高越适合溢出）
+fn calculate_spill_score(candidate : LiveInterval, current : LiveInterval) -> Int {
+  // 优先溢出：1) 结束位置更晚的区间 2) 长度更长的区间 3) 与当前区间重叠的区间
+  let end_bonus = candidate.end * 2
+  let length_bonus = (candidate.end - candidate.start)
+  let overlap_penalty = if intervals_overlap(candidate, current) { -100 } else { 0 }
+
+  end_bonus + length_bonus + overlap_penalty
+}
+
+///|
 /// 获取值对应的寄存器或生成溢出加载代码
 pub fn get_register_or_spill_load(
   value_id : Int,
@@ -489,15 +537,18 @@ pub fn get_register_or_spill_load(
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
           // 值被溢出到内存，需要加载
-          // 使用值ID来选择临时寄存器，避免冲突
-          let temp_reg = match value_id % 7 {
+          // 智能选择临时寄存器，优先选择非caller-saved寄存器以避免冲突
+          let temp_reg = match value_id % 10 {
             0 => T0
             1 => T1
             2 => T2
             3 => T3
             4 => T4
             5 => T5
-            _ => T6
+            6 => S2  // 优先使用callee-saved寄存器作为临时寄存器
+            7 => S3
+            8 => S4
+            _ => S5
           }
           let load_instr = Ld(temp_reg, {
             base: Fp,
@@ -527,4 +578,38 @@ pub fn generate_spill_store_if_needed(
     Some(spill_offset) => [Sd(reg, { base: Fp, offset: -(24 + spill_offset) })]
     None => [] // 不需要溢出存储
   }
+}
+
+///|
+/// 验证寄存器分配的一致性（用于调试）
+pub fn verify_allocation_consistency(allocator : RegisterAllocator) -> Bool {
+  // 检查是否有重复的寄存器分配
+  let allocated_regs = []
+  allocator.value_to_reg.each(fn(_value_id, reg) {
+    if allocated_regs.contains(reg) {
+      @util.logger("Warning: Register " + reg.to_string() + " allocated to multiple values")
+    }
+    allocated_regs.push(reg)
+  })
+
+  // 检查活跃区间与分配映射的一致性
+  for interval in allocator.active_intervals {
+    match interval.reg {
+      Some(reg) => {
+        match allocator.value_to_reg.get(interval.value_id) {
+          Some(allocated_reg) => {
+            if reg != allocated_reg {
+              @util.logger("Warning: Inconsistent register allocation for value " + interval.value_id.to_string())
+            }
+          }
+          None => {
+            @util.logger("Warning: Active interval has register but no mapping for value " + interval.value_id.to_string())
+          }
+        }
+      }
+      None => () // OK - 活跃区间可能没有寄存器（已溢出）
+    }
+  }
+
+  true
 }

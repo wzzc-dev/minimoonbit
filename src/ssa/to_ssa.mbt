@@ -5,14 +5,15 @@
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
 
-  // @util.logger("closure ir: " + input.to_json().stringify())
+  @util.logger("closure ir: " + input.to_json().stringify())
   // 初始化SSA程序
   let functions = []
 
   // 转换每个函数定义
   for fundef in input.fundefs {
     if not(@typing.extenv.contains(fundef.old_name.to_string())) {
-      let ssa_func = convert_function(fundef, functions)
+      let block_id = new_block_id()
+      let ssa_func = convert_function(block_id, fundef, functions)
       // @util.logger("convert_function: " + ssa_func.to_json().stringify())
       functions.push(ssa_func)
     }
@@ -28,6 +29,7 @@ pub fn to_ssa(input : @closure.Program) -> Ssa {
 ///|
 /// 转换函数定义为SSA形式
 fn convert_function(
+  block_id : Block,
   fundef : @closure.FuncDef,
   functions : Array[Function],
 ) -> Function {
@@ -44,7 +46,7 @@ fn convert_function(
 
   // 创建入口基本块
   let entry_block = BasicBlock::{
-    id: new_block_id(),
+    id: block_id,
     params: [], // 函数入口块没有参数
     instructions: [],
     terminator: Terminator::Return(None), // 默认返回
@@ -119,7 +121,9 @@ fn convert_main_function(
   body : @closure.Expr,
   functions : Array[Function],
 ) -> Function {
+  let block_id = new_block_id()
   convert_function(
+    block_id,
     @closure.FuncDef::{
       name: @closure.Label("minimbt_main"),
       old_name: (try? @types.Name::from_string("minimbt_main")).unwrap(),
@@ -1260,22 +1264,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 闭包调用
       // 特殊处理：如果n是已定义的函数，直接创建函数引用
       let func_name = n.to_string()
-      let closure_value = match safe_get_var(context.var_env, func_name) {
-        Ok(value) => value // 变量环境中找到，直接使用
-        Err(_) => {
-          // 尝试从函数环境中查找
-          match safe_get_func_type(context.func_env, func_name) {
-            Ok(func_type) => {
-              // 对于闭包调用，直接创建函数引用值，不创建CallRef指令
-              Value::{ id: new_value_id(), ty: func_type }
-            }
-            Err(_) => {
-              @util.logger("Error: Function not found for CallClosure: " + func_name)
-              Value::{ id: new_value_id(), ty: Type::Int }
-            }
-          }
-        }
-      }
+      println("var_env: " + context.var_env.to_string())
+      println("func_env: " + context.func_env.to_string())
 
       // 转换所有参数，正确链式传递上下文
       let mut current_context = context
@@ -1289,13 +1279,32 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         }
       }
 
+      let opcode = match safe_get_var(context.var_env, func_name) {
+        Ok(value) => Opcode::CallClosure(value, call_arg_values) // 变量环境中找到，直接使用
+        Err(_) => {
+          // 尝试从函数环境中查找
+          match safe_get_func_type(context.func_env, func_name) {
+            Ok(_) => {
+              // 对于闭包调用，直接创建函数引用值，不创建CallRef指令
+              Opcode::Call(Func::Label(func_name), call_arg_values)
+            }
+            Err(_) => {
+              @util.logger("Error: Function not found for CallClosure: " + func_name)
+              Opcode::Call(Func::Label(func_name), call_arg_values)
+            }
+          }
+        }
+      }
+
+      
+
       // 闭包调用时，需要先传递捕获的变量（自由变量），然后传递调用时的参数
       // 但在当前的CallClosure实现中，我们只需要传递调用参数
       // 因为捕获的变量已经在闭包创建时绑定了
       let result_value = Value::{ id: new_value_id(), ty: Type::Int }
       let instruction = Instruction::{
         result: result_value,
-        opcode: Opcode::CallClosure(closure_value, call_arg_values),
+        opcode: opcode,
       }
 
       // 更新当前块的指令列表
