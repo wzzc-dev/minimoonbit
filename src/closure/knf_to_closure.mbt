@@ -143,10 +143,6 @@ fn knf_to_closure(
       }
     }
     Apply(name, args_name) => {
-      // @util.logger("apply: " + name.to_string())
-      // @util.logger("apply: " + arr_name.to_string())
-      // @util.logger("env: " + env.to_string())
-      // @util.logger("funcdefs: " + funcdefs.to_string())
 
       // 检查是否是函数定义中的函数
       let is_closure_func = match
@@ -166,11 +162,7 @@ fn knf_to_closure(
         None => false
       }
       match is_closure_func || is_closure_var {
-        true => if is_closure_var {
-          CallClosure(name, args_name)
-        } else {
-          CallClosure(name, args_name)
-        }
+        true => CallClosure(name, args_name)
         false => CallDirect(name.to_string(), args_name)
       }
       

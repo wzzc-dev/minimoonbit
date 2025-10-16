@@ -159,7 +159,7 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
       for a in args {
         args_res.push(Value::from_json(a))
       }
-      Opcode::CallClosure(Value::from_json(closure), args_res)
+      Opcode::CallClosure(Func::from_json(closure), args_res)
     }
     _ => fail("invalid json for Opcode")
   }

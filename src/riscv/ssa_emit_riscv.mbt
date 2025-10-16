@@ -875,8 +875,8 @@ fn emit_closure_creation(
   instrs.push(Call(Label("minimbt_malloc")))
 
   // 3. 存储函数指针到闭包对象的偏移0处
-  instrs.push(La(T0, Label(func_name)))
-  instrs.push(Sd(T0, { base: A0, offset: 0 }))
+  instrs.push(La(S11, Label(func_name)))
+  instrs.push(Sd(S11, { base: A0, offset: 0 }))
   if free_vars.length() > 0 {
     // 有自由变量，存储它们
     for i, free_var in free_vars {
@@ -912,24 +912,31 @@ fn emit_closure_creation(
 /// 生成闭包调用指令
 fn emit_closure_call(
   result_val : @ssa.Value,
-  closure : @ssa.Value,
+  closure : @ssa.Func,
   args : Array[@ssa.Value],
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
   let instrs = []
-  let (closure_reg, load_closure_instrs) = get_register_or_spill_load(
-    closure.id,
-    allocator,
-  )
-  instrs.append(load_closure_instrs)
-  instrs.push(Comment("CallClosure: setting up function call"))
-
-  // 1. 将闭包对象指针加载到一个临时寄存器（T0）
-  instrs.push(Mv(T0, closure_reg))
+  
+  match closure {
+    @ssa.Func::Call(callee) => {
+      // 1. 将闭包对象指针加载到一个临时寄存器（T0）
+      let (closure_reg, load_closure_instrs) = get_register_or_spill_load(
+        callee.id,
+        allocator,
+      )
+      instrs.append(load_closure_instrs)
+      instrs.push(Comment("CallClosure: setting up function call"))
+      instrs.push(Mv(S11, closure_reg))
+    }
+    @ssa.Func::Label(_) => {
+      ()
+    } 
+  }
 
   // 2. 从闭包对象中加载自由变量到A0
   // 自由变量存储在闭包对象的偏移8处
-  instrs.push(Ld(A0, { base: T0, offset: 8 }))
+  instrs.push(Ld(A0, { base: S11, offset: 8 }))
 
   // 3. 将显式参数放入参数寄存器（从A1开始）
   for i, arg in args {
@@ -952,7 +959,7 @@ fn emit_closure_call(
 
   // 4. 调用函数
   instrs.push(Comment("Extract function pointer and call"))
-  instrs.push(Ld(T1, { base: T0, offset: 0 })) // 函数指针在偏移0处
+  instrs.push(Ld(T1, { base: S11, offset: 0 })) // 函数指针在偏移0处
   instrs.push(Jalr(T1))
 
   // 5. 将返回值移动到结果寄存器

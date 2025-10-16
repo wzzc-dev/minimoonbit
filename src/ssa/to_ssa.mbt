@@ -824,7 +824,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 创建结果值 - 数组元素的类型需要从数组类型中推断
       let element_type = match array_value.ty {
         Type::Array(elem_type) => elem_type
-        _ => @util.die("Expected array type in ArrayGet")
+        _ => @util.die("Expected array type in ArrayGet: name " + array_name.to_string() + ", type: " + array_value.ty.to_string())
       }
       let result_value = Value::{ id: new_value_id(), ty: element_type }
       let instruction = Instruction::{
@@ -1029,7 +1029,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
               None => @util.die("Failed to get modified variable value in then branch")
             }
           } else {
-            @util.die("Then branch has no return value and no modified variables")
+            Value::{ id: new_value_id(), ty: Type::Int }
           }
         }
       }
@@ -1160,16 +1160,17 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         }
       }
     }
-    Let((name, _ty), e1, e2) => {
+    Let((name, ty), e1, e2) => {
 
       // Let绑定：先计算e1
       let result1 = convert_expr(context, e1)
+      let result1_value = result1.value
       let context1 = result1.context
       // 将e1的结果绑定到name
-      match result1.value {
+      match result1_value {
         Some(value) => {
           // 更新环境，将name映射到value
-          let updated_var_env = context1.var_env.add(name.to_string(), value)
+          let updated_var_env = context1.var_env.add(name.to_string(), Value::{ id: value.id, ty: convert_type(ty) })
           let updated_context = Context::{
             current_block: context1.current_block,
             blocks: context1.blocks,
@@ -1261,6 +1262,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       ExprResult::{ value: result.value, context: result.context }
     }
     CallClosure(n, xs) => {
+
+      
       // 闭包调用
       // 特殊处理：如果n是已定义的函数，直接创建函数引用
       let func_name = n.to_string()
@@ -1280,13 +1283,12 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
 
       let opcode = match safe_get_var(context.var_env, func_name) {
-        Ok(value) => Opcode::CallClosure(value, call_arg_values) // 变量环境中找到，直接使用
+        Ok(value) => Opcode::CallClosure(Func::Call(value), call_arg_values) // 变量环境中找到，直接使用
         Err(_) => {
           // 尝试从函数环境中查找
           match safe_get_func_type(context.func_env, func_name) {
             Ok(_) => {
-              // 对于闭包调用，直接创建函数引用值，不创建CallRef指令
-              Opcode::Call(Func::Label(func_name), call_arg_values)
+              Opcode::CallClosure(Func::Label(func_name), call_arg_values)
             }
             Err(_) => {
               @util.logger("Error: Function not found for CallClosure: " + func_name)

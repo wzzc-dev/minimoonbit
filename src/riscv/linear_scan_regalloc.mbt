@@ -242,7 +242,10 @@ fn get_instruction_uses_ids(instr : @ssa.Instruction) -> Array[Int] {
         uses.push(free_var.id)
       }
     @ssa.Opcode::CallClosure(closure, args) => {
-      uses.push(closure.id)
+      match closure {
+        @ssa.Func::Call(callee) => uses.push(callee.id)
+        @ssa.Func::Label(_) => () // 直接函数标签不需要
+      }
       for arg in args {
         uses.push(arg.id)
       }
@@ -316,7 +319,6 @@ pub fn linear_scan_register_allocation(
       S8,
       S9,
       S10,
-      S11, // 添加缺失的S11寄存器
     ],
     active_intervals: [],
     value_to_reg: @immut/hashmap.new(),
