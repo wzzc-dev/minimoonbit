@@ -48,6 +48,7 @@ fn knf_to_closure(
     Int64(i) => Int64(i)
     Unit => Unit
     Double(d) => Double(d)
+    Bool(b) => Bool(b)
     Add(a, b) => Add(a, b)
     Sub(a, b) => Sub(a, b)
     Mul(a, b) => Mul(a, b)
@@ -269,6 +270,7 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
     Int(_) => @hashset.new()
     Int64(_) => @hashset.new()
     Double(_) => @hashset.new()
+    Bool(_) => @hashset.new()
     Neg(x) => @hashset.of([new_fv(x, Int)])
     Add(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
     Sub(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])

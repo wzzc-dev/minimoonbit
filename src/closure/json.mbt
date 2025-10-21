@@ -5,6 +5,7 @@ pub fn Expr::to_json(self : Expr) -> Json {
     Expr::Int(i) => ["Int", Json::number(i.to_double())]
     Expr::Int64(i) => ["Int64", Json::number(i.to_double())]
     Expr::Double(d) => ["Double", Json::number(d)]
+    Expr::Bool(b) => ["Bool", Json::boolean(b)]
     Expr::Neg(n) => ["Neg", n.to_json()]
     Expr::Add(n1, n2) => ["Add", n1.to_json(), n2.to_json()]
     Expr::Sub(n1, n2) => ["Sub", n1.to_json(), n2.to_json()]

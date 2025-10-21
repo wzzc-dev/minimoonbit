@@ -46,6 +46,7 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
   match self {
     Opcode::ConstInt(i) => ["ConstInt", i]
     Opcode::ConstFloat(f) => ["ConstFloat", f]
+    Opcode::ConstBool(b) => ["ConstBool", b]
     Opcode::Add(v1, v2) => ["Add", v1.to_json(), v2.to_json()]
     Opcode::Sub(v1, v2) => ["Sub", v1.to_json(), v2.to_json()]
     Opcode::Mul(v1, v2) => ["Mul", v1.to_json(), v2.to_json()]

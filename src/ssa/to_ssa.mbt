@@ -280,6 +280,19 @@ fn create_const_float(context : Context, value : Double) -> (Value, Context) {
   (const_value, context)
 }
 
+///| 创建布尔常量值并添加到当前块
+fn create_const_bool(context : Context, value : Bool) -> (Value, Context) {
+  let const_value = Value::{ id: new_value_id(), ty: Type::Bool }
+  let instruction = Instruction::{
+    result: const_value,
+    opcode: Opcode::ConstBool(value),
+  }
+  context.current_block.instructions.push(instruction)
+  (const_value, context)
+}
+
+
+
 ///| 创建二元运算指令
 fn create_binary_op(
   context : Context,
@@ -876,6 +889,10 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let (value, new_context) = create_const_float(context, d)
       ExprResult::{ value: Some(value), context: new_context }
     }
+    Bool(b) => {
+      let (value, new_context) = create_const_bool(context, b)
+      ExprResult::{ value: Some(value), context: new_context }
+    }
     Add(x, y)
     | Sub(x, y)
     | Mul(x, y)
@@ -1029,7 +1046,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
               None => @util.die("Failed to get modified variable value in then branch")
             }
           } else {
-            Value::{ id: new_value_id(), ty: Type::Int }
+            Value::{ id: new_value_id(), ty: Type::Unit }
           }
         }
       }

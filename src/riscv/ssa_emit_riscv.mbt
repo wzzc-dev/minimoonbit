@@ -20,9 +20,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
   let (live_intervals, param_ids) = compute_live_intervals_for_function(func)
-  // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
+  @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(live_intervals, param_ids)
-  // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
+  @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
   // 确定需要保存的被调用者保存的寄存器
@@ -37,6 +37,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
       _ => ()
     }
   })
+  allocator.saved_callee_regs = saved_callee_regs
 
   // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间
   let spill_size = allocator.next_spill_slot
@@ -172,6 +173,10 @@ fn emit_instruction_with_regalloc(
       emit_constant_instruction(instr.result, value, allocator)
     @ssa.Opcode::ConstFloat(value) =>
       emit_float_constant_instruction(instr.result, value, allocator)
+    @ssa.Opcode::ConstBool(value) =>
+      emit_bool_constant_instruction(instr.result, value, allocator)
+
+
 
     // 整数算术运算
     @ssa.Opcode::Add(lhs, rhs) =>
@@ -396,6 +401,28 @@ fn emit_float_constant_instruction(
   instrs.push(FmvDX(float_reg, temp_reg))
   instrs
 }
+
+///|
+/// 生成布尔常量加载指令
+fn emit_bool_constant_instruction(
+  result_val : @ssa.Value,
+  value : Bool,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] {
+  let instrs = []
+  let (rd, load_instrs) = get_register_or_spill_load(result_val.id, allocator)
+  instrs.append(load_instrs)
+  instrs.push(Li(rd, value.to_string()))
+  let spill_instrs = generate_spill_store_if_needed(
+    result_val.id,
+    rd,
+    allocator,
+  )
+  instrs.append(spill_instrs)
+  instrs
+}
+
+
 
 ///|
 /// 生成整数二元运算指令
@@ -704,6 +731,23 @@ fn emit_array_access_instruction(
         instrs.push(FmvD(result_reg, float_temp_reg))
       }
     }
+    @ssa.Type::Function(_) => {
+      let (result_reg, load_result_instrs) = get_register_or_spill_load(
+        result_val.id,
+        allocator,
+      )
+      instrs.append(load_result_instrs)
+      instrs.push(Ld(T2, { base: array_reg, offset: 0 }))
+      if result_reg != T2 {
+        instrs.push(Mv(result_reg, T2))
+      }
+      let spill_instrs = generate_spill_store_if_needed(
+        result_val.id,
+        result_reg,
+        allocator,
+      )
+      instrs.append(spill_instrs)
+    }
     _ => {
       let (result_reg, load_result_instrs) = get_register_or_spill_load(
         result_val.id,
@@ -828,6 +872,8 @@ fn emit_memory_allocation(
     value_to_reg: @immut/hashmap.new(),
     value_to_spill: @immut/hashmap.new(),
     next_spill_slot: 0,
+    // 需要保存的寄存器列表
+    saved_callee_regs: [],
   })
   instrs.append(load_instrs)
 
@@ -1097,6 +1143,9 @@ fn emit_terminator_with_regalloc(
     }
     @ssa.Terminator::Jump(target, args) => {
       for i, arg in args {
+        if arg.ty == @ssa.Type::Unit {
+          continue
+        }
         let (src_reg, load_instrs) = get_register_or_spill_load(
           arg.id,
           allocator,

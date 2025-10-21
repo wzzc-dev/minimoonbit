@@ -19,6 +19,7 @@ pub(all) enum Opcode {
   // 常量
   ConstInt(Int)
   ConstFloat(Double)
+  ConstBool(Bool)
 
   // 算术运算
   Add(Value, Value)

@@ -59,6 +59,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
     Int(n) => n.to_string()
     Int64(n) => n.to_string()
     Double(n) => n.to_string()
+    Bool(b) => b.to_string()
     Neg(name) => "-" + name.to_string()
     Var(name) => name.to_string()
     Add(e1, e2) => e1.to_string() + " + " + e2.to_string()

@@ -271,7 +271,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
   let mut env = env
   let instrs = []
   match expr {
-    Unit => instrs.clear()
+    Unit => ()
     Int(i) => instrs.push(Li(reg_ret, i.to_string()))
     Int64(i) => instrs.push(Li(reg_ret, i.to_string()))
     Double(d) => {
@@ -280,6 +280,7 @@ fn compile_expr(expr : @closure.Expr, env : Env) -> Array[RvAsm] {
       // instrs.push(FcvtDl(freg_ret, T0))
       instrs.push(FmvDX(freg_ret, T0))
     }
+    Bool(b) => instrs.push(Li(reg_ret, b.to_string()))
     Neg(x) => {
       instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, x) }))
       instrs.push(Neg(reg_ret, T0))

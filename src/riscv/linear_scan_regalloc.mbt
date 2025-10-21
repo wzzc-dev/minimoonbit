@@ -25,6 +25,8 @@ struct RegisterAllocator {
   mut value_to_spill : @immut/hashmap.HashMap[Int, Int]
   // 下一个可用的栈槽
   mut next_spill_slot : Int
+  // 需要保存的寄存器列表
+  mut saved_callee_regs : Array[Reg]
 } derive(Show)
 
 ///|
@@ -324,6 +326,8 @@ pub fn linear_scan_register_allocation(
     value_to_reg: @immut/hashmap.new(),
     value_to_spill: @immut/hashmap.new(),
     next_spill_slot: 0,
+    // 需要保存的寄存器列表
+    saved_callee_regs: [],
   }
 
   // 按开始位置排序区间
@@ -339,7 +343,14 @@ pub fn linear_scan_register_allocation(
       spill_at_interval(allocator, interval)
     } else {
       // 分配寄存器
-      let reg = allocator.available_regs.unsafe_pop()
+      let reg = match allocator.available_regs.pop() {
+        Some(reg) => reg
+        None => {
+          // 理论上不应该发生，因为我们检查了available_regs是否为空
+          @util.logger("Error: No available register for interval " + interval.to_string())
+          continue
+        }
+      }
 
       // 检查是否是函数参数，如果是且被分配到callee-saved寄存器，则强制溢出
       let is_function_param = param_ids.contains(interval.value_id)
@@ -554,7 +565,7 @@ pub fn get_register_or_spill_load(
           }
           let load_instr = Ld(temp_reg, {
             base: Fp,
-            offset: -(24 + spill_offset),
+            offset: -(24 + spill_offset + allocator.saved_callee_regs.length() * 8),
           })
           (temp_reg, [load_instr])
         }
@@ -577,7 +588,7 @@ pub fn generate_spill_store_if_needed(
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
   match allocator.value_to_spill.get(value_id) {
-    Some(spill_offset) => [Sd(reg, { base: Fp, offset: -(24 + spill_offset) })]
+    Some(spill_offset) => [Sd(reg, { base: Fp, offset: -(24 + spill_offset + allocator.saved_callee_regs.length() * 8) })]
     None => [] // 不需要溢出存储
   }
 }

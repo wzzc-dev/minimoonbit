@@ -10,6 +10,7 @@ pub(all) enum Knf {
   Int(Int)
   Int64(Int64)
   Double(Double)
+  Bool(Bool)
   Neg(Name)
   Add(Name, Name)
   Sub(Name, Name)
