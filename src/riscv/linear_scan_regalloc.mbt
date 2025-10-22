@@ -6,9 +6,11 @@
 /// 生命周期区间，表示一个SSA值的活跃范围
 struct LiveInterval {
   value_id : Int // SSA值的ID
+  ty : @ssa.Type // 值的类型
   start : Int // 开始位置（指令编号）
   end : Int // 结束位置（指令编号）  
-  reg : Reg? // 分配的寄存器（如果有）
+  reg : Reg? // 分配的整数寄存器（如果有）
+  freg : FReg? // 分配的浮点寄存器（如果有）
   spill_slot : Int? // 溢出栈槽位置（如果溢出）
 } derive(Show)
 
@@ -17,18 +19,22 @@ struct LiveInterval {
 struct RegisterAllocator {
   // 可用的通用寄存器池（避开特殊用途寄存器）
   available_regs : Array[Reg]
+  // 可用的浮点寄存器池
+  available_fregs : Array[FReg]
   // 当前活跃的区间
   active_intervals : Array[LiveInterval]
   // 值ID到寄存器的映射
   mut value_to_reg : @immut/hashmap.HashMap[Int, Reg]
   // 值ID到浮点数寄存器的映射
-  // mut value_to_float_reg : @immut/hashmap.HashMap[Int, FReg]
+  mut value_to_freg : @immut/hashmap.HashMap[Int, FReg]
   // 值ID到栈槽的映射
   mut value_to_spill : @immut/hashmap.HashMap[Int, Int]
   // 下一个可用的栈槽
   mut next_spill_slot : Int
   // 需要保存的寄存器列表
   mut saved_callee_regs : Array[Reg]
+  // 需要保存的浮点寄存器列表
+  mut saved_callee_fregs : Array[FReg]
 } derive(Show)
 
 ///|
@@ -36,6 +42,14 @@ struct RegisterAllocator {
 fn is_callee_saved(reg : Reg) -> Bool {
   match reg {
     S2 | S3 | S4 | S5 | S6 | S7 | S8 | S9 | S10 | S11 => true
+    _ => false
+  }
+}
+
+///| 检查浮点寄存器是否是被调用者保存寄存器（callee-saved）
+fn is_callee_saved_freg(freg : FReg) -> Bool {
+  match freg {
+    Fs0 | Fs1 | Fs2 | Fs3 | Fs4 | Fs5 | Fs6 | Fs7 | Fs8 | Fs9 | Fs10 | Fs11 => true
     _ => false
   }
 }
@@ -61,9 +75,11 @@ pub fn compute_live_intervals_for_function(
     // 参数在函数开始时（位置0）定义，先设置结束位置为0
     intervals = intervals.add(value_id, {
       value_id,
+      ty: param.ty,
       start: 0,
       end: 0,
       reg: None,
+      freg: None,
       spill_slot: None,
     })
   }
@@ -76,9 +92,11 @@ pub fn compute_live_intervals_for_function(
       let value_id = param.id
       intervals = intervals.add(value_id, {
         value_id,
+        ty: param.ty,
         start: instruction_count,
         end: instruction_count,
         reg: None,
+        freg: None,
         spill_slot: None,
       })
     }
@@ -97,9 +115,11 @@ pub fn compute_live_intervals_for_function(
           None =>
             intervals = intervals.add(used_id, {
               value_id: used_id,
+              ty: instr.result.ty,
               start: 0, // 对于参数，假设从位置0开始
               end: instruction_count, // 当前指令位置
               reg: None,
+              freg: None,
               spill_slot: None,
             })
           Some(_) => () // 已存在的区间，稍后统一更新结束位置
@@ -110,9 +130,11 @@ pub fn compute_live_intervals_for_function(
       let def_value_id = instr.result.id
       intervals = intervals.add(def_value_id, {
         value_id: def_value_id,
+        ty: instr.result.ty,
         start: instruction_count,
         end: instruction_count,
         reg: None,
+        freg: None,
         spill_slot: None,
       })
       instruction_count = instruction_count + 1
@@ -129,9 +151,11 @@ pub fn compute_live_intervals_for_function(
         None =>
           intervals = intervals.add(used_id, {
             value_id: used_id,
+            ty: Unit,
             start: 0, // 对于参数，假设从位置0开始
             end: instruction_count, // 当前指令位置
             reg: None,
+            freg: None,
             spill_slot: None,
           })
         Some(_) => () // 已存在的区间，稍后统一更新结束位置
@@ -289,6 +313,10 @@ pub fn linear_scan_register_allocation(
   intervals : Array[LiveInterval],
   param_ids : Array[Int],
 ) -> RegisterAllocator {
+  println("linear scan register allocation for intervals: ")
+  println(intervals)
+  println("linear scan register allocation for param_ids: ")
+  println(param_ids)
   // 初始化寄存器分配器
   // 优先使用调用者保存寄存器（t0-t5），因为它们不需要在函数调用间保存
   // 注意：T6在RV64中通常是线程指针，不用于通用分配
@@ -324,12 +352,49 @@ pub fn linear_scan_register_allocation(
       S9,
       S10,
     ],
+    available_fregs: [
+      Ft0,
+      Ft1,
+      Ft2,
+      Ft3,
+      Ft4,
+      Ft5,
+      Ft6,
+      Ft7,
+      Fs0,
+      Fs1,
+      Fa0,
+      Fa1,
+      Fa2,
+      Fa3,
+      Fa4,
+      Fa5,
+      Fa6,
+      Fa7,
+      Fs2,
+      Fs3,
+      Fs4,
+      Fs5,
+      Fs6,
+      Fs7,
+      Fs8,
+      Fs9,
+      Fs10,
+      Fs11,
+      Ft8,
+      Ft9,
+      Ft10,
+      Ft11,
+    ],
     active_intervals: [],
     value_to_reg: @immut/hashmap.new(),
+    value_to_freg: @immut/hashmap.new(),
     value_to_spill: @immut/hashmap.new(),
     next_spill_slot: 0,
     // 需要保存的寄存器列表
     saved_callee_regs: [],
+    // 需要保存的浮点寄存器列表
+    saved_callee_fregs: [],
   }
 
   // 按开始位置排序区间
@@ -340,38 +405,76 @@ pub fn linear_scan_register_allocation(
   for interval in sorted_intervals {
     // 移除已结束的活跃区间
     expire_old_intervals(allocator, interval.start)
-    if allocator.available_regs.length() == 0 {
-      // 没有可用寄存器，需要溢出
-      spill_at_interval(allocator, interval)
-    } else {
-      // 分配寄存器
-      let reg = match allocator.available_regs.pop() {
-        Some(reg) => reg
-        None => {
-          // 理论上不应该发生，因为我们检查了available_regs是否为空
-          @util.logger("Error: No available register for interval " + interval.to_string())
-          continue
-        }
-      }
-
-      // 检查是否是函数参数，如果是且被分配到callee-saved寄存器，则强制溢出
-      let is_function_param = param_ids.contains(interval.value_id)
-      if is_function_param && is_callee_saved(reg) {
-        // 将寄存器放回可用列表
-        allocator.available_regs.push(reg)
-        // 强制溢出函数参数，避免递归调用时的覆盖问题
+    if interval.ty == Float {
+      
+      if allocator.available_fregs.length() == 0 {
+        // 没有可用浮点寄存器，需要溢出
         spill_at_interval(allocator, interval)
       } else {
-        allocator.value_to_reg = allocator.value_to_reg.add(
-          interval.value_id,
-          reg,
-        )
+        // 分配浮点寄存器
+        let freg = match allocator.available_fregs.pop() {
+          Some(freg) => freg
+          None => {
+            // 理论上不应该发生，因为我们检查了available_fregs是否为空
+            @util.logger("Error: No available freg for interval " + interval.to_string())
+            continue
+          }
+        }
+        
+        // 检查是否是函数参数，如果是且被分配到callee-saved寄存器，则强制溢出
+        let is_function_param = param_ids.contains(interval.value_id)
+        if is_function_param && is_callee_saved_freg(freg) {
+          // 将寄存器放回可用列表
+          allocator.available_fregs.push(freg)
+          // 强制溢出函数参数，避免递归调用时的覆盖问题
+          spill_at_interval(allocator, interval)
+        } else {
+          allocator.value_to_freg = allocator.value_to_freg.add(
+            interval.value_id,
+            freg,
+          )
 
-        // 将区间添加到活跃列表（按结束位置排序）
-        let new_interval = { ..interval, reg: Some(reg) }
-        insert_active_interval(allocator, new_interval)
+          let new_interval = { ..interval, freg: Some(freg) }
+          insert_active_interval(allocator, new_interval)
+        }
+      }
+      
+    } else {
+      if allocator.available_regs.length() == 0 {
+        // 没有可用寄存器，需要溢出
+        spill_at_interval(allocator, interval)
+      } else {
+        // 分配寄存器
+        let reg = match allocator.available_regs.pop() {
+          Some(reg) => reg
+          None => {
+            // 理论上不应该发生，因为我们检查了available_regs是否为空
+            @util.logger("Error: No available register for interval " + interval.to_string())
+            continue
+          }
+        }
+
+        // 检查是否是函数参数，如果是且被分配到callee-saved寄存器，则强制溢出
+        let is_function_param = param_ids.contains(interval.value_id)
+        if is_function_param && is_callee_saved(reg) {
+          // 将寄存器放回可用列表
+          allocator.available_regs.push(reg)
+          // 强制溢出函数参数，避免递归调用时的覆盖问题
+          spill_at_interval(allocator, interval)
+        } else {
+          allocator.value_to_reg = allocator.value_to_reg.add(
+            interval.value_id,
+            reg,
+          )
+
+          // 将区间添加到活跃列表（按结束位置排序）
+          let new_interval = { ..interval, reg: Some(reg) }
+          insert_active_interval(allocator, new_interval)
+        }
       }
     }
+    
+    
   }
   allocator
 }
@@ -595,6 +698,62 @@ pub fn generate_spill_store_if_needed(
   }
 }
 
+pub fn get_float_register_or_spill_load(
+  value_id : Int,
+  allocator : RegisterAllocator,
+) -> (FReg, Array[RvAsm]) {
+  match allocator.value_to_freg.get(value_id) {
+    Some(freg) =>
+      // @util.logger("Value " + value_id.to_string() + " has register " + freg.to_string())
+      // 值有寄存器分配，直接使用
+      // 即使值也被溢出，优先使用寄存器
+      (freg, [])
+    None =>
+      // 值没有寄存器分配，检查是否被溢出
+      match allocator.value_to_spill.get(value_id) {
+        Some(spill_offset) => {
+          // 值被溢出到内存，需要加载
+          // 智能选择临时寄存器，优先选择非caller-saved寄存器以避免冲突
+          let temp_freg = match value_id % 10 {
+            0 => Ft0
+            1 => Ft1
+            2 => Ft2
+            3 => Ft3
+            4 => Ft4
+            5 => Ft5
+            6 => Ft6 
+            7 => Ft7
+            8 => Ft8
+            _ => Ft9
+          }
+          let load_instr = Fld(temp_freg, {
+            base: Fp,
+            offset: -(24 + spill_offset + allocator.saved_callee_fregs.length() * 8),
+          })
+          (temp_freg, [load_instr])
+        }
+        None => {
+          @util.die(
+            "Value " + value_id.to_string() + " has no register or spill slot",
+          )
+          // 如果都没有分配，说明这是一个错误情况
+          // 在活跃区间计算正确的情况下，所有使用的值都应该有寄存器分配
+        }
+      }
+  }
+}
+
+pub fn generate_float_spill_store_if_needed(
+  value_id : Int,
+  freg : FReg,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] {
+  match allocator.value_to_spill.get(value_id) {
+    Some(spill_offset) => [Fsd(freg, { base: Fp, offset: -(24 + spill_offset + allocator.saved_callee_fregs.length() * 8) })]
+    None => [] // 不需要溢出存储
+  }
+}
+
 ///|
 /// 验证寄存器分配的一致性（用于调试）
 pub fn verify_allocation_consistency(allocator : RegisterAllocator) -> Bool {
@@ -605,6 +764,15 @@ pub fn verify_allocation_consistency(allocator : RegisterAllocator) -> Bool {
       @util.logger("Warning: Register " + reg.to_string() + " allocated to multiple values")
     }
     allocated_regs.push(reg)
+  })
+
+  // 检查是否有重复的浮点寄存器分配
+  let allocated_fregs = []
+  allocator.value_to_freg.each(fn(_value_id, freg) {
+    if allocated_fregs.contains(freg) {
+      @util.logger("Warning: Floating-point register " + freg.to_string() + " allocated to multiple values")
+    }
+    allocated_fregs.push(freg)
   })
 
   // 检查活跃区间与分配映射的一致性

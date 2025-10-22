@@ -4,8 +4,8 @@
 /// 实现线性扫描寄存器分配算法
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  // println("emit riscv for ssa program: ")
-  // println(input.to_json().stringify())
+  println("emit riscv for ssa program: ")
+  println(input.to_json().stringify())
 
   // 遍历所有SSA函数
   for func in input.program.functions {
@@ -20,9 +20,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
   let (live_intervals, param_ids) = compute_live_intervals_for_function(func)
-  // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
+  @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(live_intervals, param_ids)
-  // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
+  @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
   // 确定需要保存的被调用者保存的寄存器
@@ -37,11 +37,27 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
       _ => ()
     }
   })
+  
   allocator.saved_callee_regs = saved_callee_regs
+
+  // 确定需要保存的被调用者保存的浮点寄存器
+  let saved_callee_fregs = []
+  allocator.value_to_freg.each(fn(_, freg) {
+    // 检查是否是被调用者保存的浮点寄存器（fs0-fs11）
+    match freg {
+      Fs2 | Fs3 | Fs4 | Fs5 | Fs6 | Fs7 | Fs8 | Fs9 | Fs10 | Fs11 =>
+        if not(saved_callee_fregs.contains(freg)) {
+          saved_callee_fregs.push(freg)
+        }
+      _ => ()
+    }
+  })
+  
+  allocator.saved_callee_fregs = saved_callee_fregs
 
   // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间
   let spill_size = allocator.next_spill_slot
-  let framesize = 24 + spill_size + saved_callee_regs.length() * 8
+  let framesize = 24 + spill_size + saved_callee_regs.length() * 8 + saved_callee_fregs.length() * 8
 
   // 函数序言
   asm_instructions.push(Addi(Sp, Sp, -framesize)) // 分配栈帧
@@ -55,6 +71,11 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
     asm_instructions.push(Sd(reg, { base: Fp, offset: -offset }))
     offset += 8
   }
+  // 保存被调用者保存的浮点寄存器到栈上
+  for freg in saved_callee_fregs {
+    asm_instructions.push(Fsd(freg, { base: Fp, offset: -offset }))
+    offset += 8
+  }
   if func.closure_param.length() > 0 {
     // 函数有闭包参数（自由变量），需要从参数寄存器加载
     // 闭包参数在A0，普通参数从A1开始
@@ -62,77 +83,150 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
     // 1. 首先设置闭包参数（自由变量）
     // 闭包对象指针在A0，从其中加载各个自由变量
     for i, closure_param in func.closure_param {
-      let (param_reg, load_instrs) = get_register_or_spill_load(
-        closure_param.id,
-        allocator,
-      )
-      asm_instructions.append(load_instrs)
+      match closure_param.ty {
+        Float => {
+          let (param_reg, load_instrs) = get_float_register_or_spill_load(
+            closure_param.id,
+            allocator,
+          )
+          asm_instructions.append(load_instrs)
 
-      // 从闭包对象（A0）的偏移位置加载自由变量
-      // 自由变量从偏移8开始（偏移0是函数指针）
-      asm_instructions.push(Ld(param_reg, { base: A0, offset: (i + 1) * 8 }))
+          // 从闭包对象（A0）的偏移位置加载自由变量
+          // 自由变量从偏移8开始（偏移0是函数指针）
+          asm_instructions.push(Fld(param_reg, { base: A0, offset: (i + 1) * 8 }))
 
-      // 如果参数需要溢出，生成存储指令
-      let spill_instrs = generate_spill_store_if_needed(
-        closure_param.id,
-        param_reg,
-        allocator,
-      )
-      asm_instructions.append(spill_instrs)
+          // 如果参数需要溢出，生成存储指令
+          let spill_instrs = generate_float_spill_store_if_needed(
+            closure_param.id,
+            param_reg,
+            allocator,
+          )
+          asm_instructions.append(spill_instrs)
+        }
+        _ => {
+          let (param_reg, load_instrs) = get_register_or_spill_load(
+            closure_param.id,
+            allocator,
+          )
+          asm_instructions.append(load_instrs)
+
+          // 从闭包对象（A0）的偏移位置加载自由变量
+          // 自由变量从偏移8开始（偏移0是函数指针）
+          asm_instructions.push(Ld(param_reg, { base: A0, offset: (i + 1) * 8 }))
+
+          // 如果参数需要溢出，生成存储指令
+          let spill_instrs = generate_spill_store_if_needed(
+            closure_param.id,
+            param_reg,
+            allocator,
+          )
+          asm_instructions.append(spill_instrs)
+        }
+      }
     }
 
     // 2. 然后设置普通参数（从A1开始）
     for i, param in func.params {
-      let (param_reg, _) = get_register_or_spill_load(param.id, allocator)
-      // 普通参数从A1开始（A0被闭包参数占用）
-      let input_reg = match i {
-        0 => A1
-        1 => A2
-        2 => A3
-        3 => A4
-        4 => A5
-        5 => A6
-        6 => A7
-        _ => @util.die("TODO")
+      match param.ty {
+        Float => {
+          let (param_reg, _) = get_float_register_or_spill_load(param.id, allocator)
+          let input_freg = match i {
+            0 => Fa1
+            1 => Fa1
+            2 => Fa2
+            3 => Fa3
+            4 => Fa4
+            5 => Fa5
+            _ => @util.die("TODO")
+          }
+          if param_reg != input_freg {
+            asm_instructions.push(FmvD(param_reg, input_freg))
+          }
+          let spill_instrs = generate_float_spill_store_if_needed(
+            param.id,
+            param_reg,
+            allocator,
+          )
+          asm_instructions.append(spill_instrs)
+        }
+        _ => {
+          let (param_reg, _) = get_register_or_spill_load(param.id, allocator)
+          // 普通参数从A1开始（A0被闭包参数占用）
+          let input_reg = match i {
+            0 => A1
+            1 => A2
+            2 => A3
+            3 => A4
+            4 => A5
+            5 => A6
+            6 => A7
+            _ => @util.die("TODO")
+          }
+          if param_reg != input_reg {
+            asm_instructions.push(Mv(param_reg, input_reg))
+          }
+          // 如果参数需要溢出，立即保存到栈槽
+          let spill_instrs = generate_spill_store_if_needed(
+            param.id,
+            param_reg,
+            allocator,
+          )
+          asm_instructions.append(spill_instrs)
+        }
       }
-      if param_reg != input_reg {
-        asm_instructions.push(Mv(param_reg, input_reg))
-      }
-      // 如果参数需要溢出，立即保存到栈槽
-      let spill_instrs = generate_spill_store_if_needed(
-        param.id,
-        param_reg,
-        allocator,
-      )
-      asm_instructions.append(spill_instrs)
     }
   } else {
     // 函数没有闭包参数，普通参数从A0开始
     for i, param in func.params {
-      let (param_reg, _) = get_register_or_spill_load(param.id, allocator)
-      if i < 8 {
-        let input_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          7 => A7
-          _ => @util.die("TODO")
+      match param.ty {
+        Float => {
+          let (param_reg, _) = get_float_register_or_spill_load(param.id, allocator)
+          let input_freg = match i {
+            0 => Fa1
+            1 => Fa1
+            2 => Fa2
+            3 => Fa3
+            4 => Fa4
+            5 => Fa5
+            _ => @util.die("TODO")
+          }
+          if param_reg != input_freg {
+            asm_instructions.push(FmvD(param_reg, input_freg))
+          }
+          let spill_instrs = generate_float_spill_store_if_needed(
+            param.id,
+            param_reg,
+            allocator,
+          )
+          asm_instructions.append(spill_instrs)
         }
-        if param_reg != input_reg {
-          asm_instructions.push(Mv(param_reg, input_reg))
+        _ => {
+          let (param_reg, _) = get_register_or_spill_load(param.id, allocator)
+          if i < 8 {
+            let input_reg = match i {
+              0 => A0
+              1 => A1
+              2 => A2
+              3 => A3
+              4 => A4
+              5 => A5
+              6 => A6
+              7 => A7
+              _ => @util.die("TODO")
+            }
+            if param_reg != input_reg {
+              asm_instructions.push(Mv(param_reg, input_reg))
+            }
+          }
+          // 如果参数需要溢出，立即保存到栈槽
+          let spill_instrs = generate_spill_store_if_needed(
+            param.id,
+            param_reg,
+            allocator,
+          )
+          asm_instructions.append(spill_instrs)
         }
       }
-      // 如果参数需要溢出，立即保存到栈槽
-      let spill_instrs = generate_spill_store_if_needed(
-        param.id,
-        param_reg,
-        allocator,
-      )
-      asm_instructions.append(spill_instrs)
     }
   }
 
@@ -172,6 +266,7 @@ fn emit_instruction_with_regalloc(
   instr : @ssa.Instruction,
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
+  // @util.logger("emit_instruction_with_regalloc: {}" + instr.to_string())
   match instr.opcode {
     // 常量操作
     @ssa.Opcode::ConstInt(value) =>
@@ -227,21 +322,21 @@ fn emit_instruction_with_regalloc(
     @ssa.Opcode::FAdd(lhs, rhs) =>
       emit_binary_float_instruction(instr.result, lhs, rhs, (rd, rs1, rs2) => FaddD(
         rd, rs1, rs2,
-      ))
+      ), allocator)
     @ssa.Opcode::FSub(lhs, rhs) =>
       emit_binary_float_instruction(instr.result, lhs, rhs, (rd, rs1, rs2) => FsubD(
         rd, rs1, rs2,
-      ))
+      ), allocator)
     @ssa.Opcode::FMul(lhs, rhs) =>
       emit_binary_float_instruction(instr.result, lhs, rhs, (rd, rs1, rs2) => FmulD(
         rd, rs1, rs2,
-      ))
+      ), allocator)
     @ssa.Opcode::FDiv(lhs, rhs) =>
       emit_binary_float_instruction(instr.result, lhs, rhs, (rd, rs1, rs2) => FdivD(
         rd, rs1, rs2,
-      ))
+      ), allocator)
     @ssa.Opcode::FMod(lhs, rhs) =>
-      emit_float_mod_operation(instr.result, lhs, rhs)
+      emit_float_mod_operation(instr.result, lhs, rhs, allocator)
 
     // 比较运算
     @ssa.Opcode::Eq(lhs, rhs) =>
@@ -334,17 +429,34 @@ fn emit_instruction_with_regalloc(
 
       // 存储每个元组元素
       for i, value in values {
-        let (value_reg, value_spill_loads) = get_register_or_spill_load(
-          value.id,
-          allocator,
-        )
-        instrs.append(value_spill_loads)
+        match value.ty {
+          Float => {
+            let (value_freg, value_spill_loads) = get_float_register_or_spill_load(
+              value.id,
+              allocator,
+            )
+            instrs.append(value_spill_loads)
 
-        // 计算元素偏移量：i * 8
-        let offset = i * 8
+            // 计算元素偏移量：i * 8
+            let offset = i * 8
 
-        // 将值存储到元组的适当位置
-        instrs.push(Sd(value_reg, { base: result_reg, offset }))
+            // 将值存储到元组的适当位置
+            instrs.push(Fsd(value_freg, { base: result_reg, offset }))
+          }
+          _ => {
+            let (value_reg, value_spill_loads) = get_register_or_spill_load(
+              value.id,
+              allocator,
+            )
+            instrs.append(value_spill_loads)
+
+            // 计算元素偏移量：i * 8
+            let offset = i * 8
+
+            // 将值存储到元组的适当位置
+            instrs.push(Sd(value_reg, { base: result_reg, offset }))
+          }
+        }
       }
 
       // 如果结果需要溢出，生成存储指令
@@ -356,53 +468,63 @@ fn emit_instruction_with_regalloc(
       instrs.append(spill_instrs)
       instrs
     }
-    @ssa.Opcode::GetElement(tuple, index) =>
-      match tuple.ty {
-        Tuple(tys) =>
-          match tys[0] {
-            Float => {
+    @ssa.Opcode::GetElement(tuple, index) => {
+      match instr.result.ty {
+        Float => {
+          let (freg_ret, freg_ret_spill_loads) = get_float_register_or_spill_load(
+            instr.result.id,
+            allocator,
+          )
+          let (tuple_reg, tuple_spill_loads) = get_register_or_spill_load(
+            tuple.id,
+            allocator,
+          )
               
-              let (tuple_reg, tuple_spill_loads) = get_register_or_spill_load(
-                tuple.id,
-                allocator,
-              )
-              
-              let instrs = tuple_spill_loads
-              // 从元组地址+偏移量处加载元素值
-              instrs.push(Fld(freg_ret, { base: tuple_reg, offset: index * 8 }))
+          let instrs = freg_ret_spill_loads
+          instrs.append(tuple_spill_loads)
 
-              instrs
-            }
-            _ => {
-              let (result_reg, spill_loads) = get_register_or_spill_load(
-                instr.result.id,
-                allocator,
-              )
-              let (tuple_reg, tuple_spill_loads) = get_register_or_spill_load(
-                tuple.id,
-                allocator,
-              )
-              let instrs = spill_loads
-              instrs.append(tuple_spill_loads)
+          let offset = index * 8
+          // 从元组地址+偏移量处加载元素值
+          instrs.push(Fld(freg_ret, { base: tuple_reg, offset }))
 
-              // 计算元素偏移量：index * 8
-              let offset = index * 8
+          let spill_instrs = generate_float_spill_store_if_needed(
+            instr.result.id,
+            freg_ret,
+            allocator,
+          )
+          instrs.append(spill_instrs)
+          instrs
+        }
+        _ => {
+          let (result_reg, spill_loads) = get_register_or_spill_load(
+            instr.result.id,
+            allocator,
+          )
+          let (tuple_reg, tuple_spill_loads) = get_register_or_spill_load(
+            tuple.id,
+            allocator,
+          )
+          let instrs = spill_loads
+          instrs.append(tuple_spill_loads)
 
-              // 从元组地址+偏移量处加载元素值
-              instrs.push(Ld(result_reg, { base: tuple_reg, offset }))
+          // 计算元素偏移量：index * 8
+          let offset = index * 8
 
-              // 如果结果需要溢出，生成存储指令
-              let spill_instrs = generate_spill_store_if_needed(
-                instr.result.id,
-                result_reg,
-                allocator,
-              )
-              instrs.append(spill_instrs)
-              instrs
-            }
-          }
-        _ => @util.die("Unsupported tuple element type")
+          // 从元组地址+偏移量处加载元素值
+          instrs.push(Ld(result_reg, { base: tuple_reg, offset }))
+
+          // 如果结果需要溢出，生成存储指令
+          let spill_instrs = generate_spill_store_if_needed(
+            instr.result.id,
+            result_reg,
+            allocator,
+          )
+          instrs.append(spill_instrs)
+          instrs
+        }     
       }
+    }
+      
 
     // 内存分配
     @ssa.Opcode::Alloc(ty) => emit_memory_allocation(instr.result, ty)
@@ -445,7 +567,8 @@ fn emit_float_constant_instruction(
   let instrs = []
 
   // 获取目标浮点寄存器
-  let float_reg = get_float_register_for_value(result_val)
+  let (float_reg, float_spill_loads) = get_float_register_or_spill_load(result_val.id, allocator)
+  instrs.append(float_spill_loads)
   let bits = value.reinterpret_as_int64()
 
   // 寻找一个安全的临时寄存器
@@ -524,12 +647,22 @@ fn emit_binary_float_instruction(
   lhs : @ssa.Value,
   rhs : @ssa.Value,
   emitter : (FReg, FReg, FReg) -> RvAsm,
+  allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
   let instrs = []
-  let rd = get_float_register_for_value(result_val)
-  let rs1 = get_float_register_for_value(lhs)
-  let rs2 = get_float_register_for_value(rhs)
+  let (rd, float_spill_loads) = get_float_register_or_spill_load(result_val.id, allocator)
+  let (rs1, load_rs1) = get_float_register_or_spill_load(lhs.id, allocator)
+  let (rs2, load_rs2) = get_float_register_or_spill_load(rhs.id, allocator)
+  instrs.append(float_spill_loads)
+  instrs.append(load_rs1)
+  instrs.append(load_rs2) 
   instrs.push(emitter(rd, rs1, rs2))
+  let spill_instrs = generate_float_spill_store_if_needed(
+    result_val.id,
+    rd,
+    allocator,
+  )
+  instrs.append(spill_instrs)
   instrs
 }
 
@@ -792,8 +925,16 @@ fn emit_array_access_instruction(
       instrs.append(spill_instrs)
     }
     @ssa.Type::Float => {
-      let result_reg = get_float_register_for_value(result_val)
-      let float_temp_reg = get_float_register_for_value(result_val)
+      let (result_reg, load_result_instrs) = get_float_register_or_spill_load(
+        result_val.id,
+        allocator,
+      )
+      instrs.append(load_result_instrs)
+      let (float_temp_reg, load_float_instrs) = get_float_register_or_spill_load(
+        result_val.id,
+        allocator,
+      )
+      instrs.append(load_float_instrs)
       instrs.push(Fld(float_temp_reg, { base: T0, offset: 0 }))
       if result_reg != float_temp_reg {
         instrs.push(FmvD(result_reg, float_temp_reg))
@@ -876,7 +1017,11 @@ fn emit_array_store_instruction(
   // 根据元素类型存储值
   match value_val.ty {
     @ssa.Type::Float => {
-      let float_temp_reg = get_float_register_for_value(value_val)
+      let (float_temp_reg, load_float_instrs) = get_float_register_or_spill_load(
+        value_val.id,
+        allocator,
+      )
+      instrs.append(load_float_instrs)
       instrs.push(Fsd(float_temp_reg, { base: T0, offset: 0 }))
     }
     _ => {
@@ -903,11 +1048,24 @@ fn emit_float_mod_operation(
   result_val : @ssa.Value,
   lhs : @ssa.Value,
   rhs : @ssa.Value,
+  allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
   let instrs = []
-  let rd = get_float_register_for_value(result_val)
-  let rs1 = get_float_register_for_value(lhs)
-  let rs2 = get_float_register_for_value(rhs)
+  let (rd, load_result_instrs) = get_float_register_or_spill_load(
+    result_val.id,
+    allocator,
+  )
+  let (rs1, load_lhs_instrs) = get_float_register_or_spill_load(
+    lhs.id,
+    allocator,
+  )
+  let (rs2, load_rhs_instrs) = get_float_register_or_spill_load(
+    rhs.id,
+    allocator,
+  )
+  instrs.append(load_result_instrs)
+  instrs.append(load_lhs_instrs)
+  instrs.append(load_rhs_instrs)
 
   // 将参数移动到浮点参数寄存器
   if rs1 != Fa0 {
@@ -936,12 +1094,16 @@ fn emit_memory_allocation(
   let instrs = []
   let (result_reg, load_instrs) = get_register_or_spill_load(result_val.id, {
     available_regs: [],
+    available_fregs: [],
     active_intervals: [],
     value_to_reg: @immut/hashmap.new(),
+    value_to_freg: @immut/hashmap.new(),
     value_to_spill: @immut/hashmap.new(),
     next_spill_slot: 0,
     // 需要保存的寄存器列表
     saved_callee_regs: [],
+    // 需要保存的浮点寄存器列表
+    saved_callee_fregs: [],
   })
   instrs.append(load_instrs)
 
@@ -1089,22 +1251,6 @@ fn emit_closure_call(
 }
 
 ///|
-/// 获取值对应的浮点寄存器
-fn get_float_register_for_value(value : @ssa.Value) -> FReg {
-  // 简单的浮点寄存器分配策略
-  match value.id % 8 {
-    0 => Ft0
-    1 => Ft1
-    2 => Ft2
-    3 => Ft3
-    4 => Ft4
-    5 => Ft5
-    6 => Ft6
-    _ => Ft7
-  }
-}
-
-///|
 /// 使用寄存器分配器为基本块参数分配寄存器
 fn allocate_block_params_with_regalloc(
   block : @ssa.BasicBlock,
@@ -1154,9 +1300,13 @@ fn emit_terminator_with_regalloc(
           // Check if the return value is a float
           match val.ty {
             @ssa.Type::Float => {
-              let float_reg = get_float_register_for_value(val)
-              if float_reg != Fa0 {
-                result.push(FmvD(Fa0, float_reg))
+              let (src_reg, load_instrs) = get_float_register_or_spill_load(
+                val.id,
+                allocator,
+              )
+              result.append(load_instrs)
+              if src_reg != Fa0 {
+                result.push(FmvD(Fa0, src_reg))
               }
             }
             _ => {
@@ -1184,16 +1334,36 @@ fn emit_terminator_with_regalloc(
           _ => ()
         }
       })
+      // 确定需要保存的被调用者保存的浮点寄存器
+      let saved_callee_fregs = []
+      allocator.value_to_freg.each(fn(_, freg) {
+        // 检查是否是被调用者保存的浮点寄存器（fs0-fs11）
+        match freg {
+          Fs2 | Fs3 | Fs4 | Fs5 | Fs6 | Fs7 | Fs8 | Fs9 | Fs10 | Fs11 =>
+            if not(saved_callee_fregs.contains(freg)) {
+              saved_callee_fregs.push(freg)
+            }
+          _ => ()
+        }
+      })
+
+
 
       // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间
       let framesize = 24 +
         allocator.next_spill_slot +
-        saved_callee_regs.length() * 8
+        saved_callee_regs.length() * 8 +
+        saved_callee_fregs.length() * 8
 
       // 恢复被调用者保存的寄存器从栈上
       let mut offset = 24
       for reg in saved_callee_regs {
         result.push(Ld(reg, { base: Fp, offset: -offset }))
+        offset += 8
+      }
+      // 恢复被调用者保存的浮点寄存器从栈上
+      for freg in saved_callee_fregs {
+        result.push(Fld(freg, { base: Fp, offset: -offset }))
         offset += 8
       }
       result.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
