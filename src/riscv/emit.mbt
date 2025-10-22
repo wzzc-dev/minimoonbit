@@ -552,8 +552,16 @@ fn emit_tuple_get(
   env : Env,
 ) -> Unit {
   instrs.push(Ld(T0, { base: Fp, offset: Env::varOffset(env, tuple) }))
+  // println("emit_tuple_get: " + tuple.to_string() + " ty: " + ty.to_string() + " index: " + index.to_string())
   match ty {
     Double => instrs.push(Fld(freg_ret, { base: T0, offset: index * 8 }))
+    Tuple(tys) => {
+      // println("emit_tuple_get: tys: " + tys.to_string())
+      match tys[0] {
+        Double => instrs.push(Fld(freg_ret, { base: T0, offset: index * 8 }))
+        _ => instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
+      }
+    }
     _ => instrs.push(Ld(reg_ret, { base: T0, offset: index * 8 }))
   }
 }

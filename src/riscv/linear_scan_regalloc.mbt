@@ -21,6 +21,8 @@ struct RegisterAllocator {
   active_intervals : Array[LiveInterval]
   // 值ID到寄存器的映射
   mut value_to_reg : @immut/hashmap.HashMap[Int, Reg]
+  // 值ID到浮点数寄存器的映射
+  // mut value_to_float_reg : @immut/hashmap.HashMap[Int, FReg]
   // 值ID到栈槽的映射
   mut value_to_spill : @immut/hashmap.HashMap[Int, Int]
   // 下一个可用的栈槽

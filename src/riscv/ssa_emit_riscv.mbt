@@ -4,8 +4,8 @@
 /// 实现线性扫描寄存器分配算法
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  println("emit riscv for ssa program: ")
-  println(input.to_json().stringify())
+  // println("emit riscv for ssa program: ")
+  // println(input.to_json().stringify())
 
   // 遍历所有SSA函数
   for func in input.program.functions {
@@ -20,9 +20,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
   let (live_intervals, param_ids) = compute_live_intervals_for_function(func)
-  @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
+  // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(live_intervals, param_ids)
-  @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
+  // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
   // 确定需要保存的被调用者保存的寄存器
@@ -60,21 +60,26 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
     // 闭包参数在A0，普通参数从A1开始
 
     // 1. 首先设置闭包参数（自由变量）
-    let (param_reg, _) = get_register_or_spill_load(
-      func.closure_param[0].id,
-      allocator,
-    )
-    // 闭包参数从A0开始（闭包对象指针） ，不需要移动
-    if param_reg != A0 {
-      asm_instructions.push(Mv(param_reg, A0))
+    // 闭包对象指针在A0，从其中加载各个自由变量
+    for i, closure_param in func.closure_param {
+      let (param_reg, load_instrs) = get_register_or_spill_load(
+        closure_param.id,
+        allocator,
+      )
+      asm_instructions.append(load_instrs)
+
+      // 从闭包对象（A0）的偏移位置加载自由变量
+      // 自由变量从偏移8开始（偏移0是函数指针）
+      asm_instructions.push(Ld(param_reg, { base: A0, offset: (i + 1) * 8 }))
+
+      // 如果参数需要溢出，生成存储指令
+      let spill_instrs = generate_spill_store_if_needed(
+        closure_param.id,
+        param_reg,
+        allocator,
+      )
+      asm_instructions.append(spill_instrs)
     }
-    // 如果参数需要溢出，立即保存到栈槽
-    let spill_instrs = generate_spill_store_if_needed(
-      func.closure_param[0].id,
-      param_reg,
-      allocator,
-    )
-    asm_instructions.append(spill_instrs)
 
     // 2. 然后设置普通参数（从A1开始）
     for i, param in func.params {
@@ -175,8 +180,6 @@ fn emit_instruction_with_regalloc(
       emit_float_constant_instruction(instr.result, value, allocator)
     @ssa.Opcode::ConstBool(value) =>
       emit_bool_constant_instruction(instr.result, value, allocator)
-
-
 
     // 整数算术运算
     @ssa.Opcode::Add(lhs, rhs) =>
@@ -309,31 +312,97 @@ fn emit_instruction_with_regalloc(
     @ssa.Opcode::ArrayPut(array, index, value) =>
       emit_array_store_instruction(array, index, value, allocator)
 
-    // 元组操作（暂时保留原有实现）
-    @ssa.Opcode::Tuple(_values) => {
+    // 元组操作（实现完整逻辑）
+    @ssa.Opcode::Tuple(values) => {
       let (result_reg, spill_loads) = get_register_or_spill_load(
         instr.result.id,
         allocator,
       )
-      spill_loads +
-      [Comment("TODO: implement tuple creation"), Li(result_reg, "0")]
-    }
-    @ssa.Opcode::GetElement(tuple, _index) => {
-      let (result_reg, spill_loads) = get_register_or_spill_load(
+      let instrs = spill_loads
+
+      // 计算元组大小：每个元素8字节，共values.length()个元素
+      let tuple_size = values.length() * 8
+
+      // 分配内存
+      instrs.push(Li(A0, tuple_size.to_string()))
+      instrs.push(Call(Label("minimbt_malloc")))
+
+      // 将分配的地址保存到结果寄存器
+      if result_reg != A0 {
+        instrs.push(Mv(result_reg, A0))
+      }
+
+      // 存储每个元组元素
+      for i, value in values {
+        let (value_reg, value_spill_loads) = get_register_or_spill_load(
+          value.id,
+          allocator,
+        )
+        instrs.append(value_spill_loads)
+
+        // 计算元素偏移量：i * 8
+        let offset = i * 8
+
+        // 将值存储到元组的适当位置
+        instrs.push(Sd(value_reg, { base: result_reg, offset }))
+      }
+
+      // 如果结果需要溢出，生成存储指令
+      let spill_instrs = generate_spill_store_if_needed(
         instr.result.id,
+        result_reg,
         allocator,
       )
-      let (tuple_reg, tuple_spill_loads) = get_register_or_spill_load(
-        tuple.id,
-        allocator,
-      )
-      spill_loads +
-      tuple_spill_loads +
-      [
-        Comment("TODO: implement tuple element access"),
-        Mv(result_reg, tuple_reg),
-      ]
+      instrs.append(spill_instrs)
+      instrs
     }
+    @ssa.Opcode::GetElement(tuple, index) =>
+      match tuple.ty {
+        Tuple(tys) =>
+          match tys[0] {
+            Float => {
+              
+              let (tuple_reg, tuple_spill_loads) = get_register_or_spill_load(
+                tuple.id,
+                allocator,
+              )
+              
+              let instrs = tuple_spill_loads
+              // 从元组地址+偏移量处加载元素值
+              instrs.push(Fld(freg_ret, { base: tuple_reg, offset: index * 8 }))
+
+              instrs
+            }
+            _ => {
+              let (result_reg, spill_loads) = get_register_or_spill_load(
+                instr.result.id,
+                allocator,
+              )
+              let (tuple_reg, tuple_spill_loads) = get_register_or_spill_load(
+                tuple.id,
+                allocator,
+              )
+              let instrs = spill_loads
+              instrs.append(tuple_spill_loads)
+
+              // 计算元素偏移量：index * 8
+              let offset = index * 8
+
+              // 从元组地址+偏移量处加载元素值
+              instrs.push(Ld(result_reg, { base: tuple_reg, offset }))
+
+              // 如果结果需要溢出，生成存储指令
+              let spill_instrs = generate_spill_store_if_needed(
+                instr.result.id,
+                result_reg,
+                allocator,
+              )
+              instrs.append(spill_instrs)
+              instrs
+            }
+          }
+        _ => @util.die("Unsupported tuple element type")
+      }
 
     // 内存分配
     @ssa.Opcode::Alloc(ty) => emit_memory_allocation(instr.result, ty)
@@ -422,8 +491,6 @@ fn emit_bool_constant_instruction(
   instrs
 }
 
-
-
 ///|
 /// 生成整数二元运算指令
 fn emit_binary_integer_instruction(
@@ -499,20 +566,23 @@ fn emit_comparison_instruction(
     ComparisonType::Equal =>
       [
         Sub(rd, rs1, rs2), // rd = rs1 - rs2
-        Sltiu(rd, rd, 1),  // rd = (rd < 1) ? 1 : 0
-      ] // rd = (rd == 0) ? 1 : 0
+        Sltiu(rd, rd, 1),
+      ] // rd = (rd < 1) ? 1 : 0
+    // rd = (rd == 0) ? 1 : 0
     ComparisonType::NotEqual =>
       [
         Sub(rd, rs1, rs2), // rd = rs1 - rs2
-        Sltiu(rd, rd, 1),  // Use signed comparison instead of unsigned
-        Xori(rd, rd, 1),   // rd = !rd (if rd != 0, then rd = 1)
-      ] // rd = (rd != 0) ? 1 : 0
+        Sltiu(rd, rd, 1), // Use signed comparison instead of unsigned
+        Xori(rd, rd, 1),
+      ] // rd = !rd (if rd != 0, then rd = 1)
+    // rd = (rd != 0) ? 1 : 0
     ComparisonType::LessThan => [Slt(rd, rs1, rs2)]
     ComparisonType::LessEqual =>
       [
         Slt(rd, rs2, rs1), // rd = rhs < lhs (检查rhs是否严格小于lhs)
-        Xori(rd, rd, 1),   // rd = !rd (如果rhs不严格小于lhs，则lhs <= rhs)
-      ] // rd = !(rhs < lhs) = (lhs <= rhs)
+        Xori(rd, rd, 1),
+      ] // rd = !rd (如果rhs不严格小于lhs，则lhs <= rhs)
+    // rd = !(rhs < lhs) = (lhs <= rhs)
     ComparisonType::GreaterThan => [Slt(rd, rs2, rs1)] // rd = rhs < lhs
     ComparisonType::GreaterEqual =>
       [
@@ -568,9 +638,7 @@ fn emit_function_call_instruction(
       // 超过8个参数需要通过栈传递
       let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
       instrs.append(load_instrs)
-      instrs.push(
-        Sd(arg_reg, { base: Sp, offset: (i - 8) * 8 }),
-      )
+      instrs.push(Sd(arg_reg, { base: Sp, offset: (i - 8) * 8 }))
     }
   }
   match func {
@@ -963,26 +1031,18 @@ fn emit_closure_call(
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
   let instrs = []
-  
   match closure {
     @ssa.Func::Call(callee) => {
-      // 1. 将闭包对象指针加载到一个临时寄存器（T0）
       let (closure_reg, load_closure_instrs) = get_register_or_spill_load(
         callee.id,
         allocator,
       )
       instrs.append(load_closure_instrs)
       instrs.push(Comment("CallClosure: setting up function call"))
-      instrs.push(Mv(S11, closure_reg))
+      instrs.push(Mv(A0, closure_reg))
     }
-    @ssa.Func::Label(_) => {
-      ()
-    } 
+    @ssa.Func::Label(_) => ()
   }
-
-  // 2. 从闭包对象中加载自由变量到A0
-  // 自由变量存储在闭包对象的偏移8处
-  instrs.push(Ld(A0, { base: S11, offset: 8 }))
 
   // 3. 将显式参数放入参数寄存器（从A1开始）
   for i, arg in args {
@@ -1005,7 +1065,7 @@ fn emit_closure_call(
 
   // 4. 调用函数
   instrs.push(Comment("Extract function pointer and call"))
-  instrs.push(Ld(T1, { base: S11, offset: 0 })) // 函数指针在偏移0处
+  instrs.push(Ld(T1, { base: A0, offset: 0 })) // 函数指针在偏移0处，从当前闭包对象A0获取
   instrs.push(Jalr(T1))
 
   // 5. 将返回值移动到结果寄存器
@@ -1167,7 +1227,13 @@ fn emit_terminator_with_regalloc(
       }
       result.push(J("block_" + target.id.to_string()))
     }
-    @ssa.Terminator::Branch(cond, true_block, true_args, false_block, false_args) => {
+    @ssa.Terminator::Branch(
+      cond,
+      true_block,
+      true_args,
+      false_block,
+      false_args
+    ) => {
       let (cond_reg, load_instrs) = get_register_or_spill_load(
         cond.id,
         allocator,
@@ -1239,7 +1305,6 @@ fn emit_terminator_with_regalloc(
           result.push(Mv(dest_reg, temp_reg))
         }
       }
-
       result.push(J("block_" + false_block.id.to_string()))
     }
   }

@@ -5,7 +5,7 @@
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
 
-  @util.logger("closure ir: " + input.to_json().stringify())
+  // @util.logger("closure ir: " + input.to_json().stringify())
   // 初始化SSA程序
   let functions = []
 
@@ -564,13 +564,17 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
     TupleGet(tuple_name, tuple_type, index) => {
       // 元组访问：tuple_name.index
       let tuple_value = context.var_env.get(tuple_name.to_string()).unwrap()
-
-      // 从元组类型中推断元素类型
-      let element_type = match convert_type(tuple_type) {
-        Type::Tuple(types) => types[index]
-        _ => @util.die("Expected tuple type in TupleGet")
+      let element_type = if index == 0 {
+        convert_type(tuple_type)
+      } else {
+        match convert_type(tuple_type) {
+          Type::Tuple(types) => types[index-1]
+          _ =>
+            @util.die(
+              "Expected tuple type in TupleGet: " + tuple_type.to_string(),
+            )
+        }
       }
-
       let (result_value, new_context) = create_get_element(context, tuple_value, index, element_type)
       ExprResult::{ value: Some(result_value), context: new_context }
     }
@@ -1284,8 +1288,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 闭包调用
       // 特殊处理：如果n是已定义的函数，直接创建函数引用
       let func_name = n.to_string()
-      println("var_env: " + context.var_env.to_string())
-      println("func_env: " + context.func_env.to_string())
+      // println("var_env: " + context.var_env.to_string())
+      // println("func_env: " + context.func_env.to_string())
 
       // 转换所有参数，正确链式传递上下文
       let mut current_context = context

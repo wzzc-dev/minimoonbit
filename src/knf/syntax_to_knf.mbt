@@ -553,7 +553,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     }
     Match(expr, arms) => {
       let tag = KnfEnv::new_name(self, "match_tag")
-      let (name, _expr_ty, _knf) = KnfEnv::get_knf(self, expr)
+      let (name, expr_ty, _knf) = KnfEnv::get_knf(self, expr)
       fn gen_match(arm : (@types.Pattern, @types.Syntax)) raise KnfErr {
         let (pat, body) = arm
         // @util.logger("Match arm: " + pat.to_string())
@@ -606,7 +606,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
               let result = body.2
               patterns_ty.foldi(init=result, (i, acc, pat_ty) => Let(
                 (names[names.length() - i - 1], pat_ty),
-                FieldAccess(name, pat_ty, names.length() - i),
+                FieldAccess(name, Tuple(patterns_ty), names.length() - i),
                 acc,
               ))
             }
@@ -655,9 +655,9 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       })
       // @util.logger("Match : " + Let((name, _expr_ty), _knf, Let((tag, Int), FieldAccess(name, _expr_ty, 0), arms_knf)).to_string())
       Let(
-        (name, _expr_ty),
+        (name, expr_ty),
         _knf,
-        Let((tag, Int), FieldAccess(name, _expr_ty, 0), arms_knf),
+        Let((tag, Int), FieldAccess(name, expr_ty, 0), arms_knf),
       )
     }
     ExternalArray(label) => ExternalArray(label)
