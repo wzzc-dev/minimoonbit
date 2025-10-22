@@ -445,12 +445,19 @@ fn infer_expression_type(expr : @closure.Expr, context : Context) -> Type {
       Type::Tuple(element_types)
     }
     CallDirect(label, _) => {
+      // println("CallDirect: " + label.0)
+      // println("context.func_env: " + context.func_env.to_string())
       match context.func_env.get(label.0) {
         Some(Type::Function(_, ret_type)) => ret_type
+        Some(Type::Float) => Type::Float
         Some(_) => Type::Int
         None => {
           // 从外部环境查找
-          match @typing.extenv.get(label.0) {
+          let name = match label.0.strip_prefix("minimbt_") {
+            Some(name) => name.to_string()
+            None => label.0.to_string()
+          }
+          match @typing.extenv.get(name) {
             Some(@types.Type::Fun(_, ret_type)) => convert_type_from_types(ret_type)
             Some(_) => Type::Int
             None => Type::Int
@@ -461,6 +468,7 @@ fn infer_expression_type(expr : @closure.Expr, context : Context) -> Type {
     CallClosure(name, _) => {
       match context.func_env.get(name.to_string()) {
         Some(Type::Function(_, ret_type)) => ret_type
+        Some(Type::Float) => Type::Float
         Some(_) => Type::Int
         None => {
           // 从外部环境查找

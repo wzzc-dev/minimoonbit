@@ -313,10 +313,10 @@ pub fn linear_scan_register_allocation(
   intervals : Array[LiveInterval],
   param_ids : Array[Int],
 ) -> RegisterAllocator {
-  println("linear scan register allocation for intervals: ")
-  println(intervals)
-  println("linear scan register allocation for param_ids: ")
-  println(param_ids)
+  // println("linear scan register allocation for intervals: ")
+  // println(intervals)
+  // println("linear scan register allocation for param_ids: ")
+  // println(param_ids)
   // 初始化寄存器分配器
   // 优先使用调用者保存寄存器（t0-t5），因为它们不需要在函数调用间保存
   // 注意：T6在RV64中通常是线程指针，不用于通用分配
@@ -404,9 +404,8 @@ pub fn linear_scan_register_allocation(
   // 为每个区间分配寄存器
   for interval in sorted_intervals {
     // 移除已结束的活跃区间
-    expire_old_intervals(allocator, interval.start)
     if interval.ty == Float {
-      
+      expire_old_intervals_float(allocator, interval.start)
       if allocator.available_fregs.length() == 0 {
         // 没有可用浮点寄存器，需要溢出
         spill_at_interval(allocator, interval)
@@ -440,6 +439,7 @@ pub fn linear_scan_register_allocation(
       }
       
     } else {
+      expire_old_intervals(allocator, interval.start)
       if allocator.available_regs.length() == 0 {
         // 没有可用寄存器，需要溢出
         spill_at_interval(allocator, interval)
@@ -495,6 +495,34 @@ fn expire_old_intervals(
           // 将寄存器放回可用池
           allocator.available_regs.push(reg)
           // 注意：不要从value_to_reg映射中移除该值！
+          // 寄存器分配应该在整个函数期间保持有效
+          // 活跃区间只用于跟踪当前使用中的寄存器，不用于最终的分配映射
+        }
+        None => ()
+      }
+      // 从活跃列表中移除
+      let _ = allocator.active_intervals.remove(i)
+
+    } else {
+      i += 1
+    }
+  }
+}
+
+fn expire_old_intervals_float(
+  allocator : RegisterAllocator,
+  current_pos : Int,
+) -> Unit {
+  let mut i = 0
+  while i < allocator.active_intervals.length() {
+    let interval = allocator.active_intervals[i]
+    if interval.end <= current_pos {
+      // 区间已结束，释放寄存器
+      match interval.freg {
+        Some(freg) => {
+          // 将寄存器放回可用池
+          allocator.available_fregs.push(freg)
+          // 注意：不要从value_to_freg映射中移除该值！
           // 寄存器分配应该在整个函数期间保持有效
           // 活跃区间只用于跟踪当前使用中的寄存器，不用于最终的分配映射
         }

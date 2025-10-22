@@ -4,8 +4,8 @@
 /// 实现线性扫描寄存器分配算法
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  println("emit riscv for ssa program: ")
-  println(input.to_json().stringify())
+  // println("emit riscv for ssa program: ")
+  // println(input.to_json().stringify())
 
   // 遍历所有SSA函数
   for func in input.program.functions {
@@ -20,9 +20,9 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
   let (live_intervals, param_ids) = compute_live_intervals_for_function(func)
-  @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
+  // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(live_intervals, param_ids)
-  @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
+  // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
   // 确定需要保存的被调用者保存的寄存器
@@ -751,27 +751,57 @@ fn emit_function_call_instruction(
   }
   for i, arg in args {
     if i < 8 {
-      let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
-      instrs.append(load_instrs)
-      let param_reg = match i {
-        0 => A0 // 第一个显式参数放到A0
-        1 => A1 // 第二个显式参数放到A1
-        2 => A2
-        3 => A3
-        4 => A4
-        5 => A5
-        6 => A6
-        7 => A7
-        _ => @util.die("TODO")
-      }
-      if arg_reg != param_reg {
-        instrs.push(Mv(param_reg, arg_reg))
+      match arg.ty {
+        Float => {
+          let (arg_freg, load_instrs) = get_float_register_or_spill_load(arg.id, allocator)
+          instrs.append(load_instrs)
+          let param_freg = match i {
+            0 => Fa0
+            1 => Fa1
+            2 => Fa2
+            3 => Fa3
+            4 => Fa4
+            5 => Fa5
+            6 => Fa6
+            7 => Fa7
+            _ => @util.die("TODO")
+          }
+          if arg_freg != param_freg {
+            instrs.push(FmvD(param_freg, arg_freg))
+          }
+        }
+        _ => {
+          let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
+          instrs.append(load_instrs)
+          let param_reg = match i {
+            0 => A0 // 第一个显式参数放到A0
+            1 => A1 // 第二个显式参数放到A1
+            2 => A2
+            3 => A3
+            4 => A4
+            5 => A5
+            6 => A6
+            7 => A7
+            _ => @util.die("TODO")
+          }
+          if arg_reg != param_reg {
+            instrs.push(Mv(param_reg, arg_reg))
+          }
+        }
       }
     } else {
-      // 超过8个参数需要通过栈传递
-      let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
-      instrs.append(load_instrs)
-      instrs.push(Sd(arg_reg, { base: Sp, offset: (i - 8) * 8 }))
+      match arg.ty {
+        Float => {
+          let (arg_freg, load_instrs) = get_float_register_or_spill_load(arg.id, allocator)
+          instrs.append(load_instrs)
+          instrs.push(Fsd(arg_freg, { base: Sp, offset: (i - 8) * 8 }))
+        }
+        _ => {
+          let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
+          instrs.append(load_instrs)
+          instrs.push(Sd(arg_reg, { base: Sp, offset: (i - 8) * 8 }))
+        }
+      }
     }
   }
   match func {
@@ -782,23 +812,46 @@ fn emit_function_call_instruction(
     }
   }
   // 5. 将返回值移动到结果寄存器
-  let (result_reg, load_result_instrs) = get_register_or_spill_load(
-    result_val.id,
-    allocator,
-  )
-  instrs.append(load_result_instrs)
-  if result_reg != A0 {
-    instrs.push(Mv(result_reg, A0))
-  }
+  match result_val.ty {
+    Float => {
+      let (result_freg, load_result_instrs) = get_float_register_or_spill_load(
+        result_val.id,
+        allocator,
+      )
+      instrs.append(load_result_instrs)
+      if result_freg != Fa0 {
+        instrs.push(FmvD(result_freg, Fa0))
+      }
 
-  // 如果结果需要溢出，生成存储指令
-  let spill_instrs = generate_spill_store_if_needed(
-    result_val.id,
-    result_reg,
-    allocator,
-  )
-  instrs.append(spill_instrs)
-  instrs
+      // 如果结果需要溢出，生成存储指令
+      let spill_instrs = generate_float_spill_store_if_needed(
+        result_val.id,
+        result_freg,
+        allocator,
+      )
+      instrs.append(spill_instrs)
+      instrs
+    }
+    _ => {
+      let (result_reg, load_result_instrs) = get_register_or_spill_load(
+        result_val.id,
+        allocator,
+      )
+      instrs.append(load_result_instrs)
+      if result_reg != A0 {
+        instrs.push(Mv(result_reg, A0))
+      }
+
+      // 如果结果需要溢出，生成存储指令
+      let spill_instrs = generate_spill_store_if_needed(
+        result_val.id,
+        result_reg,
+        allocator,
+      )
+      instrs.append(spill_instrs)
+      instrs
+    }
+  }
 }
 
 ///|
