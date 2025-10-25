@@ -38,23 +38,6 @@ struct RegisterAllocator {
 } derive(Show)
 
 ///|
-///| 检查寄存器是否是被调用者保存寄存器（callee-saved）
-fn is_callee_saved(reg : Reg) -> Bool {
-  match reg {
-    S2 | S3 | S4 | S5 | S6 | S7 | S8 | S9 | S10 | S11 => true
-    _ => false
-  }
-}
-
-///| 检查浮点寄存器是否是被调用者保存寄存器（callee-saved）
-fn is_callee_saved_freg(freg : FReg) -> Bool {
-  match freg {
-    Fs0 | Fs1 | Fs2 | Fs3 | Fs4 | Fs5 | Fs6 | Fs7 | Fs8 | Fs9 | Fs10 | Fs11 => true
-    _ => false
-  }
-}
-
-///|
 
 ///| 计算SSA函数的活跃区间
 
@@ -87,7 +70,7 @@ pub fn compute_live_intervals_for_function(
   // 遍历所有基本块和指令，计算每个值的定义和使用位置
   for block in func.blocks {
     // 基本块参数在块开始时定义
-    // 不需要额外增加instruction_count，因为基本块参数应该与跳转指令在同一位置
+    // 基本块参数的开始位置是当前指令位置，结束位置稍后根据使用情况更新
     for param in block.params {
       let value_id = param.id
       intervals = intervals.add(value_id, {
@@ -100,7 +83,7 @@ pub fn compute_live_intervals_for_function(
         spill_slot: None,
       })
     }
-    instruction_count = instruction_count + 1
+    // 不在这里递增instruction_count，因为基本块参数的定义位置与第一条指令相同
 
     // 处理块内指令
     for instr in block.instructions {
@@ -278,7 +261,27 @@ fn get_instruction_uses_ids(instr : @ssa.Instruction) -> Array[Int] {
         uses.push(arg.id)
       }
     }
-    _ => () // 常量等不使用其他值
+    Alloc(_) => ()
+    FMod(lhs, rhs) => {
+      uses.push(lhs.id)
+      uses.push(rhs.id)
+    }
+    CallRef(_, arr) =>
+      for arg in arr {
+        uses.push(arg.id)
+      }
+    ArrayGet(arr, index) => {
+      uses.push(arr.id)
+      uses.push(index.id)
+    }
+    ArrayPut(arr, index, value) => {
+      uses.push(arr.id)
+      uses.push(index.id)
+      uses.push(value.id)
+    }
+    ConstFloat(_) |
+    ConstInt(_) |
+    ConstBool(_) => ()
   }
   uses
 }
@@ -318,74 +321,21 @@ pub fn linear_scan_register_allocation(
   // println("linear scan register allocation for param_ids: ")
   // println(param_ids)
   // 初始化寄存器分配器
-  // 优先使用调用者保存寄存器（t0-t5），因为它们不需要在函数调用间保存
-  // 注意：T6在RV64中通常是线程指针，不用于通用分配
+  // 对于函数参数，优先使用callee-saved寄存器，避免被覆盖
+  // 对于其他值，优先使用caller-saved寄存器
   let allocator = {
     available_regs: [
-      // 参数寄存器（调用者保存）
-      A0,
-      A1,
-      A2,
-      A3,
-      A4,
-      A5,
-      A6,
-      A7,
-
-      // 临时寄存器（调用者保存）
-      T0,
-      T1,
-      T2,
-      T3,
-      T4,
-      T5,
-      T6,
-      // 将调用者保存寄存器（caller-saved）放在前面
-      // 只有在没有可用寄存器时才使用被调用者保存寄存器（callee-saved）
-      S2,
-      S3,
-      S4,
-      S5,
-      S6,
-      S7,
-      S8,
-      S9,
-      S10,
-    ],
+      // 优先提供callee-saved寄存器用于函数参数
+      .. reg_callee_saved_list[2:-1],
+      // 然后是调用者保存寄存器
+      .. reg_arg_list,
+      .. reg_temp_list[2:]
+    ].rev(),
     available_fregs: [
-      Ft0,
-      Ft1,
-      Ft2,
-      Ft3,
-      Ft4,
-      Ft5,
-      Ft6,
-      Ft7,
-      Fs0,
-      Fs1,
-      Fa0,
-      Fa1,
-      Fa2,
-      Fa3,
-      Fa4,
-      Fa5,
-      Fa6,
-      Fa7,
-      Fs2,
-      Fs3,
-      Fs4,
-      Fs5,
-      Fs6,
-      Fs7,
-      Fs8,
-      Fs9,
-      Fs10,
-      Fs11,
-      Ft8,
-      Ft9,
-      Ft10,
-      Ft11,
-    ],
+      .. freg_callee_saved_list[2:-1],
+      .. freg_arg_list,
+      .. freg_temp_list[2:]
+    ].rev(),
     active_intervals: [],
     value_to_reg: @immut/hashmap.new(),
     value_to_freg: @immut/hashmap.new(),
@@ -406,62 +356,143 @@ pub fn linear_scan_register_allocation(
     // 移除已结束的活跃区间
     if interval.ty == Float {
       expire_old_intervals_float(allocator, interval.start)
-      if allocator.available_fregs.length() == 0 {
-        // 没有可用浮点寄存器，需要溢出
-        spill_at_interval(allocator, interval)
-      } else {
-        // 分配浮点寄存器
-        let freg = match allocator.available_fregs.pop() {
-          Some(freg) => freg
-          None => {
-            // 理论上不应该发生，因为我们检查了available_fregs是否为空
-            @util.logger("Error: No available freg for interval " + interval.to_string())
-            continue
+      
+      let is_function_param = param_ids.contains(interval.value_id)
+      
+      if is_function_param {
+        // 为函数参数强制分配callee-saved寄存器，避免被调用者保存寄存器覆盖
+        if allocator.available_fregs.length() > 0 {
+          // 优先使用可用的寄存器
+          let freg = match allocator.available_fregs.pop() {
+            Some(freg) => freg
+            None => {
+              // 如果没有可用寄存器，尝试从参数寄存器中选择一个
+              match param_ids.search(interval.value_id) {
+                None => @util.die("Error: Function parameter not found in param_ids: " + interval.value_id.to_string())
+                Some(index) => {
+                  // 如果是前8个参数，使用对应的参数寄存器
+                  if index < freg_arg_list.length() {
+                    freg_arg_list[index]
+                  } else {
+                    @util.die("Too many parameters")
+                  }
+                }
+              }
+            }
           }
-        }
-        
-        // 检查是否是函数参数，如果是且被分配到callee-saved寄存器，则强制溢出
-        let is_function_param = param_ids.contains(interval.value_id)
-        if is_function_param && is_callee_saved_freg(freg) {
-          // 将寄存器放回可用列表
-          allocator.available_fregs.push(freg)
-          // 强制溢出函数参数，避免递归调用时的覆盖问题
-          spill_at_interval(allocator, interval)
-        } else {
           allocator.value_to_freg = allocator.value_to_freg.add(
             interval.value_id,
             freg,
           )
 
+          // 如果分配的是callee-saved寄存器，需要保存它
+          match freg {
+            Fs2 | Fs3 | Fs4 | Fs5 | Fs6 | Fs7 | Fs8 | Fs9 | Fs10 | Fs11 =>
+              if not(allocator.saved_callee_fregs.contains(freg)) {
+                allocator.saved_callee_fregs.push(freg)
+              }
+            _ => ()
+          }
+
+          // 将区间添加到活跃列表（按结束位置排序）
+          let new_interval = { ..interval, freg: Some(freg) }
+          insert_active_interval(allocator, new_interval)
+        } else {
+          // 没有可用寄存器，溢出参数
+          spill_at_interval(allocator, interval)
+        }
+
+      } else {
+        // 非函数参数的普通寄存器分配
+        if allocator.available_fregs.length() == 0 {
+          // 没有可用寄存器，需要溢出
+          spill_at_interval(allocator, interval)
+        } else {
+          // 分配寄存器
+          let freg = match allocator.available_fregs.pop() {
+            Some(freg) => freg
+            None => {
+              // 理论上不应该发生，因为我们检查了available_fregs是否为空
+              @util.logger("Error: No available register for interval " + interval.to_string())
+              continue
+            }
+          }
+          
+          allocator.value_to_freg = allocator.value_to_freg.add(
+            interval.value_id,
+            freg,
+          )
+
+          // 将区间添加到活跃列表（按结束位置排序）
           let new_interval = { ..interval, freg: Some(freg) }
           insert_active_interval(allocator, new_interval)
         }
       }
-      
     } else {
       expire_old_intervals(allocator, interval.start)
-      if allocator.available_regs.length() == 0 {
-        // 没有可用寄存器，需要溢出
-        spill_at_interval(allocator, interval)
-      } else {
-        // 分配寄存器
-        let reg = match allocator.available_regs.pop() {
-          Some(reg) => reg
-          None => {
-            // 理论上不应该发生，因为我们检查了available_regs是否为空
-            @util.logger("Error: No available register for interval " + interval.to_string())
-            continue
+      
+      // 检查是否是函数参数
+      let is_function_param = param_ids.contains(interval.value_id)
+
+      if is_function_param {
+        // 为函数参数强制分配callee-saved寄存器，避免被调用者保存寄存器覆盖
+        if allocator.available_regs.length() > 0 {
+          // 优先使用可用的寄存器
+          let reg = match allocator.available_regs.pop() {
+            Some(reg) => reg
+            None => {
+              // 如果没有可用寄存器，尝试从参数寄存器中选择一个
+              match param_ids.search(interval.value_id) {
+                None => @util.die("Error: Function parameter not found in param_ids: " + interval.value_id.to_string())
+                Some(index) => {
+                  // 如果是前8个参数，使用对应的参数寄存器
+                  if index < reg_arg_list.length() {
+                    reg_arg_list[index]
+                  } else {
+                    @util.die("Too many parameters")
+                  }
+                }
+              }
+            }
           }
+          allocator.value_to_reg = allocator.value_to_reg.add(
+            interval.value_id,
+            reg,
+          )
+
+          // 如果分配的是callee-saved寄存器，需要保存它
+          match reg {
+            S2 | S3 | S4 | S5 | S6 | S7 | S8 | S9 | S10 | S11 =>
+              if not(allocator.saved_callee_regs.contains(reg)) {
+                allocator.saved_callee_regs.push(reg)
+              }
+            _ => ()
+          }
+
+          // 将区间添加到活跃列表（按结束位置排序）
+          let new_interval = { ..interval, reg: Some(reg) }
+          insert_active_interval(allocator, new_interval)
+        } else {
+          // 没有可用寄存器，溢出参数
+          spill_at_interval(allocator, interval)
         }
 
-        // 检查是否是函数参数，如果是且被分配到callee-saved寄存器，则强制溢出
-        let is_function_param = param_ids.contains(interval.value_id)
-        if is_function_param && is_callee_saved(reg) {
-          // 将寄存器放回可用列表
-          allocator.available_regs.push(reg)
-          // 强制溢出函数参数，避免递归调用时的覆盖问题
+      } else {
+        // 非函数参数的普通寄存器分配
+        if allocator.available_regs.length() == 0 {
+          // 没有可用寄存器，需要溢出
           spill_at_interval(allocator, interval)
         } else {
+          // 分配寄存器
+          let reg = match allocator.available_regs.pop() {
+            Some(reg) => reg
+            None => {
+              // 理论上不应该发生，因为我们检查了available_regs是否为空
+              @util.logger("Error: No available register for interval " + interval.to_string())
+              continue
+            }
+          }
+          
           allocator.value_to_reg = allocator.value_to_reg.add(
             interval.value_id,
             reg,
@@ -473,8 +504,6 @@ pub fn linear_scan_register_allocation(
         }
       }
     }
-    
-    
   }
   allocator
 }
@@ -683,18 +712,28 @@ pub fn get_register_or_spill_load(
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
           // 值被溢出到内存，需要加载
-          // 智能选择临时寄存器，优先选择非caller-saved寄存器以避免冲突
-          let temp_reg = match value_id % 10 {
-            0 => T0
-            1 => T1
-            2 => T2
-            3 => T3
-            4 => T4
-            5 => T5
-            6 => S2  // 优先使用callee-saved寄存器作为临时寄存器
-            7 => S3
-            8 => S4
-            _ => S5
+          // 智能选择临时寄存器，避免与已分配的寄存器冲突
+          let candidate_temps = [T0, T1, T2, T3, T4, T5, T6]
+          let mut temp_reg = T0 // 默认使用T0
+          let mut found_available = false
+
+          for temp in candidate_temps {
+            let mut temp_is_used = false
+            allocator.value_to_reg.each(fn(_value_id, reg) {
+              if reg == temp {
+                temp_is_used = true
+              }
+            })
+            if not(temp_is_used) {
+              temp_reg = temp
+              found_available = true
+              break
+            }
+          }
+
+          // 如果所有候选寄存器都被使用，选择一个影响最小的
+          if not(found_available) {
+            temp_reg = T0
           }
           let load_instr = Ld(temp_reg, {
             base: Fp,
@@ -741,18 +780,28 @@ pub fn get_float_register_or_spill_load(
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
           // 值被溢出到内存，需要加载
-          // 智能选择临时寄存器，优先选择非caller-saved寄存器以避免冲突
-          let temp_freg = match value_id % 10 {
-            0 => Ft0
-            1 => Ft1
-            2 => Ft2
-            3 => Ft3
-            4 => Ft4
-            5 => Ft5
-            6 => Ft6 
-            7 => Ft7
-            8 => Ft8
-            _ => Ft9
+          // 智能选择临时浮点寄存器，避免与已分配的寄存器冲突
+          let candidate_fregs = [Ft0, Ft1, Ft2, Ft3, Ft4, Ft5, Ft6, Ft7, Ft8, Ft9, Ft10, Ft11]
+          let mut temp_freg = Ft0 // 默认使用Ft0
+          let mut found_available = false
+
+          for temp in candidate_fregs {
+            let mut temp_is_used = false
+            allocator.value_to_freg.each(fn(_value_id, freg) {
+              if freg == temp {
+                temp_is_used = true
+              }
+            })
+            if not(temp_is_used) {
+              temp_freg = temp
+              found_available = true
+              break
+            }
+          }
+
+          // 如果所有候选寄存器都被使用，选择一个影响最小的
+          if not(found_available) {
+            temp_freg = Ft0
           }
           let load_instr = Fld(temp_freg, {
             base: Fp,
