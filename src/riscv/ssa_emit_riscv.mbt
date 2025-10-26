@@ -5,7 +5,7 @@
 pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
   // println("emit riscv for ssa program: ")
-  // println(input.to_json().stringify())
+  println(input.to_json().stringify())
 
   // 遍历所有SSA函数
   for func in input.program.functions {
@@ -19,45 +19,17 @@ pub fn ssa_emit_riscv(input : @ssa.Ssa) -> Array[AssemblyFunction] {
 /// 生成函数的RISC-V汇编代码
 fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // 执行寄存器分配
-  let (live_intervals, param_ids) = compute_live_intervals_for_function(func)
-  // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
-  let allocator = linear_scan_register_allocation(live_intervals, param_ids)
-  // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
+  let (live_intervals, param_ids, kill_points) = compute_live_intervals_for_function(func)
+  @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
+  let allocator = linear_scan_register_allocation(live_intervals, param_ids, kill_points)
+  @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
-  // 确定需要保存的被调用者保存的寄存器
-  let saved_callee_regs = []
-  allocator.value_to_reg.each(fn(_, reg) {
-    // 检查是否是被调用者保存的寄存器（s0-s11）
-    match reg {
-      S2 | S3 | S4 | S5 | S6 | S7 | S8 | S9 | S10 | S11 =>
-        if not(saved_callee_regs.contains(reg)) {
-          saved_callee_regs.push(reg)
-        }
-      _ => ()
-    }
-  })
-  
-  allocator.saved_callee_regs = saved_callee_regs
-
-  // 确定需要保存的被调用者保存的浮点寄存器
-  let saved_callee_fregs = []
-  allocator.value_to_freg.each(fn(_, freg) {
-    // 检查是否是被调用者保存的浮点寄存器（fs0-fs11）
-    match freg {
-      Fs2 | Fs3 | Fs4 | Fs5 | Fs6 | Fs7 | Fs8 | Fs9 | Fs10 | Fs11 =>
-        if not(saved_callee_fregs.contains(freg)) {
-          saved_callee_fregs.push(freg)
-        }
-      _ => ()
-    }
-  })
-  
-  allocator.saved_callee_fregs = saved_callee_fregs
+ 
 
   // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间
   let spill_size = allocator.next_spill_slot
-  let framesize = 24 + spill_size + saved_callee_regs.length() * 8 + saved_callee_fregs.length() * 8
+  let framesize = 24 + spill_size + allocator.saved_callee_regs.length() * 8 + allocator.saved_callee_fregs.length() * 8
 
   // 函数序言
   asm_instructions.push(Addi(Sp, Sp, -framesize)) // 分配栈帧
@@ -67,12 +39,12 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
 
   // 保存被调用者保存的寄存器到栈上
   let mut offset = 24
-  for reg in saved_callee_regs {
+  for reg in allocator.saved_callee_regs {
     asm_instructions.push(Sd(reg, { base: Fp, offset: -offset }))
     offset += 8
   }
   // 保存被调用者保存的浮点寄存器到栈上
-  for freg in saved_callee_fregs {
+  for freg in allocator.saved_callee_fregs {
     asm_instructions.push(Fsd(freg, { base: Fp, offset: -offset }))
     offset += 8
   }
@@ -1303,13 +1275,9 @@ fn allocate_block_params_with_regalloc(
   block : @ssa.BasicBlock,
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
-  let result = []
+  let asm_instructions = []
   for i, param in block.params {
-    let (param_reg, load_instrs) = get_register_or_spill_load(
-      param.id,
-      allocator,
-    )
-    let source_reg = match i {
+    let input_reg = match i {
       0 => A0
       1 => A1
       2 => A2
@@ -1317,20 +1285,33 @@ fn allocate_block_params_with_regalloc(
       4 => A4
       5 => A5
       6 => A6
-      _ => A0
+      7 => A7
+      _ => @util.die("TODO: 参数超过8个")
     }
-    result.append(load_instrs)
-    if param_reg != source_reg {
-      result.push(Mv(param_reg, source_reg))
+    match allocator.value_to_reg.get(param.id) {
+      Some(reg) =>
+        // 立即将参数从输入寄存器移动到分配的寄存器
+        if reg != input_reg {
+          asm_instructions.push(Mv(reg, input_reg))
+        }
+      None =>
+        match allocator.value_to_spill.get(param.id) {
+          Some(spill_offset) =>
+            // 参数直接溢出到栈槽
+            asm_instructions.push(
+              Sd(input_reg, {
+                base: Fp,
+                offset: -(24 +
+                spill_offset +
+                allocator.saved_callee_regs.length() * 8),
+              }),
+            )
+          None =>
+            @util.die("TODO: 普通参数需要分配寄存器或溢出栈槽")
+        }
     }
-    let spill_instrs = generate_spill_store_if_needed(
-      param.id,
-      param_reg,
-      allocator,
-    )
-    result.append(spill_instrs)
   }
-  result
+  asm_instructions
 }
 
 ///|
