@@ -36,14 +36,12 @@ cp ./libriscv/emulator/rvlinux ./
 
 ### Building and Running
 ```bash
-# Compile and run single file (simple pipeline - KNF → Assembly)
-./script/single_run_simple.sh <input.mbt>
 
 # Compile and run single file (SSA pipeline)
 ./script/single_run.sh <input.mbt>
 
-# Run all tests (simple pipeline)
-./script/run_test_simple.sh
+# Run all test
+./script/run_test.sh
 
 # Clean build artifacts
 ./clear.sh
@@ -51,11 +49,9 @@ cp ./libriscv/emulator/rvlinux ./
 
 ### Direct Compiler Usage
 ```bash
-# Basic compilation (simple pipeline)
-moon run src/bin/main.mbt -- <input.mbt> -o out.s --simple
 
 # SSA compilation
-moon run -g src/bin/main.mbt -- <input.mbt> -o out.s --ssa
+moon run -g src/bin/main.mbt -- <input.mbt> -o out.s
 
 # Stage interpreters for debugging
 moon run src/bin/main.mbt -- --knf-interpreter <input>

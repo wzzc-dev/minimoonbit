@@ -44,13 +44,13 @@ flowchart LR
 生成 riscv 汇编并编译运行 
 
 ```shell
-./single_run.sh contest-2025-data/test_cases/mbt/conv_pool.mbt
+./script/single_run.sh contest-2025-data/test_cases/mbt/conv_pool.mbt
 ```
 
 测试全部
 
 ```shell
-./new_run_test.sh
+./script/run_test.sh
 ```
 
 闭包 IR 

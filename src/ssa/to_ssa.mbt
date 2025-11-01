@@ -1065,7 +1065,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
 
       // 为then分支准备参数
       let then_args = [then_branch_value]
-      // 添加修改变量的值
+      // 添加修改变量的值，但避免重复添加返回值
       let var_names = all_modified_vars.keys().to_array()
       for i = 0; i < var_names.length(); i = i + 1 {
         let var_name = var_names[i]
@@ -1078,7 +1078,10 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
             }
           }
         }
-        then_args.push(var_value)
+        // 避免重复添加：如果var_value等于then_branch_value，则跳过
+        if var_value.id != then_branch_value.id {
+          then_args.push(var_value)
+        }
       }
 
       let updated_then_block = BasicBlock::{
@@ -1114,7 +1117,7 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
 
       // 为else分支准备参数
       let else_args = [else_branch_value]
-      // 添加修改变量的值
+      // 添加修改变量的值，但避免重复添加返回值
       for i = 0; i < var_names.length(); i = i + 1 {
         let var_name = var_names[i]
         let var_value = match final_else_context.var_env.get(var_name) {
@@ -1126,7 +1129,10 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
             }
           }
         }
-        else_args.push(var_value)
+        // 避免重复添加：如果var_value等于else_branch_value，则跳过
+        if var_value.id != else_branch_value.id {
+          else_args.push(var_value)
+        }
       }
 
       let updated_else_block = BasicBlock::{

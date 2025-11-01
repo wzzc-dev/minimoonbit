@@ -27,13 +27,13 @@ fn Stages::from_string(s : String) -> Stages? {
 }
 
 ///|
-fn Stages::next(self : Stages, simple : Bool) -> Stages {
+fn Stages::next(self : Stages) -> Stages {
   match self {
     Stages::Parse => Stages::Typecheck
     Stages::Typecheck => Stages::Knf
     Stages::Knf => Stages::KnfOpt
     Stages::KnfOpt => Stages::Closure
-    Stages::Closure => if simple { Stages::Asm } else { Stages::Ssa }
+    Stages::Closure => Stages::Ssa
     Stages::Ssa => Stages::Asm
     Stages::Asm => Stages::Finished
     Stages::Finished => Stages::Finished
@@ -103,7 +103,6 @@ fn CompileStatus::initialize(
 fn CompileStatus::step(
   self : CompileStatus,
   backend : Backend,
-  simple : Bool,
 ) -> Bool {
   if self.curr_stage >= self.end_stage {
     return true
@@ -167,19 +166,15 @@ fn CompileStatus::step(
           let llvmir = @llvmir.to_llvmir(self.closure_ir.unwrap())
           self.llvmir = Some(llvmir)
         }
-        RISCV =>
-          if simple {
-            let real_asm = @riscv.emit(self.closure_ir.unwrap())
-            self.riscv_asm = Some(real_asm)
-          } else {
+        RISCV => {
             // @util.logger("ssa ir: \n" + self.ssa.unwrap().to_json().stringify())
-            let real_asm = @riscv.ssa_emit_riscv(self.ssa.unwrap())
+            let real_asm = @riscv.emit(self.ssa.unwrap())
             self.riscv_asm = Some(real_asm)
           }
       }
     Finished => ()
   }
-  self.curr_stage = self.curr_stage.next(simple)
+  self.curr_stage = self.curr_stage.next()
   self.curr_stage >= self.end_stage
 }
 
@@ -187,8 +182,7 @@ fn CompileStatus::step(
 fn CompileStatus::output(
   self : CompileStatus,
   json : Bool,
-  outTy : Backend,
-  simple : Bool,
+  outTy : Backend
 ) -> String {
   if json {
     match self.curr_stage {
@@ -198,12 +192,7 @@ fn CompileStatus::output(
       KnfOpt => Json::stringify(self.knf.unwrap().to_json())
       Closure => Json::stringify(self.opt_knf.unwrap().to_json())
       Ssa => Json::stringify(self.closure_ir.unwrap().to_json())
-      Asm =>
-        if simple {
-          Json::stringify(self.closure_ir.unwrap().to_json())
-        } else {
-          Json::stringify(self.ssa.unwrap().to_json())
-        }
+      Asm => Json::stringify(self.ssa.unwrap().to_json())
       Finished => @riscv.print_functions(self.riscv_asm.unwrap())
     }
   } else {
@@ -214,12 +203,7 @@ fn CompileStatus::output(
       KnfOpt => self.knf.unwrap().to_string()
       Closure => self.opt_knf.unwrap().to_string()
       Ssa => self.closure_ir.unwrap().to_string()
-      Asm =>
-        if simple {
-          self.closure_ir.unwrap().to_string()
-        } else {
-          self.ssa.unwrap().to_string()
-        }
+      Asm => self.ssa.unwrap().to_string()
       Finished =>
         match outTy {
           JS => self.js.unwrap()
@@ -251,7 +235,6 @@ fn main {
   let js = Ref::new(false)
   let wasm = Ref::new(false)
   let llvmir = Ref::new(false)
-  let simple = Ref::new(true)
   let ssa = Ref::new(false)
   // 
   @ArgParser.parse(
@@ -338,17 +321,12 @@ fn main {
       ("--js", "", @ArgParser.Set(js), "Generate JavaScript code"),
       ("--wasm", "", @ArgParser.Set(wasm), "Generate WebAssembly code"),
       ("--llvmir", "", @ArgParser.Set(llvmir), "Generate llvmir"),
-      ("--simple", "", @ArgParser.Set(simple), "Simple backend"),
       ("--ssa", "", @ArgParser.Set(ssa), "Use SSA"),
     ],
     fn(s) { file = Some(s) },
     "",
     argv.to_array(),
   )
-  if ssa.val {
-    simple.val = false
-  }
-
   // println(end_stage)
 
   // Configure pipeline
@@ -377,7 +355,7 @@ fn main {
   let contents = try? @fs.read_file_to_string(file)
   let compileStatus = try? CompileStatus::initialize(
       start_stage.val,
-      end_stage.val.next(simple.val),
+      end_stage.val.next(),
       contents.unwrap(),
     )
   // Compilation
@@ -397,10 +375,10 @@ fn main {
     } else {
       RISCV
     }
-    let stop = status.step(ty, simple.val)
+    let stop = status.step(ty)
     if stages_to_print.contains(stage) {
       println("Stage: \{stage}")
-      println(status.output(json.val, ty, simple.val))
+      println(status.output(json.val, ty))
     }
     if stop {
       break
@@ -442,7 +420,7 @@ fn main {
     } else {
       RISCV
     }
-    let out_string = status.output(json.val, ty, simple.val)
+    let out_string = status.output(json.val, ty)
     if out_file.val == "-" {
       println(out_string)
     } else {
