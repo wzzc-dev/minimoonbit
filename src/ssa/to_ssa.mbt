@@ -1297,8 +1297,6 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       ExprResult::{ value: result.value, context: result.context }
     }
     CallClosure(n, xs) => {
-
-      
       // 闭包调用
       // 特殊处理：如果n是已定义的函数，直接创建函数引用
       let func_name = n.to_string()

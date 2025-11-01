@@ -800,13 +800,11 @@ pub fn get_register_or_spill_load(
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
           // 值被溢出到内存，需要加载
-          // 智能选择临时寄存器，避免与已分配的寄存器冲突
-          let temp_reg = T0
-          let load_instr = Ld(temp_reg, {
+          let load_instr = Ld(reg_swap, {
             base: Fp,
             offset: -(24 + spill_offset + allocator.saved_callee_regs.length() * 8),
           })
-          (temp_reg, [load_instr])
+          (reg_swap, [load_instr])
         }
         None => {
           @util.die(
@@ -847,13 +845,11 @@ pub fn get_float_register_or_spill_load(
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
           // 值被溢出到内存，需要加载
-          // 智能选择临时浮点寄存器，避免与已分配的寄存器冲突
-          let temp_freg = Ft0
-          let load_instr = Fld(temp_freg, {
+          let load_instr = Fld(freg_swap, {
             base: Fp,
             offset: -(24 + spill_offset + allocator.saved_callee_fregs.length() * 8),
           })
-          (temp_freg, [load_instr])
+          (freg_swap, [load_instr])
         }
         None => {
           @util.die(
