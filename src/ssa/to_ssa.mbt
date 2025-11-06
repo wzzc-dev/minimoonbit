@@ -1219,7 +1219,16 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
           result2
         }
         None => {
-          // 如果e1没有返回值，直接计算e2
+          // let updated_var_env = context1.var_env.add(name.to_string(), Value::{ id: new_value_id(), ty: Unit })
+          // let updated_context = Context::{
+          //   current_block: context1.current_block,
+          //   blocks: context1.blocks,
+          //   block_map: context1.block_map,
+          //   var_env: updated_var_env,
+          //   func_env: context1.func_env,
+          // }
+          // // 如果e1没有返回值，直接计算e2
+          // let result2 = convert_expr(updated_context, e2)
           let result2 = convert_expr(context1, e2)
           result2
         }

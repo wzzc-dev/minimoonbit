@@ -50,8 +50,6 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
   // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
- 
-
   // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间
   let spill_size = allocator.next_spill_slot
   let framesize = 24 + spill_size + allocator.saved_callee_regs.length() * 8 + allocator.saved_callee_fregs.length() * 8
@@ -261,6 +259,178 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
     body: asm_instructions,
   }
 }
+
+///|
+/// 使用寄存器分配器生成终止指令
+fn emit_terminator_with_regalloc(
+  terminator : @ssa.Terminator,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] {
+  let result = []
+  match terminator {
+    @ssa.Terminator::Return(value) => {
+      match value {
+        Some(val) =>
+          // Check if the return value is a float
+          match val.ty {
+            @ssa.Type::Float => {
+              let (src_reg, load_instrs) = get_float_register_or_spill_load(
+                val.id,
+                allocator,
+              )
+              result.append(load_instrs)
+              if src_reg != Fa0 {
+                result.push(FmvD(Fa0, src_reg))
+              }
+            }
+            _ => {
+              let (src_reg, load_instrs) = get_register_or_spill_load(
+                val.id,
+                allocator,
+              )
+              result.append(load_instrs)
+              if src_reg != A0 {
+                result.push(Mv(A0, src_reg))
+              }
+            }
+          }
+        None => result.push(Li(A0, "0"))
+      }
+
+      // 使用函数序言中计算的被调用者保存寄存器列表，确保一致性
+      let saved_callee_regs = allocator.saved_callee_regs
+      let saved_callee_fregs = allocator.saved_callee_fregs
+
+      // 计算栈帧大小：与函数序言中的计算保持一致
+      let spill_size = allocator.next_spill_slot
+      let framesize = 24 + spill_size + saved_callee_regs.length() * 8 + saved_callee_fregs.length() * 8
+
+      // 恢复被调用者保存的寄存器从栈上
+      let mut offset = 24
+      for reg in saved_callee_regs {
+        result.push(Ld(reg, { base: Fp, offset: -offset }))
+        offset += 8
+      }
+      // 恢复被调用者保存的浮点寄存器从栈上
+      for freg in saved_callee_fregs {
+        result.push(Fld(freg, { base: Fp, offset: -offset }))
+        offset += 8
+      }
+      result.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
+      result.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
+      result.push(Addi(Sp, Sp, framesize))
+      result.push(Ret)
+    }
+    @ssa.Terminator::Jump(target, args) => {
+      for i, arg in args {
+        if arg.ty == @ssa.Type::Unit {
+          continue
+        }
+        let (src_reg, load_instrs) = get_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        let dest_reg = match i {
+          0 => A0
+          1 => A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          _ => A0
+        }
+        result.append(load_instrs)
+        if src_reg != dest_reg {
+          result.push(Mv(dest_reg, src_reg))
+        }
+      }
+      result.push(J("block_" + target.id.to_string()))
+    }
+    @ssa.Terminator::Branch(
+      cond,
+      true_block,
+      true_args,
+      false_block,
+      false_args
+    ) => {
+      let (cond_reg, load_instrs) = get_register_or_spill_load(
+        cond.id,
+        allocator,
+      )
+      result.append(load_instrs)
+
+      // 保存false分支的参数到临时寄存器（避免与true参数冲突）
+      let false_param_regs = []
+      for i, arg in false_args {
+        let (src_reg, load_instrs) = get_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        let temp_reg = match i {
+          0 => T0
+          1 => T1
+          2 => T2
+          3 => T3
+          4 => T4
+          5 => T5
+          _ => T6
+        }
+        result.append(load_instrs)
+        if src_reg != temp_reg {
+          result.push(Mv(temp_reg, src_reg))
+        }
+        false_param_regs.push(temp_reg)
+      }
+
+      // 加载true分支的参数到寄存器（在分支指令之前）
+      for i, arg in true_args {
+        let (src_reg, load_instrs) = get_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        let dest_reg = match i {
+          0 => A0
+          1 => A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          _ => A0
+        }
+        result.append(load_instrs)
+        if src_reg != dest_reg {
+          result.push(Mv(dest_reg, src_reg))
+        }
+      }
+
+      // 生成分支指令
+      result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
+
+      // 设置false分支的参数（在分支指令之后）
+      for i = 0; i < false_param_regs.length(); i = i + 1 {
+        let temp_reg = false_param_regs[i]
+        let dest_reg = match i {
+          0 => A0
+          1 => A1
+          2 => A2
+          3 => A3
+          4 => A4
+          5 => A5
+          6 => A6
+          _ => A0
+        }
+        if temp_reg != dest_reg {
+          result.push(Mv(dest_reg, temp_reg))
+        }
+      }
+      result.push(J("block_" + false_block.id.to_string()))
+    }
+  }
+  result
+}
+
 
 ///|
 /// 生成SSA指令的RISC-V汇编代码（重构版本 - 分离不同类型的指令生成逻辑）
@@ -1339,173 +1509,3 @@ fn allocate_block_params_with_regalloc(
   asm_instructions
 }
 
-///|
-/// 使用寄存器分配器生成终止指令
-fn emit_terminator_with_regalloc(
-  terminator : @ssa.Terminator,
-  allocator : RegisterAllocator,
-) -> Array[RvAsm] {
-  let result = []
-  match terminator {
-    @ssa.Terminator::Return(value) => {
-      match value {
-        Some(val) =>
-          // Check if the return value is a float
-          match val.ty {
-            @ssa.Type::Float => {
-              let (src_reg, load_instrs) = get_float_register_or_spill_load(
-                val.id,
-                allocator,
-              )
-              result.append(load_instrs)
-              if src_reg != Fa0 {
-                result.push(FmvD(Fa0, src_reg))
-              }
-            }
-            _ => {
-              let (src_reg, load_instrs) = get_register_or_spill_load(
-                val.id,
-                allocator,
-              )
-              result.append(load_instrs)
-              if src_reg != A0 {
-                result.push(Mv(A0, src_reg))
-              }
-            }
-          }
-        None => result.push(Li(A0, "0"))
-      }
-
-      // 使用函数序言中计算的被调用者保存寄存器列表，确保一致性
-      let saved_callee_regs = allocator.saved_callee_regs
-      let saved_callee_fregs = allocator.saved_callee_fregs
-
-      // 计算栈帧大小：与函数序言中的计算保持一致
-      let spill_size = allocator.next_spill_slot
-      let framesize = 24 + spill_size + saved_callee_regs.length() * 8 + saved_callee_fregs.length() * 8
-
-      // 恢复被调用者保存的寄存器从栈上
-      let mut offset = 24
-      for reg in saved_callee_regs {
-        result.push(Ld(reg, { base: Fp, offset: -offset }))
-        offset += 8
-      }
-      // 恢复被调用者保存的浮点寄存器从栈上
-      for freg in saved_callee_fregs {
-        result.push(Fld(freg, { base: Fp, offset: -offset }))
-        offset += 8
-      }
-      result.push(Ld(Ra, { base: Sp, offset: framesize - 8 }))
-      result.push(Ld(Fp, { base: Sp, offset: framesize - 16 }))
-      result.push(Addi(Sp, Sp, framesize))
-      result.push(Ret)
-    }
-    @ssa.Terminator::Jump(target, args) => {
-      for i, arg in args {
-        if arg.ty == @ssa.Type::Unit {
-          continue
-        }
-        let (src_reg, load_instrs) = get_register_or_spill_load(
-          arg.id,
-          allocator,
-        )
-        let dest_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          _ => A0
-        }
-        result.append(load_instrs)
-        if src_reg != dest_reg {
-          result.push(Mv(dest_reg, src_reg))
-        }
-      }
-      result.push(J("block_" + target.id.to_string()))
-    }
-    @ssa.Terminator::Branch(
-      cond,
-      true_block,
-      true_args,
-      false_block,
-      false_args
-    ) => {
-      let (cond_reg, load_instrs) = get_register_or_spill_load(
-        cond.id,
-        allocator,
-      )
-      result.append(load_instrs)
-
-      // 保存false分支的参数到临时寄存器（避免与true参数冲突）
-      let false_param_regs = []
-      for i, arg in false_args {
-        let (src_reg, load_instrs) = get_register_or_spill_load(
-          arg.id,
-          allocator,
-        )
-        let temp_reg = match i {
-          0 => T0
-          1 => T1
-          2 => T2
-          3 => T3
-          4 => T4
-          5 => T5
-          _ => T6
-        }
-        result.append(load_instrs)
-        if src_reg != temp_reg {
-          result.push(Mv(temp_reg, src_reg))
-        }
-        false_param_regs.push(temp_reg)
-      }
-
-      // 加载true分支的参数到寄存器（在分支指令之前）
-      for i, arg in true_args {
-        let (src_reg, load_instrs) = get_register_or_spill_load(
-          arg.id,
-          allocator,
-        )
-        let dest_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          _ => A0
-        }
-        result.append(load_instrs)
-        if src_reg != dest_reg {
-          result.push(Mv(dest_reg, src_reg))
-        }
-      }
-
-      // 生成分支指令
-      result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
-
-      // 设置false分支的参数（在分支指令之后）
-      for i = 0; i < false_param_regs.length(); i = i + 1 {
-        let temp_reg = false_param_regs[i]
-        let dest_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          _ => A0
-        }
-        if temp_reg != dest_reg {
-          result.push(Mv(dest_reg, temp_reg))
-        }
-      }
-      result.push(J("block_" + false_block.id.to_string()))
-    }
-  }
-  result
-}

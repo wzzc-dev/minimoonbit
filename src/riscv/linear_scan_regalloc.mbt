@@ -9,10 +9,11 @@ struct LiveInterval {
   block_param_index : Int? // 块参数索引（如果是块参数）
   ty : @ssa.Type // 值的类型
   start : Int // 开始位置（指令编号）
-  end : Int // 结束位置（指令编号）  
+  end : Int // 结束位置（指令编号）
   reg : Reg? // 分配的整数寄存器（如果有）
   freg : FReg? // 分配的浮点寄存器（如果有）
   spill_slot : Int? // 溢出栈槽位置（如果溢出）
+  is_call_result : Bool // 是否是函数调用结果
 } derive(Show)
 
 ///|
@@ -67,6 +68,7 @@ pub fn compute_live_intervals_for_function(
       reg: None,
       freg: None,
       spill_slot: None,
+      is_call_result: false,
     })
   }
   // @util.logger("func name: " + func.name + " func_param_ids: " + func_param_ids.to_string())
@@ -87,6 +89,7 @@ pub fn compute_live_intervals_for_function(
         reg: None,
         freg: None,
         spill_slot: None,
+        is_call_result: false,
       })
     }
     // 不在这里递增instruction_count，因为基本块参数的定义位置与第一条指令相同
@@ -119,6 +122,7 @@ pub fn compute_live_intervals_for_function(
               reg: None,
               freg: None,
               spill_slot: None,
+              is_call_result: false,
             })
           Some(_) => () // 已存在的区间，稍后统一更新结束位置
         }
@@ -126,6 +130,11 @@ pub fn compute_live_intervals_for_function(
 
       // 记录当前指令定义的值
       let def_value_id = instr.result.id
+      // 检查是否是函数调用结果
+      let is_call_result = match instr.opcode {
+        @ssa.Opcode::Call(_, _) | @ssa.Opcode::CallRef(_, _) | @ssa.Opcode::CallClosure(_, _) | @ssa.Opcode::MakeClosure(_) => true
+        _ => false
+      }
       intervals = intervals.add(def_value_id, {
         value_id: def_value_id,
         block_param_index: None,
@@ -135,6 +144,7 @@ pub fn compute_live_intervals_for_function(
         reg: None,
         freg: None,
         spill_slot: None,
+        is_call_result: is_call_result,
       })
       instruction_count = instruction_count + 1
     }
@@ -157,6 +167,7 @@ pub fn compute_live_intervals_for_function(
             reg: None,
             freg: None,
             spill_slot: None,
+            is_call_result: false,
           })
         Some(_) => () // 已存在的区间，稍后统一更新结束位置
       }
@@ -363,11 +374,6 @@ pub fn linear_scan_register_allocation(
   // 按开始位置排序区间
   let sorted_intervals = intervals.copy()
   sorted_intervals.sort_by(fn(a, b) { a.start - b.start + (if a.start == b.start { a.value_id - b.value_id } else { 0 }) })
-  
-  // for interval in sorted_intervals {
-  //   @util.logger(" interval: " + interval.to_string())
-  // }
-
   // 为每个区间分配寄存器
   for interval in sorted_intervals {
     // 统一处理所有类型的区间过期
@@ -386,8 +392,15 @@ fn live_interval_crosses_kill_point(interval: LiveInterval, kill_points: Array[I
     // 找到第一个 kill point 的位置 >= interval.start
     // 并且 < interval.end（因为 end 是最后一个 use 的位置，通常 inclusive）
     for kp in kill_points {
-        if kp >= interval.start && kp <= interval.end {
+        if interval.is_call_result {
+          if kp > interval.start && kp <= interval.end {
             return true;
+          }
+          // println("call result interval: " + interval.to_string())
+        } else {
+          if kp >= interval.start && kp <= interval.end {
+            return true;
+          }
         }
     }
     return false;
@@ -499,7 +512,6 @@ fn allocate_normal_register(allocator : RegisterAllocator, interval : LiveInterv
         }
       }
       None => {
-        // 优先分配 A0-A7, T1-T5, 没有的话分配 S2-S10
         let mut reg = Zero
         if live_interval_crosses_kill_point(interval, kill_points) {
           // 分配寄存器到
@@ -510,16 +522,22 @@ fn allocate_normal_register(allocator : RegisterAllocator, interval : LiveInterv
             }
           }
         } else {
-          for r in [..reg_arg_list[1:], ..reg_temp_list[2:], ..reg_callee_saved_list] {
-            if allocator.available_regs.contains(r) {
-              reg = r
-              break
+          // 函数调用结果优先分配A0，然后按正常优先级分配
+          if false && interval.is_call_result && allocator.available_regs.contains(A0){
+            // 函数调用结果优先分配到A0（返回值寄存器）
+            reg = A0
+          } else {
+            for r in [..reg_arg_list[1:], ..reg_temp_list[2:], ..reg_callee_saved_list] {
+              if allocator.available_regs.contains(r) {
+                reg = r
+                break
+              }
             }
           }
         }
         
         if reg == Zero {
-          @util.die("No available register for allocation")
+          @util.die("No available register for allocation: " + interval.to_string())
         }
         allocate_reg(allocator, reg, interval)
       }
@@ -546,7 +564,7 @@ fn allocate_normal_float_register(allocator : RegisterAllocator, interval : Live
         }
       }
       None => {
-        // 优先分配 A0-A7, T1-T5, 没有的话分配 S2-S10
+        // 函数调用结果优先分配Fa0，然后按正常优先级分配
         let mut freg = Ft0
         if live_interval_crosses_kill_point(interval, kill_points) {
           // 分配寄存器到
@@ -557,16 +575,22 @@ fn allocate_normal_float_register(allocator : RegisterAllocator, interval : Live
             }
           }
         } else {
-          for r in [..freg_arg_list[1:], ..freg_temp_list[2:], ..freg_callee_saved_list] {
-            if allocator.available_fregs.contains(r) {
-              freg = r
-              break
+          // 函数调用结果优先分配Fa0，然后按正常优先级分配
+          if false && interval.is_call_result && allocator.available_fregs.contains(Fa0){
+            // 函数调用结果优先分配到Fa0（返回值寄存器）
+            freg = Fa0
+          } else {
+            for r in [..freg_arg_list[1:], ..freg_temp_list[2:], ..freg_callee_saved_list] {
+              if allocator.available_fregs.contains(r) {
+                freg = r
+                break
+              }
             }
           }
         }
         
         if freg == Ft0 {
-          @util.die("No available register for allocation")
+          @util.die("No available float register for allocation")
         }
         allocate_freg(allocator, freg, interval)
       }
