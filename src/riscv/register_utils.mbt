@@ -20,6 +20,7 @@ pub fn generate_spill_store_if_needed(
 pub fn get_register_or_spill_load(
   value_id : Int,
   allocator : RegisterAllocator,
+  fallback? : Reg = reg_swap,
 ) -> (Reg, Array[RvAsm]) {
   match allocator.value_to_reg.get(value_id) {
     Some(reg) => (reg, [])
@@ -28,13 +29,13 @@ pub fn get_register_or_spill_load(
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
           // 值被溢出到内存，需要加载
-          let load_instr = Ld(reg_swap, {
+          let load_instr = Ld(fallback, {
             base: Fp,
             offset: -(24 +
             spill_offset +
             allocator.saved_callee_regs.length() * 8),
           })
-          (reg_swap, [load_instr])
+          (fallback, [load_instr])
         }
         None =>
           @util.die(
@@ -49,6 +50,7 @@ pub fn get_register_or_spill_load(
 pub fn get_float_register_or_spill_load(
   value_id : Int,
   allocator : RegisterAllocator,
+  fallback? : FReg = freg_swap,
 ) -> (FReg, Array[RvAsm]) {
   match allocator.value_to_freg.get(value_id) {
     Some(freg) =>
@@ -58,11 +60,11 @@ pub fn get_float_register_or_spill_load(
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
           // 值被溢出到内存，需要加载
-          let load_instr = Fld(freg_swap, {
+          let load_instr = Fld(fallback, {
             base: Fp,
             offset: -(24 + spill_offset + allocator.saved_callee_fregs.length() * 8),
           })
-          (freg_swap, [load_instr])
+          (fallback, [load_instr])
         }
         None =>
           @util.die(

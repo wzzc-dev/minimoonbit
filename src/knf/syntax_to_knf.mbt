@@ -193,8 +193,8 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
     Int64(i) => Int64(i)
     Double(d) => Double(d)
     Var(name) => Var(gen_name_from_string(name))
-    Bool(b) => if b { Int(1) } else { Int(0) }
-    Not(syn) => KnfEnv::to_knf(self, If(syn, Int(0), Int(1)))
+    Bool(b) => if b { Bool(true) } else { Bool(false) }
+    Not(syn) => KnfEnv::to_knf(self, If(syn, Bool(false), Bool(true)))
     If(condition_expr, then_expr, else_expr) => {
       match condition_expr {
         Eq(lhs, rhs) =>
@@ -261,14 +261,14 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
       }
     }
     Eq(lhs, rhs) =>
-      process_comparison(self, lhs, rhs, Int(1), Int(0),
-                       (l_name, r_name, _, _) => IfEq(l_name, r_name, Int(1), Int(0)))
+      process_comparison(self, lhs, rhs, Bool(true), Bool(false),
+                       (l_name, r_name, _, _) => IfEq(l_name, r_name, Bool(true), Bool(false)))
     LE(lhs, rhs) =>
-      process_comparison(self, lhs, rhs, Int(1), Int(0),
-                       (l_name, r_name, _, _) => IfLe(l_name, r_name, Int(1), Int(0)))
+      process_comparison(self, lhs, rhs, Bool(true), Bool(false),
+                       (l_name, r_name, _, _) => IfLe(l_name, r_name, Bool(true), Bool(false)))
     LT(lhs, rhs) =>
-      process_comparison(self, lhs, rhs, Int(1), Int(0),
-                       (l_name, r_name, _, _) => IfLt(l_name, r_name, Int(1), Int(0)))
+      process_comparison(self, lhs, rhs, Bool(true), Bool(false),
+                       (l_name, r_name, _, _) => IfLt(l_name, r_name, Bool(true), Bool(false)))
     GT(syn1, syn2) =>
       KnfEnv::to_knf(self, LT(syn2, syn1))
     GE(syn1, syn2) =>

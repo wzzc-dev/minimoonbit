@@ -9,6 +9,7 @@ pub fn emit_get_element_instruction(
   let (tuple_reg, tuple_spill_loads) = get_register_or_spill_load(
     tuple_val.id,
     allocator,
+    fallback=T0,
   )
   instrs.append(tuple_spill_loads)
   // 计算元素偏移量：index * 8

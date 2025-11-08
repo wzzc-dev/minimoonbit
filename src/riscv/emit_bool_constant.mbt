@@ -8,7 +8,11 @@ pub fn emit_bool_constant_instruction(
   let instrs = []
   let (rd, load_instrs) = get_register_or_spill_load(result_val.id, allocator)
   instrs.append(load_instrs)
-  instrs.push(Li(rd, value.to_string()))
+  if value {
+    instrs.push(Li(rd, "1"))
+  } else {
+    instrs.push(Li(rd, "0"))
+  }
   let spill_instrs = generate_spill_store_if_needed(
     result_val.id,
     rd,

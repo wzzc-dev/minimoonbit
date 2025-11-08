@@ -33,25 +33,7 @@ pub fn emit_tuple_instruction(
       }
     }
   }
-  match allocator.value_to_reg.get(result.id) {
-    Some(result_reg) =>
-      // 将分配的地址保存到结果寄存器
-      if result_reg != A0 {
-        instrs.push(Mv(result_reg, A0))
-      }
-    None =>
-      match allocator.value_to_spill.get(result.id) {
-        Some(spill_offset) =>
-          instrs.push(
-            Sd(A0, {
-              base: Fp,
-              offset: -(24 +
-              spill_offset +
-              allocator.saved_callee_regs.length() * 8),
-            }),
-          )
-        None => @util.die("No spill register found for tuple allocation")
-      }
-  }
+
+  instrs.append(store_value_to_allocator_reg_or_spill(result, A0, allocator))
   instrs
 }

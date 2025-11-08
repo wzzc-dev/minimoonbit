@@ -146,10 +146,12 @@ fn CompileStatus::step(
         Map::new()
         // Map::from_iter(externals().iter()),
       )
+      // @util.logger("closure ir: \n" + closure_ir.to_json().stringify())
       self.closure_ir = Some(closure_ir)
     }
     Ssa => {
       let ssa = @ssa.to_ssa(self.closure_ir.unwrap())
+      // @util.logger("ssa ir: \n" + ssa.to_json().stringify())
       self.ssa = Some(ssa)
     }
     Asm =>

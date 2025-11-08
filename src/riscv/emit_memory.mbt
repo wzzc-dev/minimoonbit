@@ -6,7 +6,11 @@ pub fn emit_memory_load_instruction(
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
   let instrs = []
-  let (rd, load_rd) = get_register_or_spill_load(result_val.id, allocator)
+  let (rd, load_rd) = get_register_or_spill_load(
+    result_val.id,
+    allocator,
+    fallback=T0,
+  )
   let (addr_reg, load_addr) = get_register_or_spill_load(
     address_val.id,
     allocator,
@@ -34,6 +38,7 @@ pub fn emit_memory_store_instruction(
   let (addr_reg, load_addr) = get_register_or_spill_load(
     address_val.id,
     allocator,
+    fallback=T0,
   )
   let (value_reg, load_value) = get_register_or_spill_load(
     value_val.id,
