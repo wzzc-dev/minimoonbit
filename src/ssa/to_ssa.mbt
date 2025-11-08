@@ -481,7 +481,16 @@ fn infer_expression_type(expr : @closure.Expr, context : Context) -> Type {
       }
     }
     MakeClosure((_, ty), _, _) => convert_type(ty) // 闭包值的类型需要更精确的推断
-    _ => Type::Int // 默认类型
+    Neg(_) => Type::Int
+    Bool(_) => Type::Bool
+    FNeg(_) => Type::Float
+    TupleGet(_, ty, _) => convert_type(ty)
+    LetTuple(_, _, _) => Type::Unit
+    ArrayGet(_, _) => Type::Int
+    ExternalArray(Label(_)) => Type::Int
+    ArrayPut(_, _, _) => Type::Unit
+    Assign(_, _) => Type::Unit
+    StaticArrayRef(Label(_)) => Type::Int
   }
 }
 
@@ -976,7 +985,8 @@ fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       let merge_block_id = new_block_id()
 
       // 创建合并值 - 用于接收两个分支的返回值
-      let merge_value = Value::{ id: new_value_id(), ty: Type::Int }
+      let merge_value_type = infer_expression_type(e1, context2)
+      let merge_value = Value::{ id: new_value_id(), ty: merge_value_type }
 
       // 分析两个分支中修改的变量
       let then_modified_vars = analyze_modified_variables(e1, context2.var_env)
