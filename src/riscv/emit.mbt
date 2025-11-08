@@ -1,5 +1,3 @@
-
-
 ///|
 pub(all) struct AssemblyFunction {
   name : String
@@ -278,25 +276,6 @@ fn emit_terminator_with_regalloc(
       false_block,
       false_args
     ) => {
-      
-      // 保存false分支的参数到临时寄存器（避免与true参数冲突）
-      let false_param_regs = []
-      for i, arg in false_args {
-        
-        let temp_reg = match i {
-          0 => T0
-          1 => T1
-          2 => T2
-          3 => T3
-          4 => T4
-          5 => T5
-          _ => T6
-        }
-        result.append(allocate_value_to_dest_reg(arg, temp_reg, allocator))
-        false_param_regs.push(temp_reg)
-      }
-
-      // 加载true分支的参数到寄存器（在分支指令之前）
       for i, arg in true_args {
         let dest_reg = match i {
           0 => A0
@@ -310,18 +289,19 @@ fn emit_terminator_with_regalloc(
         }
         result.append(allocate_value_to_dest_reg(arg, dest_reg, allocator))
       }
-
-      let (cond_reg, load_instrs) = get_register_or_spill_load(
-        cond.id,
-        allocator,
-      )
-      result.append(load_instrs)
-      // 生成分支指令
-      result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
-
-      // 设置false分支的参数（在分支指令之后）
-      for i = 0; i < false_param_regs.length(); i = i + 1 {
-        let temp_reg = false_param_regs[i]
+      match allocator.value_to_reg.get(cond.id) {
+        Some(cond_reg) => {
+          result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
+        }
+        None => match allocator.value_to_spill.get(cond.id) {
+          Some(spill_offset) => {
+            result.push(Ld(T0, { base: Fp, offset: -(24 + spill_offset + allocator.saved_callee_regs.length() * 8) }))
+            result.push(Bne(T0, Zero, "block_" + true_block.id.to_string()))
+          }
+          None => @util.die("TODO: 条件分支需要分配寄存器或溢出栈槽")
+        }
+      }
+      for i, arg in false_args {
         let dest_reg = match i {
           0 => A0
           1 => A1
@@ -332,9 +312,7 @@ fn emit_terminator_with_regalloc(
           6 => A6
           _ => A0
         }
-        if temp_reg != dest_reg {
-          result.push(Mv(dest_reg, temp_reg))
-        }
+        result.append(allocate_value_to_dest_reg(arg, dest_reg, allocator))
       }
       result.push(J("block_" + false_block.id.to_string()))
     }
