@@ -148,17 +148,17 @@ fn allocate_function_param_register(
   if param_index < 8 {
     // 函数参数 (A0-A7)
     let mut reg = reg_arg_list[param_index]
-    // 先判断 reg 寄存器是否已被分配
-    if allocator.available_regs.contains(reg) {
-      // 检查 live range 是否跨越 kill point。
-      if live_interval_crosses_kill_point(interval, kill_points) {
-        // 分配寄存器到
-        reg = allocator.available_regs
-          .to_array()
-          .filter(r => reg_callee_saved_list.contains(r))[0]
-      }
+    // println("\n")
+    // println(" allocate function param reg: " + reg.to_string() + " interval: " + interval.to_string())
+    if live_interval_crosses_kill_point(interval, kill_points) {
+      // println(" live interval crosses kill point: " + interval.to_string())
+      // 分配寄存器到
+      reg = allocator.available_regs
+        .to_array()
+        .filter(r => reg_callee_saved_list.contains(r))[0]
     }
     allocate_reg(allocator, reg, interval)
+    // println("\n")
     // @util.logger(" allocate reg: " + reg.to_string() + " interval: " + interval.to_string())
   } else {
     // 其他参数，溢出
@@ -181,15 +181,11 @@ fn allocate_function_param_float_register(
   if param_index < 8 {
     // 函数参数 (A0-A7)
     let mut freg = freg_arg_list[param_index]
-    // 先判断 reg 寄存器是否已被分配
-    if allocator.available_fregs.contains(freg) {
-      // 检查 live range 是否跨越 kill point。
-      if live_interval_crosses_kill_point(interval, kill_points) {
-        // 分配寄存器到
-        freg = allocator.available_fregs
-          .to_array()
-          .filter(r => freg_callee_saved_list.contains(r))[0]
-      }
+    if live_interval_crosses_kill_point(interval, kill_points) {
+      // 分配寄存器到
+      freg = allocator.available_fregs
+        .to_array()
+        .filter(r => freg_callee_saved_list.contains(r))[0]
     }
     allocate_freg(allocator, freg, interval)
     // @util.logger(" allocate reg: " + reg.to_string() + " interval: " + interval.to_string())

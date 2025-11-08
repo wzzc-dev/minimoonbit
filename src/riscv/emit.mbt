@@ -27,9 +27,7 @@ pub fn AssemblyFunction::output(
 /// 实现线性扫描寄存器分配算法
 pub fn emit(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  // println("emit riscv for ssa program: ")
-  // println(input.to_json().stringify())
-
+  // println("emit riscv for ssa program: \n" + input.to_json().stringify())
   // 遍历所有SSA函数
   for func in input.program.functions {
     let asm_func = emit_function(func)
@@ -325,9 +323,8 @@ fn emit_terminator_with_regalloc(
         }
         result.append(allocate_value_to_dest_reg(arg, dest_reg, allocator))
       }
-      match allocator.value_to_reg.get(cond.id) {
-        Some(cond_reg) =>
-          result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
+      let cond_reg = match allocator.value_to_reg.get(cond.id) {
+        Some(cond_reg) => cond_reg
         None =>
           match allocator.value_to_spill.get(cond.id) {
             Some(spill_offset) => {
@@ -339,7 +336,7 @@ fn emit_terminator_with_regalloc(
                   allocator.saved_callee_regs.length() * 8),
                 }),
               )
-              result.push(Bne(T0, Zero, "block_" + true_block.id.to_string()))
+              T0
             }
             None =>
               @util.die(
@@ -347,6 +344,7 @@ fn emit_terminator_with_regalloc(
               )
           }
       }
+      result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
       for i, arg in false_args {
         let dest_reg = match i {
           0 => A0
