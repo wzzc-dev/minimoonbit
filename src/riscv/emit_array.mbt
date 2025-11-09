@@ -40,7 +40,6 @@ pub fn emit_array_access_instruction(
       )
       instrs.append(load_result_instrs)
       instrs.push(Lw(result_reg, { base: T1, offset: 0 }))
-      
       let spill_instrs = generate_spill_store_if_needed(
         result_val.id,
         result_reg,

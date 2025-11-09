@@ -321,7 +321,10 @@ fn structDecl(
     match input {
       (((((_, UPPER_IDENTIFIER(struct_name)), None), _), None), _) =>
         @types.Syntax::Struct(struct_name, "", [], @types.Syntax::Unit)
-      (((((_, UPPER_IDENTIFIER(struct_name)), None), _), Some(structFieldList)), _) =>
+      (
+        ((((_, UPPER_IDENTIFIER(struct_name)), None), _), Some(structFieldList)),
+        _,
+      ) =>
         @types.Syntax::Struct(
           struct_name,
           "",
@@ -331,7 +334,10 @@ fn structDecl(
       (
         (
           (
-            ((_, UPPER_IDENTIFIER(struct_name)), Some(((_, UPPER_IDENTIFIER(generic)), _))),
+            (
+              (_, UPPER_IDENTIFIER(struct_name)),
+              Some(((_, UPPER_IDENTIFIER(generic)), _)),
+            ),
             _,
           ),
           Some(structFieldList),
@@ -408,7 +414,8 @@ fn enumDecl(
   .parser_and(rcurlybracket)
   .map(fn(input) {
     match input {
-      (((((_, UPPER_IDENTIFIER(enum_name)), None), _), Some(enumVariantList)), _) =>
+      (((((_, UPPER_IDENTIFIER(enum_name)), None), _), Some(enumVariantList)), _
+      ) =>
         @types.Syntax::Enum(enum_name, "", enumVariantList, @types.Syntax::Unit)
       _ => @util.die("Invalid enum decl")
     }
@@ -619,12 +626,12 @@ fn stmt(
 }
 
 // binding: IDENTIFIER | WILDCARD ;
+
+///|
 fn binding(
   tokens : ArrayView[@lex.Token],
 ) -> (@lex.Token, ArrayView[@lex.Token])? {
-  identifier
-  .or(ptoken_wildcard)
-  .parse(tokens)
+  identifier.or(ptoken_wildcard).parse(tokens)
 }
 
 ///|
@@ -646,19 +653,7 @@ fn letTupleStmt(
   .map(fn(input) {
     // @util.logger("letTupleStmt: " + input.to_string())
     match input {
-      (
-        (
-          (
-            (
-              (((_, identifier), identifiers), _),
-              type_annotation,
-            ),
-            _,
-          ),
-          expr,
-        ),
-        _,
-      ) => {
+      (((((((_, identifier), identifiers), _), type_annotation), _), expr), _) => {
         let identifier = match identifier {
           @lex.Token::IDENTIFIER(id) => id
           @lex.Token::WILDCARD => "_".to_string()
@@ -1151,7 +1146,7 @@ fn matchExpr(
   .map(fn(input) {
     // @util.logger("matchExpr input: " + input.to_string())
     match input {
-      ((_, expr), ((_, match_arm_list), _)) => 
+      ((_, expr), ((_, match_arm_list), _)) =>
         @types.Syntax::Match(expr, match_arm_list)
     }
   })
@@ -1303,10 +1298,9 @@ fn pattern(
       (Some((Some((None, Some(WILDCARD))), None)), None) =>
         @util.die("暂未实现: " + @lex.WILDCARD.to_string())
       (None, Some(IDENTIFIER(identifier))) => @types.Pattern::PVar(identifier)
-      (Some((None, Some(((UPPER_IDENTIFIER(id), None), None)))), None) =>{
+      (Some((None, Some(((UPPER_IDENTIFIER(id), None), None)))), None) =>
         // @types.Syntax::EnumConstruct(id, [])
         @types.Pattern::PEnumVariant(id, [])
-      }
       (
         Some(
           (
@@ -1695,10 +1689,10 @@ fn floatingPointExpr(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("floatingPointExpr: " + tokens.to_string())
-  Parser(floatingPointExpr1).or(floatingPointExpr2)
-  .parse(tokens)
+  Parser(floatingPointExpr1).or(floatingPointExpr2).parse(tokens)
 }
 
+///|
 fn floatingPointExpr1(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
@@ -1750,24 +1744,25 @@ fn floatingPointExpr1(
   .parse(tokens)
 }
 
+///|
 fn floatingPointExpr2(
   tokens : ArrayView[@lex.Token],
 ) -> (@types.Syntax, ArrayView[@lex.Token])? {
   // println("floatingPointExpr: " + tokens.to_string())
   ptoken_float_number
-  
   .map(fn(input) {
     match input {
       FLOAT_NUMBER(num) =>
         // println("intExpr: " + num.to_string())
         @types.Syntax::Double(num)
       _ =>
-        @util.die("floatingPointExpr: not handled, input: " + tokens.to_string())
+        @util.die(
+          "floatingPointExpr: not handled, input: " + tokens.to_string(),
+        )
     }
   })
   .parse(tokens)
 }
-
 
 // int_expr: NUMBER; // 1
 
@@ -1954,8 +1949,8 @@ fn enumConstructExpr(
   .map(fn(input) {
     // @util.logger("enumConstructExpr input: " + input.to_string())
     match input {
-      ((UPPER_IDENTIFIER(name), None), Some(((_, enum_construct_field_list), _))) =>
-        @types.Syntax::EnumConstruct(name, enum_construct_field_list)
+      ((UPPER_IDENTIFIER(name), None), Some(((_, enum_construct_field_list), _))
+      ) => @types.Syntax::EnumConstruct(name, enum_construct_field_list)
       ((UPPER_IDENTIFIER(name), None), None) =>
         @types.Syntax::EnumConstruct(name, [])
       _ => @util.die("enumConstructExpr: not handled")
@@ -2278,7 +2273,7 @@ fn[V] parse(
 let parser : Parser[@types.Syntax] = Parser(program)
 
 ///|
-pub(all) suberror ParserErr String derive(ToJson(style="flat"))
+pub(all) suberror ParserErr String derive(ToJson)
 
 ///|
 pub fn parse_from_string(str : String) -> @types.Syntax {

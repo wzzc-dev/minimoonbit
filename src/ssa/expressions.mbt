@@ -1,14 +1,20 @@
 ///| 表达式转换模块
+
 ///|
+
 ///| 提供将闭包IR表达式转换为SSA指令的功能
-///| 表达式转换结果
+
+///|
+/// 表达式转换结果
 pub struct ExprResult {
   value : Value?
   context : Context
 } derive(Show)
 
 ///|
-///| 转换闭包IR表达式为SSA指令
+
+///|
+/// 转换闭包IR表达式为SSA指令
 pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
   // @util.logger("convert_expr: " + expr.to_string())
   match expr {
@@ -98,14 +104,16 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         convert_type(tuple_type)
       } else {
         match convert_type(tuple_type) {
-          Type::Tuple(types) => types[index-1]
+          Type::Tuple(types) => types[index - 1]
           _ =>
             @util.die(
               "Expected tuple type in TupleGet: " + tuple_type.to_string(),
             )
         }
       }
-      let (result_value, new_context) = create_get_element(context, tuple_value, index, element_type)
+      let (result_value, new_context) = create_get_element(
+        context, tuple_value, index, element_type,
+      )
       ExprResult::{ value: Some(result_value), context: new_context }
     }
     ExternalArray(label) => {
@@ -120,7 +128,6 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         result: array_value,
         opcode: Opcode::CallRef(label.0, []),
       }
-
       context.current_block.instructions.push(instruction)
       ExprResult::{ value: Some(array_value), context }
     }
@@ -130,7 +137,10 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       match safe_get_var(context.var_env, rhs_name_str) {
         Ok(rhs_value) => {
           // 在SSA中，赋值操作实际上是更新变量环境
-          let updated_var_env = context.var_env.add(lhs_name.to_string(), rhs_value)
+          let updated_var_env = context.var_env.add(
+            lhs_name.to_string(),
+            rhs_value,
+          )
           let updated_context = update_var_env(context, updated_var_env)
 
           // 赋值表达式返回Unit类型
@@ -142,10 +152,9 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         }
       }
     }
-    While(cond_expr, body_expr) => {
+    While(cond_expr, body_expr) =>
       // 调用控制流模块处理While循环
       convert_while(context, cond_expr, body_expr)
-    }
     StaticArrayRef(label) => {
       // 静态数组引用：类似于ExternalArray，但引用的是静态数据段中的数组
       let array_value = Value::{
@@ -158,7 +167,6 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         result: array_value,
         opcode: Opcode::Call(Func::Label("static_array_" + label.0), []), // 使用特殊的函数名标识静态数组
       }
-
       context.current_block.instructions.push(instruction)
       ExprResult::{ value: Some(array_value), context }
     }
@@ -195,7 +203,13 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 创建结果值 - 数组元素的类型需要从数组类型中推断
       let element_type = match array_value.ty {
         Type::Array(elem_type) => elem_type
-        _ => @util.die("Expected array type in ArrayGet: name " + array_name.to_string() + ", type: " + array_value.ty.to_string())
+        _ =>
+          @util.die(
+            "Expected array type in ArrayGet: name " +
+            array_name.to_string() +
+            ", type: " +
+            array_value.ty.to_string(),
+          )
       }
       let result_value = Value::{ id: new_value_id(), ty: element_type }
       let instruction = Instruction::{
@@ -226,7 +240,13 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
 
       // 整数取负: 0 - x
       let (zero_value, context2) = create_const_int(context1, 0)
-      let (result_value, final_context) = create_binary_op(context2, BinaryOpType::Sub, zero_value, operand_value, Type::Int)
+      let (result_value, final_context) = create_binary_op(
+        context2,
+        BinaryOpType::Sub,
+        zero_value,
+        operand_value,
+        Type::Int,
+      )
       ExprResult::{ value: Some(result_value), context: final_context }
     }
     FNeg(x) => {
@@ -240,7 +260,13 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
 
       // 浮点取负: 0.0 - x
       let (zero_value, context2) = create_const_float(context1, 0.0)
-      let (result_value, final_context) = create_binary_op(context2, BinaryOpType::FSub, zero_value, operand_value, Type::Float)
+      let (result_value, final_context) = create_binary_op(
+        context2,
+        BinaryOpType::FSub,
+        zero_value,
+        operand_value,
+        Type::Float,
+      )
       ExprResult::{ value: Some(result_value), context: final_context }
     }
     Double(d) => {
@@ -279,14 +305,14 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         FMod(_, _) => (BinaryOpType::FMod, Type::Float)
         _ => @util.die("unexpected expression type")
       }
-
-      let (result_value, new_context) = create_binary_op(context, op_type, value1, value2, result_type)
+      let (result_value, new_context) = create_binary_op(
+        context, op_type, value1, value2, result_type,
+      )
       ExprResult::{ value: Some(result_value), context: new_context }
     }
-    IfEq(x, y, e1, e2) | IfLe(x, y, e1, e2) | IfLt(x, y, e1, e2) => {
+    IfEq(x, y, e1, e2) | IfLe(x, y, e1, e2) | IfLt(x, y, e1, e2) =>
       // 调用条件表达式模块处理条件分支
       convert_conditional(context, expr, x, y, e1, e2)
-    }
     Var(name) => {
       let var_name = name.to_string()
       // @util.logger("Var: " + var_name + " context.func_env: " + context.func_env.to_string())
@@ -294,7 +320,7 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 安全地查找变量
       match safe_get_var(context.var_env, var_name) {
         Ok(value) => ExprResult::{ value: Some(value), context }
-        Err(_) => {
+        Err(_) =>
           // 尝试从函数环境中查找
           match safe_get_func_type(context.func_env, var_name) {
             Ok(func_type) => {
@@ -311,11 +337,12 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
             }
             Err(_) => {
               // 变量未找到，返回None并记录警告
-              @util.logger("Warning: Variable or function not found: " + var_name)
+              @util.logger(
+                "Warning: Variable or function not found: " + var_name,
+              )
               ExprResult::{ value: None, context }
             }
           }
-        }
       }
     }
     Let((name, ty), e1, e2) => {
@@ -328,7 +355,10 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       match result1_value {
         Some(value) => {
           // 更新环境，将name映射到value
-          let updated_var_env = context1.var_env.add(name.to_string(), Value::{ id: value.id, ty: convert_type(ty) })
+          let updated_var_env = context1.var_env.add(name.to_string(), Value::{
+            id: value.id,
+            ty: convert_type(ty),
+          })
           let updated_context = Context::{
             current_block: context1.current_block,
             blocks: context1.blocks,
@@ -376,12 +406,20 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
 
       // 使用缓存的类型推断函数确定返回类型
-      let func_type = cached_infer_type(@closure.Expr::CallDirect(label, args), current_context)
+      let func_type = cached_infer_type(
+        @closure.Expr::CallDirect(label, args),
+        current_context,
+      )
       let return_type = match func_type {
         Type::Function(_, ret_type) => ret_type
-        _ => @util.die("CallDirect: not a function type: " + func_type.to_string() + " for function: " + label.0.to_string())
+        _ =>
+          @util.die(
+            "CallDirect: not a function type: " +
+            func_type.to_string() +
+            " for function: " +
+            label.0.to_string(),
+          )
       }
-      
       let opcode = match context.var_env.get(label.0.to_string()) {
         Some(v) => Opcode::Call(Func::Call(v), arg_values)
         None => Opcode::Call(Func::Label(label.0), arg_values)
@@ -442,27 +480,34 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
           None => () // 参数可能为Unit类型
         }
       }
-
       let opcode = match safe_get_var(context.var_env, func_name) {
         Ok(value) => Opcode::CallClosure(Func::Call(value), call_arg_values) // 变量环境中找到，直接使用
-        Err(_) => {
+        Err(_) =>
           // 尝试从函数环境中查找
           match safe_get_func_type(context.func_env, func_name) {
-            Ok(_) => {
+            Ok(_) =>
               Opcode::CallClosure(Func::Label(func_name), call_arg_values)
-            }
             Err(_) => {
-              @util.logger("Error: Function not found for CallClosure: " + func_name)
+              @util.logger(
+                "Error: Function not found for CallClosure: " + func_name,
+              )
               Opcode::Call(Func::Label(func_name), call_arg_values)
             }
           }
-        }
       }
-
-      let func_type = cached_infer_type(@closure.Expr::CallClosure(n, xs), current_context)
+      let func_type = cached_infer_type(
+        @closure.Expr::CallClosure(n, xs),
+        current_context,
+      )
       let return_type = match func_type {
         Type::Function(_, ret_type) => ret_type
-        _ => @util.die("CallClosure: not a function type: " + func_type.to_string() + " for function: " + func_name)
+        _ =>
+          @util.die(
+            "CallClosure: not a function type: " +
+            func_type.to_string() +
+            " for function: " +
+            func_name,
+          )
       }
       // 闭包调用时，需要先传递捕获的变量（自由变量），然后传递调用时的参数
       // 但在当前的CallClosure实现中，我们只需要传递调用参数
@@ -471,10 +516,7 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // println("CallClosure result_value: " + result_value.to_string())
       // println("CallClosure name: " + func_name)
 
-      let instruction = Instruction::{
-        result: result_value,
-        opcode: opcode,
-      }
+      let instruction = Instruction::{ result: result_value, opcode }
 
       // 更新当前块的指令列表
       context.current_block.instructions.push(instruction)

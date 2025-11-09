@@ -1,9 +1,7 @@
-///| SSA类型定义和转换相关功能
-///|
-///| 从@closure.LowType和@types.Type转换到SSA Type
+// SSA类型定义和转换相关功能 从@closure.LowType和@types.Type转换到SSA Type
 
 ///|
-///| 转换类型
+/// 转换类型
 pub fn convert_type(ty : @closure.LowType) -> Type {
   match ty {
     Unit => Type::Unit
@@ -21,7 +19,7 @@ pub fn convert_type(ty : @closure.LowType) -> Type {
 }
 
 ///|
-///| 从 @types.Type 转换到 SSA Type
+/// 从 @types.Type 转换到 SSA Type
 pub fn convert_type_from_types(ty : @types.Type) -> Type {
   match ty {
     @types.Type::Unit => Type::Unit

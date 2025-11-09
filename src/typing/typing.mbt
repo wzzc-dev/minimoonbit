@@ -1,5 +1,5 @@
 ///|
-pub(all) suberror TyErr String derive(ToJson(style="flat"))
+pub(all) suberror TyErr String derive(ToJson)
 
 ///|
 fn unify(t1 : @types.Type, t2 : @types.Type) -> Unit raise TyErr {
@@ -263,10 +263,9 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       // }
       // println("infer var: " + x)
       match ctx.inner().get(x) {
-        Some(t) => {
+        Some(t) =>
           // println("infer: " + x + " is " + t.to_string())
           t.repr()
-        }
         None =>
           match extenv.get(x) {
             Some(t) => t.repr()
@@ -829,14 +828,11 @@ pub let extenv : Map[String, @types.Type] = {
   "print_char": Fun([Int], Unit),
   "print_newline": Fun([], Unit),
   "print_endline": Fun([], Unit),
-
   "int_of_float": Fun([Double], Int),
   "float_of_int": Fun([Int], Double),
-
   "create_array": Fun([Int, Int], @types.Type::Array(Int)),
   "create_float_array": Fun([Int, Double], @types.Type::Array(Double)),
   "create_ptr_array": Fun([Int, Ptr], @types.Type::Array(Ptr)),
-
   "truncate": Fun([Double], Int),
   "abs_float": Fun([Double], Double),
   "sqrt": Fun([Double], Double),

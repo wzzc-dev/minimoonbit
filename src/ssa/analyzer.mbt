@@ -190,7 +190,7 @@ pub fn infer_expression_type(expr : @closure.Expr, context : Context) -> Type {
           }
         }
       }
-    CallClosure(name, _) => {
+    CallClosure(name, _) =>
       // @util.logger(
       //   "infer_expression_type CallClosure name: " + name.to_string(),
       // )
@@ -219,7 +219,6 @@ pub fn infer_expression_type(expr : @closure.Expr, context : Context) -> Type {
               }
           }
       }
-    }
     MakeClosure((_, ty), _, _) => convert_type(ty) // 闭包值的类型需要更精确的推断
     Neg(_) => Type::Int
     Bool(_) => Type::Bool

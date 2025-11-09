@@ -26,7 +26,6 @@ pub fn Knf::to_json(self : Knf) -> Json {
       ["IfLt", n1.to_json(), n2.to_json(), k1.to_json(), k2.to_json()]
     Let((n, t), k1, k2) =>
       ["Let", [n.to_json(), t.to_json()], k1.to_json(), k2.to_json()]
-      
     Var(n) => ["Var", n.to_json()]
     LetRec(f, k) => ["LetRec", f.to_json(), k.to_json()]
     Apply(n, ns) => ["Apply", n.to_json(), ns.to_json()]
@@ -44,11 +43,12 @@ pub fn Knf::to_json(self : Knf) -> Json {
     ExternalArray(n) => ["ExternalArray", n.to_json()]
     ExternalFunctionApplication(s, ns) =>
       ["ExternalFunctionApplication", s.to_json(), ns.to_json()]
-    While(cond, body) =>
-      ["While", cond.to_json(), body.to_json()]
+    While(cond, body) => ["While", cond.to_json(), body.to_json()]
     Assign(n1, n2) => ["Assign", n1.to_json(), n2.to_json()]
-    FieldAccess(n1, t, n2) => ["FieldAccess", n1.to_json(), t.to_json(), n2.to_json()]
-    ArrayData(label, data) => ["ArrayData", label.to_json(), data.map(fn(d) { d.to_json() })]
+    FieldAccess(n1, t, n2) =>
+      ["FieldAccess", n1.to_json(), t.to_json(), n2.to_json()]
+    ArrayData(label, data) =>
+      ["ArrayData", label.to_json(), data.map(fn(d) { d.to_json() })]
   }
 }
 
@@ -62,11 +62,9 @@ pub fn FuncDef::to_json(self : FuncDef) -> Json {
   }
 }
 
+///|
 pub fn StructDef::to_json(self : StructDef) -> Json {
-  {
-    "name": self.name.to_json(),
-    "fields": self.fields.to_json(),
-  }
+  { "name": self.name.to_json(), "fields": self.fields.to_json() }
 }
 
 ///|
@@ -169,6 +167,7 @@ pub fn FuncDef::from_json(json : Json) -> FuncDef raise {
   }
 }
 
+///|
 pub fn StructDef::from_json(json : Json) -> StructDef raise {
   match json {
     { "name": n, "fields": Array(fields), .. } => {
@@ -179,10 +178,7 @@ pub fn StructDef::from_json(json : Json) -> StructDef raise {
           _ => fail("StructDef::from_json: invalid json: \{json}")
         }
       }
-      {
-        name: Name::from_json(n),
-        fields: rfields,
-      }
+      { name: Name::from_json(n), fields: rfields }
     }
     _ => fail("StructDef::from_json: invalid json: \{json}")
   }

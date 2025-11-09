@@ -11,7 +11,7 @@ pub(all) enum LowTypeValue {
   IntValue(Int)
   DoubleValue(Double)
   PtrValue(Array[LowTypeValue])
-} derive(Show, ToJson(style="flat"))
+} derive(Show, ToJson)
 
 ///|
 pub(all) struct Label(String) derive(Show, ToJson)
@@ -52,7 +52,6 @@ pub(all) enum Expr {
   MakeTuple(Array[Name])
   LetTuple(Array[(Name, LowType)], Name, Expr)
   TupleGet(Name, LowType, Int)
-
   ArrayGet(Name, Name)
   ArrayPut(Name, Name, Name)
   ExternalArray(Label)
@@ -60,7 +59,7 @@ pub(all) enum Expr {
   Assign(Name, Name)
   /// Reference to static array data in data segment
   StaticArrayRef(Label)
-} derive(Show, ToJson(style="flat"))
+} derive(Show, ToJson)
 
 ///|
 pub(all) struct Closure {

@@ -21,7 +21,8 @@ pub fn Value::to_json(self : Value) -> Json {
 /// Value结构体的JSON反序列化
 pub fn Value::from_json(json : Json) -> Value raise {
   match json {
-    { "value_id": id, "type": ty, .. } => Value::{ id: id.as_number().unwrap().to_int(), ty: Type::from_json(ty) }
+    { "value_id": id, "type": ty, .. } =>
+      Value::{ id: id.as_number().unwrap().to_int(), ty: Type::from_json(ty) }
     _ => fail("invalid json for Value")
   }
 }
@@ -40,6 +41,7 @@ pub fn Block::from_json(json : Json) -> Block raise {
     _ => fail("invalid json for Block")
   }
 }
+
 ///|
 /// Opcode枚举的JSON序列化
 pub fn Opcode::to_json(self : Opcode) -> Json {
@@ -63,7 +65,6 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
     Opcode::Le(v1, v2) => ["Le", v1.to_json(), v2.to_json()]
     Opcode::Gt(v1, v2) => ["Gt", v1.to_json(), v2.to_json()]
     Opcode::Ge(v1, v2) => ["Ge", v1.to_json(), v2.to_json()]
-  
     Opcode::Alloc(ty) => ["Alloc", ty.to_json()]
     Opcode::Load(value) => ["Load", value.to_json()]
     Opcode::Store(v1, v2) => ["Store", v1.to_json(), v2.to_json()]
@@ -116,7 +117,6 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
     ["Le", v1, v2] => Opcode::Le(Value::from_json(v1), Value::from_json(v2))
     ["Gt", v1, v2] => Opcode::Gt(Value::from_json(v1), Value::from_json(v2))
     ["Ge", v1, v2] => Opcode::Ge(Value::from_json(v1), Value::from_json(v2))
-
     ["Alloc", ty] => Opcode::Alloc(Type::from_json(ty))
     ["Load", value] => Opcode::Load(Value::from_json(value))
     ["Store", v1, v2] =>
@@ -166,19 +166,21 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
   }
 }
 
+///|
 pub fn Func::from_json(json : Json) -> Func raise {
   match json {
     String(name) => Func::Label(name)
     value => Func::Call(Value::from_json(value))
   }
-} 
+}
+
+///|
 fn Func::to_json(self : Func) -> Json {
   match self {
     Func::Label(name) => name.to_json()
     Func::Call(value) => value.to_json()
   }
 }
-
 
 ///|
 /// Instruction结构体的JSON序列化
@@ -198,6 +200,7 @@ pub fn Instruction::from_json(json : Json) -> Instruction raise {
     _ => fail("invalid json for Instruction")
   }
 }
+
 ///|
 /// BasicBlock结构体的JSON序列化
 pub fn BasicBlock::to_json(self : BasicBlock) -> Json {
@@ -223,7 +226,7 @@ pub fn BasicBlock::from_json(json : Json) -> BasicBlock raise {
       let params_res = []
       for p in params {
         match p {
-          value => params_res.push(Value::from_json(value)) 
+          value => params_res.push(Value::from_json(value))
         }
       }
       let instructions_res = []
@@ -252,7 +255,14 @@ pub fn Terminator::to_json(self : Terminator) -> Json {
     Terminator::Branch(value, block1, values1, block2, values2) => {
       let values1_json = values1.map(Value::to_json)
       let values2_json = values2.map(Value::to_json)
-      ["Branch", value.to_json(), block1.to_json(), values1_json, block2.to_json(), values2_json]
+      [
+        "Branch",
+        value.to_json(),
+        block1.to_json(),
+        values1_json,
+        block2.to_json(),
+        values2_json,
+      ]
     }
     Terminator::Return(value) =>
       match value {
@@ -305,7 +315,6 @@ pub fn Terminator::from_json(json : Json) -> Terminator raise {
   }
 }
 
-
 ///|
 /// Function结构体的JSON序列化
 pub fn Function::to_json(self : Function) -> Json {
@@ -334,8 +343,7 @@ pub fn Function::from_json(json : Json) -> Function raise {
       let params_res = []
       for p in params {
         match p {
-          value =>
-            params_res.push((Value::from_json(value)))
+          value => params_res.push(Value::from_json(value))
         }
       }
       let closure_param_res = []
@@ -358,6 +366,7 @@ pub fn Function::from_json(json : Json) -> Function raise {
     _ => fail("invalid json for Function")
   }
 }
+
 ///|
 /// Program结构体的JSON序列化
 pub fn Program::to_json(self : Program) -> Json {

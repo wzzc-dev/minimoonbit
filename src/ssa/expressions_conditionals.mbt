@@ -1,16 +1,20 @@
 ///| 条件表达式处理模块
+
 ///|
+
 ///| 提供将闭包IR中的条件表达式（IfEq、IfLe、IfLt）转换为SSA指令的功能
 
 ///|
-///| 转换条件表达式为SSA指令
+
+///|
+/// 转换条件表达式为SSA指令
 pub fn convert_conditional(
   context : Context,
   expr : @closure.Expr,
   x : @types.Name,
   y : @types.Name,
   e1 : @closure.Expr,
-  e2 : @closure.Expr
+  e2 : @closure.Expr,
 ) -> ExprResult {
   // 先转换条件表达式的左操作数
   let result1 = convert_expr(context, @closure.Expr::Var(x))
@@ -59,7 +63,9 @@ pub fn convert_conditional(
 
   // 如果有变量修改，创建合并块的参数
   let merge_params = []
-  let all_modified_vars = merge_modified_vars(then_modified_vars, else_modified_vars)
+  let all_modified_vars = merge_modified_vars(
+    then_modified_vars, else_modified_vars,
+  )
   for var_name in all_modified_vars.keys() {
     match all_modified_vars.get(var_name) {
       Some(original_value) => {
@@ -103,7 +109,11 @@ pub fn convert_conditional(
 
   // 更新当前块的终止指令
   let terminator = Terminator::Branch(
-    cmp_result, then_block_id, [], else_block_id, [],
+    cmp_result,
+    then_block_id,
+    [],
+    else_block_id,
+    [],
   )
   let updated_current_block = BasicBlock::{
     id: context2.current_block.id,
@@ -113,8 +123,12 @@ pub fn convert_conditional(
   }
 
   // 使用辅助函数更新块列表
-  let mut context_with_blocks = add_block_to_context(context2, updated_current_block)
-  context_with_blocks = add_blocks_to_context(context_with_blocks, [then_block, else_block, merge_block])
+  let mut context_with_blocks = add_block_to_context(
+    context2, updated_current_block,
+  )
+  context_with_blocks = add_blocks_to_context(context_with_blocks, [
+    then_block, else_block, merge_block,
+  ])
   context_with_blocks = update_current_block(context_with_blocks, then_block)
   context_with_blocks = update_var_env(context_with_blocks, context2.var_env)
 
@@ -130,7 +144,8 @@ pub fn convert_conditional(
         let first_var_name = var_names[0]
         match then_context.var_env.get(first_var_name) {
           Some(var_val) => var_val
-          None => @util.die("Failed to get modified variable value in then branch")
+          None =>
+            @util.die("Failed to get modified variable value in then branch")
         }
       } else {
         Value::{ id: new_value_id(), ty: Type::Unit }
@@ -146,16 +161,14 @@ pub fn convert_conditional(
     let var_name = var_names[i]
     let var_value = match then_context.var_env.get(var_name) {
       Some(current_val) => current_val
-      None => {
+      None =>
         match all_modified_vars.get(var_name) {
           Some(original_val) => original_val
           None => merge_params[i]
         }
-      }
     }
     then_args.push(var_value)
   }
-
   let updated_then_block = BasicBlock::{
     id: then_context.current_block.id,
     params: then_context.current_block.params,
@@ -179,7 +192,8 @@ pub fn convert_conditional(
         let first_var_name = var_names[0]
         match final_else_context.var_env.get(first_var_name) {
           Some(var_val) => var_val
-          None => @util.die("Failed to get modified variable value in else branch")
+          None =>
+            @util.die("Failed to get modified variable value in else branch")
         }
       } else {
         // 如果 else 分支没有返回值和修改变量，尝试使用外部环境中的值
@@ -204,16 +218,14 @@ pub fn convert_conditional(
     let var_name = var_names[i]
     let var_value = match final_else_context.var_env.get(var_name) {
       Some(current_val) => current_val
-      None => {
+      None =>
         match all_modified_vars.get(var_name) {
           Some(original_val) => original_val
           None => merge_params[i]
         }
-      }
     }
     else_args.push(var_value)
   }
-
   let updated_else_block = BasicBlock::{
     id: final_else_context.current_block.id,
     params: final_else_context.current_block.params,
@@ -222,7 +234,9 @@ pub fn convert_conditional(
   }
 
   // 使用辅助函数更新最终块
-  let mut final_context = add_block_to_context(final_else_context, updated_then_block)
+  let mut final_context = add_block_to_context(
+    final_else_context, updated_then_block,
+  )
   final_context = add_block_to_context(final_context, updated_else_block)
   final_context = add_block_to_context(final_context, merge_block)
   final_context = update_current_block(final_context, merge_block)
@@ -233,10 +247,12 @@ pub fn convert_conditional(
     let var_name = var_names[i]
     let param_index = if merge_params.length() > 0 { i + 1 } else { 0 }
     if param_index < final_merge_params.length() {
-      updated_var_env = updated_var_env.add(var_name, final_merge_params[param_index])
+      updated_var_env = updated_var_env.add(
+        var_name,
+        final_merge_params[param_index],
+      )
     }
   }
-
   final_context = update_var_env(final_context, updated_var_env)
 
   // 返回合并值作为结果

@@ -7,7 +7,8 @@ struct MemAccess[TBase, TOff] {
 ///|
 struct Label(String) derive(Show, Eq, Hash)
 
-///| RISC-V register
+///|
+/// RISC-V register
 pub(all) enum Reg {
   Zero
   Ra
@@ -130,7 +131,8 @@ impl Show for Reg with output(self, logger : &Logger) {
   logger.write_string(self.to_string())
 }
 
-///| RISC-V floating point register
+///|
+/// RISC-V floating point register
 pub(all) enum FReg {
   Ft0
   Ft1

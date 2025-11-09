@@ -48,7 +48,6 @@ pub(all) enum Opcode {
   Load(Value)
   Store(Value, Value)
 
-  
   // 函数调用
   Call(Func, Array[Value])
   // 函数引用
@@ -67,6 +66,7 @@ pub(all) enum Opcode {
   ArrayPut(Value, Value, Value)
 } derive(Show)
 
+///|
 pub(all) enum Func {
   Label(String)
   Call(Value)
@@ -79,7 +79,6 @@ pub(all) struct Instruction {
   opcode : Opcode // 操作码
 } derive(Show)
 
-
 ///|
 /// 基本块
 pub(all) struct BasicBlock {
@@ -89,8 +88,6 @@ pub(all) struct BasicBlock {
   terminator : Terminator // 终止指令
 } derive(Show)
 
-
-
 ///|
 /// 终止指令
 pub(all) enum Terminator {
@@ -98,7 +95,6 @@ pub(all) enum Terminator {
   Branch(Value, Block, Array[Value], Block, Array[Value]) // 条件分支，支持为每个目标传递参数
   Return(Value?) // 函数返回
 } derive(Show)
-
 
 ///|
 /// 函数定义
@@ -111,15 +107,12 @@ pub(all) struct Function {
   blocks : Array[BasicBlock] // 基本块列表
 } derive(Show)
 
-
 ///|
 /// SSA程序
 pub(all) struct Program {
   functions : Array[Function] // 函数定义列表
   static_arrays : Array[@closure.StaticArrayData] // 静态数组数据
 } derive(Show)
-
-
 
 ///|
 /// 类型系统
@@ -133,7 +126,6 @@ pub(all) enum Type {
   Tuple(Array[Type])
   Array(Type)
 } derive(Show, Eq, Hash)
-
 
 ///|
 /// SSA中间表示主结构

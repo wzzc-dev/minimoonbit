@@ -1,11 +1,3 @@
-///| 寄存器分配辅助函数
-
-///|
-
-///| 提供寄存器获取、溢出存储等辅助功能
-
-///|
-
 ///|
 /// 生成溢出存储指令（如果需要）
 pub fn generate_spill_store_if_needed(
@@ -24,8 +16,6 @@ pub fn generate_spill_store_if_needed(
     None => [] // 不需要溢出存储
   }
 }
-
-///|
 
 ///|
 /// 获取值对应的寄存器或生成溢出加载代码
@@ -58,8 +48,6 @@ pub fn get_register_or_spill_load(
 }
 
 ///|
-
-///|
 /// 获取浮点寄存器或生成溢出加载代码
 pub fn get_float_register_or_spill_load(
   value_id : Int,
@@ -90,8 +78,6 @@ pub fn get_float_register_or_spill_load(
       }
   }
 }
-
-///|
 
 ///|
 /// 生成浮点溢出存储指令（如果需要）
@@ -214,14 +200,18 @@ fn store_value_to_allocator_freg_or_spill(
               allocator.saved_callee_regs.length() * 8),
             }),
           )
-        None => fail("store_value_to_allocator_freg_or_spill 分配寄存器或溢出栈槽: " + value.id.to_string())
+        None =>
+          fail(
+            "store_value_to_allocator_freg_or_spill 分配寄存器或溢出栈槽: " +
+            value.id.to_string(),
+          )
       }
   }
   result
 }
-// 移动基本块参数到目标寄存器或溢出栈槽
 
 ///|
+/// 移动基本块参数到目标寄存器或溢出栈
 fn move_block_params_to_target_reg_or_spill(
   block_map : @hashmap.HashMap[@ssa.Block, @ssa.BasicBlock],
   args : Array[@ssa.Value],

@@ -286,6 +286,7 @@ let ptoken_cmp_operator : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
+///|
 let ptoken_enum : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::ENUM => true
@@ -293,6 +294,7 @@ let ptoken_enum : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
+///|
 let ptoken_match : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::MATCH => true
@@ -300,6 +302,7 @@ let ptoken_match : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
+///|
 let ptoken_true : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::TRUE => true
@@ -307,6 +310,7 @@ let ptoken_true : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
+///|
 let ptoken_false : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::FALSE => true
@@ -314,6 +318,7 @@ let ptoken_false : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
+///|
 let ptoken_wildcard : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::WILDCARD => true
@@ -321,7 +326,7 @@ let ptoken_wildcard : Parser[@lex.Token] = ptoken(fn(input) {
   }
 })
 
-
+///|
 let ptoken_gt : Parser[@lex.Token] = ptoken(fn(input) {
   match input {
     @lex.Token::CMP_OPERATOR(">") => true

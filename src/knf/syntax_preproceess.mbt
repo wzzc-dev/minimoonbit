@@ -19,22 +19,22 @@ pub fn KnfEnv::syntax_preprocess(
       }
     Let((str, ty), s1, s2) =>
       match s1 {
-        ArrayExpr(elems) => {
+        ArrayExpr(elems) =>
           // Check if this is a static array (all elements are constants)
           if KnfEnv::is_static_array(elems) {
             // Generate a unique label for this static array
-            
+
             // Add the array data to the environment
             let array_data = KnfEnv::extract_array_data(elems)
-           
+
             // Create ExternalArray reference
             Let(
               (str, ty),
               ArrayData(str, array_data),
-              KnfEnv::syntax_preprocess({
-                counter: self.counter,
-                externals: self.externals,
-              }, s2),
+              KnfEnv::syntax_preprocess(
+                { counter: self.counter, externals: self.externals },
+                s2,
+              ),
             )
           } else {
             // Check if this is a multidimensional array by examining first element
@@ -50,7 +50,6 @@ pub fn KnfEnv::syntax_preprocess(
               KnfEnv::process_1d_array(self, str, ty, elems, s2)
             }
           }
-        }
         Array(len, ArrayExpr(elems)) => {
           let elems_len = elems.length()
           // Create Array::make(len, default_value) where default_value is based on first expr
@@ -61,22 +60,23 @@ pub fn KnfEnv::syntax_preprocess(
           let mut sub_result = array_make
           for i = elems_len - 1; i >= 0; i = i - 1 {
             // Wrap the previous result with this Put operation
-            sub_result = Let(("_", Unit), Put(Var(str + "_sub"), Int(i), elems[i]), sub_result)
+            sub_result = Let(
+              ("_", Unit),
+              Put(Var(str + "_sub"), Int(i), elems[i]),
+              sub_result,
+            )
           }
-
-          
           let sub_ty = match elems[0] {
             Int(_) => @types.Type::Int
             Double(_) => @types.Type::Double
             _ => Ptr
           }
-          let sub = @types.Syntax::Let((str + "_sub", Array(sub_ty)), array_make_sub, sub_result)
-
-          Let(
-            (str, ty),
-            sub,
-            KnfEnv::syntax_preprocess(self, s2),
+          let sub = @types.Syntax::Let(
+            (str + "_sub", Array(sub_ty)),
+            array_make_sub,
+            sub_result,
           )
+          Let((str, ty), sub, KnfEnv::syntax_preprocess(self, s2))
         }
         _ =>
           Let(
@@ -121,14 +121,13 @@ pub fn KnfEnv::syntax_preprocess(
 fn KnfEnv::is_static_array(elems : Array[@types.Syntax]) -> Bool {
   for elem in elems {
     match elem {
-      Int(_) | Double(_) | Bool(_) | Neg(_, ..) => ()  // These are constants
-      ArrayExpr(sub_elems) => {
+      Int(_) | Double(_) | Bool(_) | Neg(_, ..) => () // These are constants
+      ArrayExpr(sub_elems) =>
         // Recursively check if nested array is static
         if not(KnfEnv::is_static_array(sub_elems)) {
           return false
         }
-      }
-      _ => return false  // Not a constant
+      _ => return false // Not a constant
     }
   }
   true
@@ -136,7 +135,9 @@ fn KnfEnv::is_static_array(elems : Array[@types.Syntax]) -> Bool {
 
 ///|
 /// Extract array data for static arrays
-fn KnfEnv::extract_array_data(elems : Array[@types.Syntax]) -> Array[@types.Syntax] {
+fn KnfEnv::extract_array_data(
+  elems : Array[@types.Syntax],
+) -> Array[@types.Syntax] {
   elems
 }
 

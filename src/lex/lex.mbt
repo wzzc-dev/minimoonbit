@@ -51,7 +51,7 @@ pub fn julex(context : Context) -> Unit {
         array.push(ASSIGN)
         context.offset += 1
       }
-    '!' => {
+    '!' =>
       if str[context.offset + 1] == '=' {
         array.push(CMP_OPERATOR("!="))
         context.offset += 2
@@ -59,8 +59,7 @@ pub fn julex(context : Context) -> Unit {
         array.push(NOT)
         context.offset += 1
       }
-    }
-    '>' => {
+    '>' =>
       if str[context.offset + 1] == '=' {
         array.push(CMP_OPERATOR(">="))
         context.offset += 2
@@ -68,7 +67,6 @@ pub fn julex(context : Context) -> Unit {
         array.push(CMP_OPERATOR(">"))
         context.offset += 1
       }
-    }
     '<' =>
       if str[context.offset + 1] == '=' {
         array.push(CMP_OPERATOR("<="))
@@ -77,22 +75,20 @@ pub fn julex(context : Context) -> Unit {
         array.push(CMP_OPERATOR("<"))
         context.offset += 1
       }
-    '&' => {
+    '&' =>
       if str[context.offset + 1] == '&' {
         array.push(AND)
         context.offset += 2
       } else {
         @util.die("Invalid character: " + str[context.offset + 1].to_string())
       }
-    }
-    '|' => {
+    '|' =>
       if str[context.offset + 1] == '|' {
         array.push(OR)
         context.offset += 2
       } else {
         @util.die("Invalid character: " + str[context.offset + 1].to_string())
       }
-    }
     '(' => {
       array.push(LPAREN)
       context.offset += 1
@@ -153,7 +149,6 @@ fn lex_number_rest(context : Context, number : String) -> Unit {
   // println("lex_number_rest: " + number)
   let { offset, str, array } = context
   let number_ = (try? @strconv.parse_int64(number)).unwrap()
-  
   if offset >= str.length() {
     if number_ > 0x7fffffff {
       array.push(BIG_NUMBER(number_))
@@ -166,18 +161,14 @@ fn lex_number_rest(context : Context, number : String) -> Unit {
   if ch >= '0' && ch <= '9' {
     context.offset += 1
     lex_number_rest(context, number + ch.to_string())
-  } 
-  else if ch == '.' {
+  } else if ch == '.' {
     // 处理浮点数的小数部分
     context.offset += 1
     lex_float_rest(context, number + ".")
-  } 
-  else {
-    if number_ > 0x7fffffff {
-      array.push(BIG_NUMBER(number_))
-    } else {
-      array.push(NUMBER(number_.to_int()))
-    }
+  } else if number_ > 0x7fffffff {
+    array.push(BIG_NUMBER(number_))
+  } else {
+    array.push(NUMBER(number_.to_int()))
   }
 }
 
@@ -185,13 +176,11 @@ fn lex_number_rest(context : Context, number : String) -> Unit {
 fn lex_float_rest(context : Context, number : String) -> Unit {
   // println("lex_float_rest: " + number)
   let { offset, str, array } = context
-  
   if offset >= str.length() {
     let float_number = (try? @strconv.parse_double(number)).unwrap()
     array.push(FLOAT_NUMBER(float_number))
     return
   }
-  
   let ch = str.get_char(offset).unwrap()
   if ch >= '0' && ch <= '9' {
     context.offset += 1
@@ -201,6 +190,7 @@ fn lex_float_rest(context : Context, number : String) -> Unit {
     array.push(FLOAT_NUMBER(float_number))
   }
 }
+
 ///|
 fn lex_other_rest(context : Context, ident : String) -> Unit {
   let { str, offset, array } = context
@@ -242,13 +232,12 @@ fn matchIdentifier(ident : String) -> Token {
     "mut" => MUT
     "while" => WHILE
     "return" => RETURN
-    _ => {
+    _ =>
       if ident[0] >= 'A' && ident[0] <= 'Z' {
         UPPER_IDENTIFIER(ident)
       } else {
         IDENTIFIER(ident)
       }
-    }
   }
 }
 
@@ -303,51 +292,40 @@ pub(all) enum Token {
   RETURN
 } derive(Show)
 
+///|
 test {
   let tokens = []
-  let source = #| fn main() {
-               #|    let hello = "world"
-               #|    println(hello)
-               #| }
+  let source =
+    #| fn main() {
+    #|    let hello = "world"
+    #|    println(hello)
+    #| }
   println(source)
-  julex(
-    {
-      str: source,
-      offset: 0,
-      array: tokens,
-    },
-  )
+  julex({ str: source, offset: 0, array: tokens })
   println(tokens)
 
   // let (prog, _) = parseType(tokens[:]).unwrap()
   // println(prog)  
 
 }
+
+///|
 test {
   let tokens = []
-  julex(
-    {
-      str: "let x = x",
-      offset: 0,
-      array: tokens,
-    },
-  )
+  julex({ str: "let x = x", offset: 0, array: tokens })
   println(tokens)
 
   // let (prog, _) = parseType(tokens[:]).unwrap()
   // println(prog)  
 }
+
+///|
 test {
   let tokens = []
-  let _test2 = @fs.read_file_to_string("contest-2025-data/test_cases/mbt/test.mbt")
+  let _test2 = @fs.read_file_to_string(
+    "contest-2025-data/test_cases/mbt/test.mbt",
+  )
   println(_test2)
-  julex(
-    {
-      str: _test2,
-      offset: 0,
-      array: tokens,
-    },
-  )
+  julex({ str: _test2, offset: 0, array: tokens })
   println(tokens)
-  
 }

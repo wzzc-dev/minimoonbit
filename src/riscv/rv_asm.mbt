@@ -297,7 +297,7 @@ impl Show for RvAsm with output(self, logger) {
     Data(label, data) => {
       logger.write_string(label)
       logger.write_string(" ")
-      for index,i in data {
+      for index, i in data {
         logger.write_string(i)
         if index != data.length() - 1 {
           logger.write_string(", ")

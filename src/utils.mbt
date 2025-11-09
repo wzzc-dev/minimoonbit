@@ -207,7 +207,12 @@ pub fn Syntax::to_json(self : Syntax) -> Json {
         arms.map(fn(input) { (input.0.to_json(), input.1.to_json()) }),
       ]
     ExternalArray(label) => ["ExternalArray", label |> Json::string]
-    ArrayData(label, es) => ["ArrayData", label |> Json::string, es.map(Syntax::to_json) |> Json::array]
+    ArrayData(label, es) =>
+      [
+        "ArrayData",
+        label |> Json::string,
+        es.map(Syntax::to_json) |> Json::array,
+      ]
   }
 }
 

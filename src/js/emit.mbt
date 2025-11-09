@@ -19,10 +19,7 @@ pub fn emit(input : @closure.Program) -> String {
       output += "function \{name.0.to_string()}(env, "
 
       // 添加函数参数
-      output += Array::join(
-        func.args.map(fn(arg) { arg.0.to_string() }),
-        ", ",
-      )
+      output += Array::join(func.args.map(fn(arg) { arg.0.to_string() }), ", ")
       output += ") {\n"
       // 从环境变量中获取闭包
       for i, fv in func.formal_free_vars {
@@ -34,10 +31,7 @@ pub fn emit(input : @closure.Program) -> String {
       output += "\n}\n\n"
     } else {
       output += "function \{name.0.to_string()}("
-      output += Array::join(
-        func.args.map(fn(arg) { arg.0.to_string() }),
-        ",",
-      )
+      output += Array::join(func.args.map(fn(arg) { arg.0.to_string() }), ",")
       output += ") {\n"
       output += "  return "
       output += emit_expr(func.body)
@@ -103,7 +97,6 @@ fn emit_expr(expr : @closure.Expr) -> String {
       "\n} else {\n  " +
       emit_expr(e4) +
       "\n}"
-    
     Let((name, _), e1, e2) => // 先生成绑定，然后继续处理剩余表达式
       "(() => {\n  " +
       "const \{name} = " +
@@ -161,10 +154,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
     LetTuple(names_tys, e1, e2) =>
       "(() => {\n  " +
       "const " +
-      Array::join(
-        names_tys.map(fn(name) { name.0.to_string() }),
-        ",",
-      ) +
+      Array::join(names_tys.map(fn(name) { name.0.to_string() }), ",") +
       " = " +
       e1.to_string() +
       ";\n  " +
@@ -173,20 +163,15 @@ fn emit_expr(expr : @closure.Expr) -> String {
       ";\n" +
       "})()"
     ArrayGet(e1, e2) => e1.to_string() + "[" + e2.to_string() + "]"
-    ArrayPut(e1, e2, e3) => {
-  
+    ArrayPut(e1, e2, e3) =>
       e1.to_string() + "[" + e2.to_string() + "] = " + e3.to_string() + ";"
-    }
     ExternalArray(e) => e.0.to_string()
     While(cond, body) =>
-      "while (" +
-      cond.to_string() +
-      ") {\n  " +
-      emit_expr(body) +
-      "\n}"
+      "while (" + cond.to_string() + ") {\n  " + emit_expr(body) + "\n}"
     Assign(x, y) => x.to_string() + " = " + y.to_string()
     Unit => "undefined"
-    TupleGet(tuple, _, index) => tuple.to_string() + "[" + index.to_string() + "]"
+    TupleGet(tuple, _, index) =>
+      tuple.to_string() + "[" + index.to_string() + "]"
     StaticArrayRef(Label(_)) => "undefined"
   }
 }

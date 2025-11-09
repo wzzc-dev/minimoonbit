@@ -1,8 +1,11 @@
 ///| 二元运算模块
+
 ///|
+
 ///| 提供创建二元运算指令的功能
 
-///| 二元运算类型
+///|
+/// 二元运算类型
 pub enum BinaryOpType {
   Add
   Sub
@@ -16,13 +19,14 @@ pub enum BinaryOpType {
   FMod
 }
 
-///| 创建二元运算指令
+///|
+/// 创建二元运算指令
 pub fn create_binary_op(
   context : Context,
   op_type : BinaryOpType,
   left : Value,
   right : Value,
-  result_type : Type
+  result_type : Type,
 ) -> (Value, Context) {
   let result_value = Value::{ id: new_value_id(), ty: result_type }
   let opcode = match op_type {
@@ -37,18 +41,18 @@ pub fn create_binary_op(
     BinaryOpType::FDiv => Opcode::FDiv(left, right)
     BinaryOpType::FMod => Opcode::FMod(left, right)
   }
-
   let instruction = Instruction::{ result: result_value, opcode }
   context.current_block.instructions.push(instruction)
   (result_value, context)
 }
 
-///| 创建GetElement指令
+///|
+/// 创建GetElement指令
 pub fn create_get_element(
   context : Context,
   tuple_value : Value,
   index : Int,
-  element_type : Type
+  element_type : Type,
 ) -> (Value, Context) {
   let element_value = Value::{ id: new_value_id(), ty: element_type }
   let instruction = Instruction::{

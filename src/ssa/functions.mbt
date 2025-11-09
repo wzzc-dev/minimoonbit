@@ -1,9 +1,13 @@
 ///| 函数转换模块
+
 ///|
+
 ///| 提供将闭包IR函数转换为SSA形式的功能
 
 ///|
-///| 转换函数定义为SSA形式
+
+///|
+/// 转换函数定义为SSA形式
 pub fn convert_function(
   block_id : Block,
   fundef : @closure.FuncDef,
@@ -91,8 +95,11 @@ pub fn convert_function(
     blocks: updated_blocks,
   }
 }
+
 ///|
-///| 转换主函数体为SSA形式
+
+///|
+/// 转换主函数体为SSA形式
 pub fn convert_main_function(
   body : @closure.Expr,
   functions : Array[Function],

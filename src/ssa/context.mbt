@@ -1,9 +1,13 @@
 ///| 上下文管理模块
+
 ///|
+
 ///| 提供SSA转换过程中的上下文管理功能
 
 ///|
-///| 转换上下文
+
+///|
+/// 转换上下文
 pub struct Context {
   current_block : BasicBlock
   blocks : Array[BasicBlock]
@@ -14,11 +18,16 @@ pub struct Context {
   func_env : @immut/hashmap.HashMap[String, Type]
 } derive(Show)
 
-///| 更新上下文中的当前块
+///|
+/// 更新上下文中的当前块
 pub fn update_current_block(context : Context, block : BasicBlock) -> Context {
   let updated_blocks = context.blocks.map(fn(b) {
-      if b.id == block.id { block } else { b }
-    })
+    if b.id == block.id {
+      block
+    } else {
+      b
+    }
+  })
   Context::{
     current_block: block,
     blocks: updated_blocks,
@@ -28,35 +37,45 @@ pub fn update_current_block(context : Context, block : BasicBlock) -> Context {
   }
 }
 
-///| 更新上下文中的变量环境
-pub fn update_var_env(context : Context, var_env : @immut/hashmap.HashMap[String, Value]) -> Context {
+///|
+/// 更新上下文中的变量环境
+pub fn update_var_env(
+  context : Context,
+  var_env : @immut/hashmap.HashMap[String, Value],
+) -> Context {
   Context::{
     current_block: context.current_block,
     blocks: context.blocks,
     block_map: context.block_map,
-    var_env: var_env,
+    var_env,
     func_env: context.func_env,
   }
 }
 
-///| 更新上下文中的块列表
+///|
+/// 更新上下文中的块列表
 pub fn update_blocks(context : Context, blocks : Array[BasicBlock]) -> Context {
   Context::{
     current_block: context.current_block,
-    blocks: blocks,
+    blocks,
     block_map: context.block_map,
     var_env: context.var_env,
     func_env: context.func_env,
   }
 }
 
-///| 安全地添加块到上下文，避免重复
+///|
+/// 安全地添加块到上下文，避免重复
 pub fn add_block_to_context(context : Context, block : BasicBlock) -> Context {
   let existing_ids = context.blocks.map(fn(b) { b.id })
   if existing_ids.contains(block.id) {
     // 替换现有块
     let updated_blocks = context.blocks.map(fn(b) {
-      if b.id == block.id { block } else { b }
+      if b.id == block.id {
+        block
+      } else {
+        b
+      }
     })
     update_blocks(context, updated_blocks)
   } else {
@@ -67,8 +86,12 @@ pub fn add_block_to_context(context : Context, block : BasicBlock) -> Context {
   }
 }
 
-///| 添加多个块到上下文
-pub fn add_blocks_to_context(context : Context, blocks : Array[BasicBlock]) -> Context {
+///|
+/// 添加多个块到上下文
+pub fn add_blocks_to_context(
+  context : Context,
+  blocks : Array[BasicBlock],
+) -> Context {
   let mut result_context = context
   for block in blocks {
     result_context = add_block_to_context(result_context, block)
@@ -76,7 +99,11 @@ pub fn add_blocks_to_context(context : Context, blocks : Array[BasicBlock]) -> C
   result_context
 }
 
-pub fn update_current_terminator(context : Context, terminator : Terminator) -> Context {
+///|
+pub fn update_current_terminator(
+  context : Context,
+  terminator : Terminator,
+) -> Context {
   let updated_current_block = BasicBlock::{
     id: context.current_block.id,
     params: context.current_block.params,

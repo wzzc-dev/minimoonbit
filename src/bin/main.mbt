@@ -100,10 +100,7 @@ fn CompileStatus::initialize(
 
 ///|
 /// Run the next stage of compilation. Returns true if the compilation is finished.
-fn CompileStatus::step(
-  self : CompileStatus,
-  backend : Backend,
-) -> Bool {
+fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
   if self.curr_stage >= self.end_stage {
     return true
   }
@@ -143,7 +140,7 @@ fn CompileStatus::step(
     Closure => {
       let closure_ir = @closure.knf_program_to_closure(
         self.opt_knf.unwrap(),
-        Map::new()
+        Map::new(),
         // Map::from_iter(externals().iter()),
       )
       // @util.logger("closure ir: \n" + closure_ir.to_json().stringify())
@@ -169,10 +166,10 @@ fn CompileStatus::step(
           self.llvmir = Some(llvmir)
         }
         RISCV => {
-            // @util.logger("ssa ir: \n" + self.ssa.unwrap().to_json().stringify())
-            let real_asm = @riscv.emit(self.ssa.unwrap())
-            self.riscv_asm = Some(real_asm)
-          }
+          // @util.logger("ssa ir: \n" + self.ssa.unwrap().to_json().stringify())
+          let real_asm = @riscv.emit(self.ssa.unwrap())
+          self.riscv_asm = Some(real_asm)
+        }
       }
     Finished => ()
   }
@@ -184,7 +181,7 @@ fn CompileStatus::step(
 fn CompileStatus::output(
   self : CompileStatus,
   json : Bool,
-  outTy : Backend
+  outTy : Backend,
 ) -> String {
   if json {
     match self.curr_stage {

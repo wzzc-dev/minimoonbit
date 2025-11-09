@@ -33,14 +33,12 @@ pub(all) enum Knf {
   Tuple(Array[Name])
   LetTuple(Array[(Name, Type)], Name, Knf)
   FieldAccess(Name, Type, Int)
-
   Get(Name, Name)
   Put(Name, Name, Name)
   ExternalArray(String)
   ExternalFunctionApplication(String, Array[Name])
   ArrayData(String, Array[Knf])
-  
-  While(Knf, Knf)   // While(condition, body)
+  While(Knf, Knf) // While(condition, body)
   Assign(Name, Name)
 } derive(Show, Eq)
 
@@ -52,6 +50,7 @@ pub(all) struct FuncDef {
   body : Knf
 } derive(Show, Eq)
 
+///|
 pub(all) struct StructDef {
   name : Name
   fields : Array[(Name, Type)]

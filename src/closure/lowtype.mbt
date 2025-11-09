@@ -1,4 +1,5 @@
-///| Low-level types. Main difference between this and Type is that it distinguishes between direct function pointers and closure function pointers.
+///|
+/// Low-level types. Main difference between this and Type is that it distinguishes between direct function pointers and closure function pointers.
 pub(all) enum LowType {
   Unit
   Bool
@@ -9,7 +10,7 @@ pub(all) enum LowType {
   Tuple(Array[LowType])
   Array(LowType)
   Ptr
-} derive(Show, Eq, ToJson(style="flat"))
+} derive(Show, Eq, ToJson)
 
 ///|
 pub fn LowType::is_ptr_like(self : LowType) -> Bool {

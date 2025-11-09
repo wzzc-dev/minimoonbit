@@ -38,8 +38,9 @@ pub(all) enum Syntax {
   Return(Syntax?) // return _;
   ArrayData(String, Array[Syntax])
   ExternalArray(String)
-} derive(Show, ToJson(style="flat"))
+} derive(Show, ToJson)
 
+///|
 pub(all) enum Pattern {
   PVar(String)
   PInt(Int)
@@ -47,12 +48,13 @@ pub(all) enum Pattern {
   PTuple(Array[Pattern])
   PEnumVariant(String, Array[Pattern])
   PWildcard
-} derive(Show, ToJson(style="flat"))
+} derive(Show, ToJson)
+
 ///|
 pub(all) enum Kind {
   Int
   Double
-} derive(Show, Eq, ToJson(style="flat"))
+} derive(Show, Eq, ToJson)
 
 ///|
 pub(all) enum Op {
@@ -61,7 +63,7 @@ pub(all) enum Op {
   Mul
   Div
   Mod
-} derive(Show, Eq, ToJson(style="flat"))
+} derive(Show, Eq, ToJson)
 
 ///|
 pub(all) struct Fundef {
@@ -103,9 +105,7 @@ pub impl ToJson for Type with to_json(self : Type) -> Json {
     | Struct(_)
     | Var(_)
     | ArrayData(_) => self.to_json()
-    UserDefineType(name, val) => {
-      ["UserDefineType", name, val.val.to_json()]
-    }
+    UserDefineType(name, val) => ["UserDefineType", name, val.val.to_json()]
   }
 }
 
@@ -142,14 +142,14 @@ pub fn Type::size_of(self : Type, size_of_ptr : Int) -> Int {
   }
 }
 
-
+///|
 pub impl Eq for Type with equal(self, other) -> Bool {
   match (self, other) {
     (Type::Unit, Type::Unit) => true
     (Type::Bool, Type::Bool) => true
     (Type::Int, Type::Int) => true
     (Type::Double, Type::Double) => true
-    (Type::Fun(xs, x), Type::Fun(ys, y)) => {
+    (Type::Fun(xs, x), Type::Fun(ys, y)) =>
       if xs.length() != ys.length() {
         false
       } else {
@@ -162,8 +162,7 @@ pub impl Eq for Type with equal(self, other) -> Bool {
         }
         equal && x.equal(y)
       }
-    }
-    (Type::Tuple(xs), Type::Tuple(ys)) => {
+    (Type::Tuple(xs), Type::Tuple(ys)) =>
       if xs.length() != ys.length() {
         false
       } else {
@@ -176,30 +175,26 @@ pub impl Eq for Type with equal(self, other) -> Bool {
         }
         equal
       }
-    }
     (Type::Array(x), Type::Array(y)) => x.equal(y)
-    (Type::Struct(name1, fields1), Type::Struct(name2, fields2)) => {
-      name1 == name2 && {
-        if fields1.length() != fields2.length() {
-          false
-        } else {
-          let mut equal = true
-          for i = 0; i < fields1.length(); i = i + 1 {
-            if fields1[i].0 != fields2[i].0 || not(fields1[i].1.equal(fields2[i].1)) {
-              equal = false
-              break
-            }
+    (Type::Struct(name1, fields1), Type::Struct(name2, fields2)) =>
+      name1 == name2 &&
+      (if fields1.length() != fields2.length() {
+        false
+      } else {
+        let mut equal = true
+        for i = 0; i < fields1.length(); i = i + 1 {
+          if fields1[i].0 != fields2[i].0 ||
+            not(fields1[i].1.equal(fields2[i].1)) {
+            equal = false
+            break
           }
-          equal
         }
-      }
-    }
-    (Type::Enum(name1, variants1), Type::Enum(name2, variants2)) => {
+        equal
+      })
+    (Type::Enum(name1, variants1), Type::Enum(name2, variants2)) =>
       name1 == name2 && variants1 == variants2
-    }
-    (Type::UserDefineType(name1, fields1), Type::UserDefineType(name2, fields2)) => {
+    (Type::UserDefineType(name1, fields1), Type::UserDefineType(name2, fields2)) =>
       name1 == name2 && fields1.val == fields2.val
-    }
     (Type::Ptr, Type::Ptr) => true
     (Type::ArrayData(_), Type::ArrayData(_)) => true
     (Type::Var(x), Type::Var(y)) => x.val.op_equal(y.val)

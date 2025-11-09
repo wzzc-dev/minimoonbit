@@ -39,11 +39,10 @@ pub fn emit_comparison_instruction(
         ComparisonType::NotEqual =>
           [FeqD(rd, lhs_freg, rhs_freg), Xori(rd, rd, 1)]
         ComparisonType::LessThan => [FltD(rd, lhs_freg, rhs_freg)]
-        ComparisonType::LessEqual =>
-          [FleD(rd, lhs_freg, rhs_freg)]
-        ComparisonType::GreaterThan => [FleD(rd, lhs_freg, rhs_freg), Xori(rd, rd, 1)]
-        ComparisonType::GreaterEqual =>
-          [FeqD(rd, lhs_freg, rhs_freg)]
+        ComparisonType::LessEqual => [FleD(rd, lhs_freg, rhs_freg)]
+        ComparisonType::GreaterThan =>
+          [FleD(rd, lhs_freg, rhs_freg), Xori(rd, rd, 1)]
+        ComparisonType::GreaterEqual => [FeqD(rd, lhs_freg, rhs_freg)]
       }
       instrs.append(comparison_instrs)
       let spill_instrs = generate_spill_store_if_needed(

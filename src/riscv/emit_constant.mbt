@@ -1,3 +1,4 @@
+///|
 pub fn emit_constant_instruction(
   result_val : @ssa.Value,
   value : Int,

@@ -87,7 +87,7 @@ fn knf_to_closure(
       // @util.logger("name: " + (x, ty).to_string())
       let ty = match ty {
         // Fun(args_ty, ret_ty) =>
-          // ClosureFn(args_ty.map(ty_to_low_type), ty_to_low_type(ret_ty))
+        // ClosureFn(args_ty.map(ty_to_low_type), ty_to_low_type(ret_ty))
         Fun(_, ty) => gen_body_ret_type(ty, funcdefs, env, body)
         _ => ty_to_low_type(ty)
       }
@@ -126,7 +126,6 @@ fn knf_to_closure(
       let index = funcdefs.search_by(fn(def) { def.old_name == name }).unwrap()
       let _ = funcdefs.remove(index)
       funcdefs.push(def)
-
       match is_closure {
         true => {
           let closure : Closure = {
@@ -134,13 +133,12 @@ fn knf_to_closure(
             actual_free_vars: fv_to_array(free_vars).map(fv => fv.0),
           }
           MakeClosure(
-            (name, gen_func_type(ty, is_closure, funcdefs,env, body)),
+            (name, gen_func_type(ty, is_closure, funcdefs, env, body)),
             closure,
             knf_to_closure(funcdefs, env, static_arrays, cont),
           )
         }
-        false =>  knf_to_closure(funcdefs, env, static_arrays, cont)
-        
+        false => knf_to_closure(funcdefs, env, static_arrays, cont)
       }
     }
     Apply(name, args_name) => {
@@ -156,17 +154,17 @@ fn knf_to_closure(
           }
       }
       let is_closure_var = match env.get(name) {
-        Some(ty) => match ty {
-          ClosureFn(_, _) => true
-          _ => false
-        }
+        Some(ty) =>
+          match ty {
+            ClosureFn(_, _) => true
+            _ => false
+          }
         None => false
       }
       match is_closure_func || is_closure_var {
         true => CallClosure(name, args_name)
         false => CallDirect(name.to_string(), args_name)
       }
-      
     }
     Var(n) => Var(n)
     Tuple(arr_name) => MakeTuple(arr_name)

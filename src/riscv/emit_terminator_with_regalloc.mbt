@@ -47,10 +47,18 @@ fn emit_terminator_with_regalloc(
       result.push(Ret)
     }
     @ssa.Terminator::Jump(target, args) => {
-      let move_instrs = try {
-        move_block_params_to_target_reg_or_spill(block_map, args, target, allocator)
-      } catch {
-        e => fail("Compilation error: [Jump]: target:" + target.id.to_string() + ", args:" + args.to_string() + ", " + e.to_string())
+      let move_instrs = move_block_params_to_target_reg_or_spill(
+        block_map, args, target, allocator,
+      ) catch {
+        e =>
+          fail(
+            "Compilation error: [Jump]: target:" +
+            target.id.to_string() +
+            ", args:" +
+            args.to_string() +
+            ", " +
+            e.to_string(),
+          )
       }
       result.append(move_instrs)
       result.push(J("block_" + target.id.to_string()))
@@ -62,7 +70,11 @@ fn emit_terminator_with_regalloc(
       false_block,
       false_args
     ) => {
-      result.append(move_block_params_to_target_reg_or_spill(block_map, true_args, true_block, allocator))
+      result.append(
+        move_block_params_to_target_reg_or_spill(
+          block_map, true_args, true_block, allocator,
+        ),
+      )
       let cond_reg = match allocator.value_to_reg.get(cond.id) {
         Some(cond_reg) => cond_reg
         None =>
@@ -89,7 +101,11 @@ fn emit_terminator_with_regalloc(
       if false_target_block is None {
         @util.die("找不到目标块 id=" + false_block.id.to_string())
       }
-      result.append(move_block_params_to_target_reg_or_spill(block_map, false_args, false_block, allocator))
+      result.append(
+        move_block_params_to_target_reg_or_spill(
+          block_map, false_args, false_block, allocator,
+        ),
+      )
       result.push(J("block_" + false_block.id.to_string()))
     }
   }

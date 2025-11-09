@@ -1,6 +1,9 @@
 ///| 将闭包IR转换为SSA形式
+
 ///|
+
 ///| 使用基本块参数来实现SSA
+
 ///|
 /// 将闭包IR程序转换为SSA程序
 pub fn to_ssa(input : @closure.Program) -> Ssa {
@@ -22,6 +25,5 @@ pub fn to_ssa(input : @closure.Program) -> Ssa {
   // 转换主函数体
   let main_func = convert_main_function(input.body, functions)
   functions.push(main_func)
-
   { program: { functions, static_arrays: input.static_arrays } }
 }

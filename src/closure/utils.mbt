@@ -1,10 +1,26 @@
-fn gen_func_type(ty : Type, is_closure : Bool, fundefs: Array[FuncDef], env : @immut/hashmap.HashMap[Name, LowType], body : Expr) -> LowType {
+///|
+fn gen_func_type(
+  ty : Type,
+  is_closure : Bool,
+  fundefs : Array[FuncDef],
+  env : @immut/hashmap.HashMap[Name, LowType],
+  body : Expr,
+) -> LowType {
   // @util.logger("gen_func_type: " + ty.to_string() + " is_closure: " + is_closure.to_string() + " body: " + body.to_string())
   match ty {
-    Fun(args, ty) => match is_closure {
-      true => ClosureFn(args.map(ty => ty_to_low_type(ty)), gen_body_ret_type(ty, fundefs, env, body))
-      false => DirectFn(args.map(ty => ty_to_low_type(ty)), gen_body_ret_type(ty, fundefs, env, body))
-    }
+    Fun(args, ty) =>
+      match is_closure {
+        true =>
+          ClosureFn(
+            args.map(ty => ty_to_low_type(ty)),
+            gen_body_ret_type(ty, fundefs, env, body),
+          )
+        false =>
+          DirectFn(
+            args.map(ty => ty_to_low_type(ty)),
+            gen_body_ret_type(ty, fundefs, env, body),
+          )
+      }
     _ => @util.die("gen_func_type: " + ty.to_string())
   }
 }
@@ -18,56 +34,86 @@ fn gen_func_type(ty : Type, is_closure : Bool, fundefs: Array[FuncDef], env : @i
 //   }
 // }
 
-fn gen_body_ret_type(ty : Type, funcdefs: Array[FuncDef], env : @immut/hashmap.HashMap[Name, LowType], body: Expr) -> LowType {
+///|
+fn gen_body_ret_type(
+  ty : Type,
+  funcdefs : Array[FuncDef],
+  env : @immut/hashmap.HashMap[Name, LowType],
+  body : Expr,
+) -> LowType {
   match body {
     MakeClosure((_, ret_ty), _, _) => ret_ty
     Let(_, _, body) => gen_body_ret_type(ty, funcdefs, env, body)
-    CallClosure(name, _) => match funcdefs.search_by(fn(f) { f.name.0 == name.name.unwrap() }) {
-      Some(index) => match funcdefs.get(index) {
-        Some(f) => f.ty
-        None => @util.die("gen_body_ret_type: r " + name.name.unwrap() + " not found")
-      }
-      None => match env.get(name) {
-        Some(ty) => match ty {
-          ClosureFn(_, ret_ty) => ret_ty
-          DirectFn(_, ret_ty) => ret_ty
-          _ => @util.die("gen_body_ret_type var1: " + name.name.unwrap() + " not found")
-        }
-        None => @util.die("gen_body_ret_type var2: " + name.name.unwrap() + " not found")
-      }
-    }
-    CallDirect(name, _) => match funcdefs.search_by(fn(f) { f.name.0 == name.0 }) {
-      Some(index) => match funcdefs.get(index) {
-        Some(f) =>{
-            match f.ty {
-              DirectFn(_, ret_ty) => ret_ty
-              ClosureFn(_, ret_ty) => ret_ty
-              _ => @util.die("gen_body_ret_type dir: " + name.0 + " not found")
-            }
+    CallClosure(name, _) =>
+      match funcdefs.search_by(fn(f) { f.name.0 == name.name.unwrap() }) {
+        Some(index) =>
+          match funcdefs.get(index) {
+            Some(f) => f.ty
+            None =>
+              @util.die(
+                "gen_body_ret_type: r " + name.name.unwrap() + " not found",
+              )
           }
-        None => @util.die("gen_body_ret_type dir1: " + name.0 + " not found")
+        None =>
+          match env.get(name) {
+            Some(ty) =>
+              match ty {
+                ClosureFn(_, ret_ty) => ret_ty
+                DirectFn(_, ret_ty) => ret_ty
+                _ =>
+                  @util.die(
+                    "gen_body_ret_type var1: " +
+                    name.name.unwrap() +
+                    " not found",
+                  )
+              }
+            None =>
+              @util.die(
+                "gen_body_ret_type var2: " + name.name.unwrap() + " not found",
+              )
+          }
       }
-      None => ty_to_low_type(ty)
-    }
-    Var(name) => match funcdefs.search_by(fn(f) { f.name.0 == name.name.unwrap() }) {
-      Some(index) => match funcdefs.get(index) {
-        Some(f) => f.ty
+    CallDirect(name, _) =>
+      match funcdefs.search_by(fn(f) { f.name.0 == name.0 }) {
+        Some(index) =>
+          match funcdefs.get(index) {
+            Some(f) =>
+              match f.ty {
+                DirectFn(_, ret_ty) => ret_ty
+                ClosureFn(_, ret_ty) => ret_ty
+                _ =>
+                  @util.die("gen_body_ret_type dir: " + name.0 + " not found")
+              }
+            None =>
+              @util.die("gen_body_ret_type dir1: " + name.0 + " not found")
+          }
         None => ty_to_low_type(ty)
       }
-      None => ty_to_low_type(ty)
-    }
-    ArrayGet(arr, _) => {
-      match env.get(arr) {
-        Some(ty) => match ty {
-          Array(ty) => ty
-          _ => @util.die("gen_body_ret_type arr: " + arr.name.unwrap() + " not found")
-        }
-        None => @util.die("gen_body_ret_type arr1: " + arr.name.unwrap() + " not found")
+    Var(name) =>
+      match funcdefs.search_by(fn(f) { f.name.0 == name.name.unwrap() }) {
+        Some(index) =>
+          match funcdefs.get(index) {
+            Some(f) => f.ty
+            None => ty_to_low_type(ty)
+          }
+        None => ty_to_low_type(ty)
       }
-    }
-    _ => {
-      ty_to_low_type(ty)
-    }
+    ArrayGet(arr, _) =>
+      match env.get(arr) {
+        Some(ty) =>
+          match ty {
+            Array(ty) => ty
+            _ =>
+              @util.die(
+                "gen_body_ret_type arr: " + arr.name.unwrap() + " not found",
+              )
+          }
+        None =>
+          @util.die(
+            "gen_body_ret_type arr1: " + arr.name.unwrap() + " not found",
+          )
+      }
+    _ => ty_to_low_type(ty)
   }
 }
 
@@ -101,6 +147,8 @@ fn ty_to_low_type(ty : Type) -> LowType {
       DirectFn(args_ty.map(ty => ty_to_low_type(ty)), ty_to_low_type(ret_ty))
   }
 }
+
+///|
 fn arr_ty_to_low_type(ty : Type) -> LowType {
   match ty {
     Unit => Unit

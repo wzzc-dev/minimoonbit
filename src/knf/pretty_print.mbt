@@ -140,9 +140,7 @@ fn PrettyKnf::print_one_level(
       }
       logger.write_string("])")
     }
-    Put(e1, e2, e3) => {
-      logger.write_string("Put \{e1}[\{e2}] = \{e3}")
-    }
+    Put(e1, e2, e3) => logger.write_string("Put \{e1}[\{e2}] = \{e3}")
     Get(e1, e2) => logger.write_string("Get \{e1}[\{e2}]")
     ExternalArray(name) => logger.write_string("ExternalArray(\{name})")
     ExternalFunctionApplication(name, args) => {
@@ -163,7 +161,8 @@ fn PrettyKnf::print_one_level(
       logger.write_string("\n")
     }
     Assign(x, y) => logger.write_string("\{x} = \{y}")
-    FieldAccess(e, t, name) => logger.write_string("FieldAccess(\{e}, \{t}, \{name})")
+    FieldAccess(e, t, name) =>
+      logger.write_string("FieldAccess(\{e}, \{t}, \{name})")
     ArrayData(label, data) => {
       logger.write_string("ArrayData(\{label}, [")
       for d in data {

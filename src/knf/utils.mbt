@@ -16,7 +16,7 @@ pub fn knf_max_counter(knf : Knf) -> Int {
     FAdd(x, y) => @cmp.maximum(x.slot, y.slot)
     FSub(x, y) => @cmp.maximum(x.slot, y.slot)
     FMul(x, y) => @cmp.maximum(x.slot, y.slot)
-    FDiv(x, y) => @cmp.maximum(x.slot, y.slot)  
+    FDiv(x, y) => @cmp.maximum(x.slot, y.slot)
     FMod(x, y) => @cmp.maximum(x.slot, y.slot)
     IfEq(x, y, e1, e2) =>
       @cmp.maximum(
@@ -29,7 +29,7 @@ pub fn knf_max_counter(knf : Knf) -> Int {
     IfLe(x, y, e1, e2) =>
       @cmp.maximum(
         x.slot,
-        @cmp.maximum( 
+        @cmp.maximum(
           y.slot,
           @cmp.maximum(knf_max_counter(e1), knf_max_counter(e2)),
         ),
@@ -37,7 +37,7 @@ pub fn knf_max_counter(knf : Knf) -> Int {
     IfLt(x, y, e1, e2) =>
       @cmp.maximum(
         x.slot,
-        @cmp.maximum( 
+        @cmp.maximum(
           y.slot,
           @cmp.maximum(knf_max_counter(e1), knf_max_counter(e2)),
         ),
@@ -45,7 +45,7 @@ pub fn knf_max_counter(knf : Knf) -> Int {
     Let((n, _), e1, e2) =>
       @cmp.maximum(
         n.slot,
-        @cmp.maximum(knf_max_counter(e1), knf_max_counter(e2)),   
+        @cmp.maximum(knf_max_counter(e1), knf_max_counter(e2)),
       )
     Var(x) => x.slot
     LetRec(f, e) =>
