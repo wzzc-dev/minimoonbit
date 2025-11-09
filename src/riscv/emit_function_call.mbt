@@ -121,6 +121,7 @@ fn emit_move_result_to_result_register(
 ) -> Array[RvAsm] raise {
   let instrs = []
   match result_val.ty {
+    Unit => instrs
     Float => {
       let (result_freg, load_result_instrs) = get_float_register_or_spill_load(
         result_val.id,
