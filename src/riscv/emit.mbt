@@ -28,11 +28,36 @@ pub fn AssemblyFunction::output(
 pub fn emit(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
   // println("emit riscv for ssa program: \n" + input.to_json().stringify())
+  for static_array in input.program.static_arrays {
+    fn get_elems(name : String, arr : Array[@closure.LowTypeValue]) {
+      let body = []
+      let elems = []
+      for i, elem in arr {
+        match elem {
+          DoubleValue(d) => elems.push(d.to_string())
+          IntValue(i) => elems.push(i.to_string())
+          PtrValue(a) => {
+            get_elems(name + "_" + i.to_string(), a)
+            elems.push(name + "_" + i.to_string())
+          }
+        }
+      }
+      if elems.length() > 0 {
+        match arr[0] {
+          PtrValue(_) => body.push(Data(".dword", elems))
+          IntValue(_) => body.push(Data(".word", elems))
+          DoubleValue(_) => body.push(Data(".double", elems))
+        }
+      }
+      functions.push({ name, asm_export: false, body })
+    }
+
+    get_elems(static_array.label.0, static_array.elements)
+  }
+
   // 遍历所有SSA函数
   for func in input.program.functions {
-    let asm_func = try {
-      emit_function(func)
-    } catch {
+    let asm_func = emit_function(func) catch {
       e => @util.die("Compilation error: " + e.to_string())
     }
     functions.push(asm_func)
@@ -223,10 +248,14 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
 
     // 生成指令
     for instr in block.instructions {
-      let asm_instrs = try {
-        emit_instruction_with_regalloc(instr, allocator)
-      } catch {
-        e => @util.die("Compilation error: [Instruction]: " + instr.to_string() + ", \n" + e.to_string())
+      let asm_instrs = emit_instruction_with_regalloc(instr, allocator) catch {
+        e =>
+          @util.die(
+            "Compilation error: [Instruction]: " +
+            instr.to_string() +
+            ", \n" +
+            e.to_string(),
+          )
       }
       asm_instructions.append(asm_instrs)
     }

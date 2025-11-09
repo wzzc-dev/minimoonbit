@@ -116,6 +116,7 @@ pub(all) struct Function {
 /// SSA程序
 pub(all) struct Program {
   functions : Array[Function] // 函数定义列表
+  static_arrays : Array[@closure.StaticArrayData] // 静态数组数据
 } derive(Show)
 
 

@@ -118,7 +118,7 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       // 创建外部数组引用指令（使用Call指令）
       let instruction = Instruction::{
         result: array_value,
-        opcode: Opcode::Call(Func::Label(label.0), []),
+        opcode: Opcode::CallRef(label.0, []),
       }
 
       context.current_block.instructions.push(instruction)

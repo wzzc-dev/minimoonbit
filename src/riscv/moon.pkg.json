@@ -1,6 +1,7 @@
 {
   "import": [
     "moonbitlang/minimbt/util",
-    "moonbitlang/minimbt/ssa"
+    "moonbitlang/minimbt/ssa",
+    "moonbitlang/minimbt/closure"
   ]
 }

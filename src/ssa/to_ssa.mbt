@@ -23,5 +23,5 @@ pub fn to_ssa(input : @closure.Program) -> Ssa {
   let main_func = convert_main_function(input.body, functions)
   functions.push(main_func)
 
-  { program: { functions, } }
+  { program: { functions, static_arrays: input.static_arrays } }
 }

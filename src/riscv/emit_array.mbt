@@ -153,19 +153,21 @@ pub fn emit_array_store_instruction(
       instrs.append(load_float_instrs)
       instrs.push(Fsd(float_temp_reg, { base: T0, offset: 0 }))
     }
+    @ssa.Type::Int => {
+      let (value_reg, load_value_instrs) = get_register_or_spill_load(
+        value_val.id,
+        allocator,
+      )
+      instrs.append(load_value_instrs)
+      instrs.push(Sw(value_reg, { base: T0, offset: 0 }))
+    }
     _ => {
       let (value_reg, load_value_instrs) = get_register_or_spill_load(
         value_val.id,
         allocator,
       )
       instrs.append(load_value_instrs)
-      if value_reg != T2 {
-        instrs.push(Mv(T2, value_reg))
-      }
-      match value_val.ty {
-        @ssa.Type::Int => instrs.push(Sw(T2, { base: T0, offset: 0 }))
-        _ => instrs.push(Sd(T2, { base: T0, offset: 0 }))
-      }
+      instrs.push(Sd(value_reg, { base: T0, offset: 0 }))
     }
   }
   instrs

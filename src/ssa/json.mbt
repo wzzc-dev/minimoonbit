@@ -368,12 +368,16 @@ pub fn Program::to_json(self : Program) -> Json {
 /// Program结构体的JSON反序列化
 pub fn Program::from_json(json : Json) -> Program raise {
   match json {
-    { "functions": Array(functions), .. } => {
+    { "functions": Array(functions), "static_arrays": Array(static_arrays), .. } => {
       let functions_res = []
       for f in functions {
         functions_res.push(Function::from_json(f))
       }
-      Program::{ functions: functions_res }
+      let static_arrays_res = []
+      for sa in static_arrays {
+        static_arrays_res.push(@closure.StaticArrayData::from_json(sa))
+      }
+      Program::{ functions: functions_res, static_arrays: static_arrays_res }
     }
     _ => fail("invalid json for Program")
   }
