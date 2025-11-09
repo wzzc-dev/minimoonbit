@@ -1,22 +1,34 @@
 ///| 寄存器分配辅助函数
+
 ///|
+
 ///| 提供寄存器获取、溢出存储等辅助功能
 
 ///|
-///| 生成溢出存储指令（如果需要）
+
+///|
+/// 生成溢出存储指令（如果需要）
 pub fn generate_spill_store_if_needed(
   value_id : Int,
   reg : Reg,
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
   match allocator.value_to_spill.get(value_id) {
-    Some(spill_offset) => [Sd(reg, { base: Fp, offset: -(24 + spill_offset + allocator.saved_callee_regs.length() * 8) })]
+    Some(spill_offset) =>
+      [
+        Sd(reg, {
+          base: Fp,
+          offset: -(24 + spill_offset + allocator.saved_callee_regs.length() * 8),
+        }),
+      ]
     None => [] // 不需要溢出存储
   }
 }
 
 ///|
-///| 获取值对应的寄存器或生成溢出加载代码
+
+///|
+/// 获取值对应的寄存器或生成溢出加载代码
 pub fn get_register_or_spill_load(
   value_id : Int,
   allocator : RegisterAllocator,
@@ -46,15 +58,16 @@ pub fn get_register_or_spill_load(
 }
 
 ///|
-///| 获取浮点寄存器或生成溢出加载代码
+
+///|
+/// 获取浮点寄存器或生成溢出加载代码
 pub fn get_float_register_or_spill_load(
   value_id : Int,
   allocator : RegisterAllocator,
   fallback? : FReg = freg_swap,
 ) -> (FReg, Array[RvAsm]) {
   match allocator.value_to_freg.get(value_id) {
-    Some(freg) =>
-      (freg, [])
+    Some(freg) => (freg, [])
     None =>
       // 值没有寄存器分配，检查是否被溢出
       match allocator.value_to_spill.get(value_id) {
@@ -62,7 +75,9 @@ pub fn get_float_register_or_spill_load(
           // 值被溢出到内存，需要加载
           let load_instr = Fld(fallback, {
             base: Fp,
-            offset: -(24 + spill_offset + allocator.saved_callee_fregs.length() * 8),
+            offset: -(24 +
+            spill_offset +
+            allocator.saved_callee_fregs.length() * 8),
           })
           (fallback, [load_instr])
         }
@@ -75,14 +90,24 @@ pub fn get_float_register_or_spill_load(
 }
 
 ///|
-///| 生成浮点溢出存储指令（如果需要）
+
+///|
+/// 生成浮点溢出存储指令（如果需要）
 pub fn generate_float_spill_store_if_needed(
   value_id : Int,
   freg : FReg,
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
   match allocator.value_to_spill.get(value_id) {
-    Some(spill_offset) => [Fsd(freg, { base: Fp, offset: -(24 + spill_offset + allocator.saved_callee_fregs.length() * 8) })]
+    Some(spill_offset) =>
+      [
+        Fsd(freg, {
+          base: Fp,
+          offset: -(24 +
+          spill_offset +
+          allocator.saved_callee_fregs.length() * 8),
+        }),
+      ]
     None => [] // 不需要溢出存储
   }
 }
@@ -112,7 +137,6 @@ fn allocate_value_to_dest_reg(
   }
   result
 }
-
 
 ///|
 fn allocate_value_to_dest_freg(
@@ -161,8 +185,7 @@ fn store_value_to_allocator_reg_or_spill(
               allocator.saved_callee_regs.length() * 8),
             }),
           )
-        None =>
-          @util.die("TODO: 普通参数需要分配寄存器或溢出栈槽")
+        None => @util.die("TODO: 参数需要分配寄存器或溢出栈槽")
       }
   }
   result
@@ -192,6 +215,49 @@ fn store_value_to_allocator_freg_or_spill(
         None =>
           @util.die("TODO: 普通参数需要分配寄存器或溢出栈槽")
       }
+  }
+  result
+}
+// 移动基本块参数到目标寄存器或溢出栈槽
+///|
+fn move_block_params_to_target_reg_or_spill(
+  block_map : @hashmap.HashMap[@ssa.Block, @ssa.BasicBlock],
+  args : Array[@ssa.Value],
+  target : @ssa.Block,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] {
+  let result = []
+  let target_block = block_map.get(target)
+  if target_block is None {
+    @util.die("找不到目标块 id=" + target.id.to_string())
+  }
+  let target = target_block.unwrap()
+  if args.length() != target.params.length() {
+    @util.die(
+      "Jump 参数数量与目标块参数数量不匹配: " +
+      "block " +
+      target.id.to_string() +
+      " args " +
+      args.map(fn(arg) { arg.id.to_string() }).join(", ") +
+      " target params " +
+      target.params.map(fn(param) { param.id.to_string() }).join(", "),
+    )
+  }
+  for i, arg in args {
+    if arg.ty == @ssa.Type::Unit {
+      continue
+    }
+
+    // args 对应的值移动到 target 对应的参数寄存器或栈位置
+    let (arg_reg, spill_instrs) = get_register_or_spill_load(arg.id, allocator)
+    result.append(spill_instrs)
+    result.append(
+      store_value_to_allocator_reg_or_spill(
+        target.params[i],
+        arg_reg,
+        allocator,
+      ),
+    )
   }
   result
 }

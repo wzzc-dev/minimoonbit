@@ -27,7 +27,7 @@ pub fn AssemblyFunction::output(
 /// 实现线性扫描寄存器分配算法
 pub fn emit(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  // println("emit riscv for ssa program: \n" + input.to_json().stringify())
+  println("emit riscv for ssa program: \n" + input.to_json().stringify())
   // 遍历所有SSA函数
   for func in input.program.functions {
     let asm_func = emit_function(func)
@@ -213,18 +213,25 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
     let block_label = "block_" + block.id.id.to_string()
     asm_instructions.push(Label(block_label))
 
-    // 为基本块参数分配寄存器或栈位置
-    let param_instrs = allocate_block_params_with_regalloc(block, allocator)
-    asm_instructions.append(param_instrs)
+    // // 为基本块参数分配寄存器或栈位置
+    // let param_instrs = allocate_block_params_with_regalloc(block, allocator)
+    // asm_instructions.append(param_instrs)
 
     // 生成指令
     for instr in block.instructions {
       let asm_instrs = emit_instruction_with_regalloc(instr, allocator)
       asm_instructions.append(asm_instrs)
     }
-
+    let block_map = @hashmap.new()
+    for b in func.blocks {
+      block_map.set(b.id, b)
+    }
     // 生成终止指令
-    let term_instrs = emit_terminator_with_regalloc(block.terminator, allocator)
+    let term_instrs = emit_terminator_with_regalloc(
+      block.terminator,
+      allocator,
+      block_map,
+    )
     asm_instructions.append(term_instrs)
   }
 
@@ -242,6 +249,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction {
 fn emit_terminator_with_regalloc(
   terminator : @ssa.Terminator,
   allocator : RegisterAllocator,
+  block_map : @hashmap.HashMap[@ssa.Block, @ssa.BasicBlock],
 ) -> Array[RvAsm] {
   let result = []
   match terminator {
@@ -285,22 +293,7 @@ fn emit_terminator_with_regalloc(
       result.push(Ret)
     }
     @ssa.Terminator::Jump(target, args) => {
-      for i, arg in args {
-        if arg.ty == @ssa.Type::Unit {
-          continue
-        }
-        let dest_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          _ => A0
-        }
-        result.append(allocate_value_to_dest_reg(arg, dest_reg, allocator))
-      }
+      result.append(move_block_params_to_target_reg_or_spill(block_map, args, target, allocator))
       result.push(J("block_" + target.id.to_string()))
     }
     @ssa.Terminator::Branch(
@@ -310,19 +303,7 @@ fn emit_terminator_with_regalloc(
       false_block,
       false_args
     ) => {
-      for i, arg in true_args {
-        let dest_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          _ => A0
-        }
-        result.append(allocate_value_to_dest_reg(arg, dest_reg, allocator))
-      }
+      result.append(move_block_params_to_target_reg_or_spill(block_map, true_args, true_block, allocator))
       let cond_reg = match allocator.value_to_reg.get(cond.id) {
         Some(cond_reg) => cond_reg
         None =>
@@ -345,19 +326,11 @@ fn emit_terminator_with_regalloc(
           }
       }
       result.push(Bne(cond_reg, Zero, "block_" + true_block.id.to_string()))
-      for i, arg in false_args {
-        let dest_reg = match i {
-          0 => A0
-          1 => A1
-          2 => A2
-          3 => A3
-          4 => A4
-          5 => A5
-          6 => A6
-          _ => A0
-        }
-        result.append(allocate_value_to_dest_reg(arg, dest_reg, allocator))
+      let false_target_block = block_map.get(false_block)
+      if false_target_block is None {
+        @util.die("找不到目标块 id=" + false_block.id.to_string())
       }
+      result.append(move_block_params_to_target_reg_or_spill(block_map, false_args, false_block, allocator))
       result.push(J("block_" + false_block.id.to_string()))
     }
   }
@@ -538,31 +511,3 @@ fn emit_instruction_with_regalloc(
       emit_closure_call(instr.result, closure, args, allocator)
   }
 }
-
-///|
-/// 使用寄存器分配器为基本块参数分配寄存器
-fn allocate_block_params_with_regalloc(
-  block : @ssa.BasicBlock,
-  allocator : RegisterAllocator,
-) -> Array[RvAsm] {
-  let asm_instructions = []
-  for i, param in block.params {
-    let input_reg = match i {
-      0 => A0
-      1 => A1
-      2 => A2
-      3 => A3
-      4 => A4
-      5 => A5
-      6 => A6
-      7 => A7
-      _ => @util.die("TODO: 参数超过8个")
-    }
-    let instrs = store_value_to_allocator_reg_or_spill(
-      param, input_reg, allocator,
-    )
-    asm_instructions.append(instrs)
-  }
-  asm_instructions
-}
-
