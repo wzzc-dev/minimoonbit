@@ -3,6 +3,7 @@ pub(all) struct AssemblyFunction {
   name : String
   asm_export : Bool
   body : Array[RvAsm]
+  static_data : Bool
 } derive(Show)
 
 ///|
@@ -14,10 +15,16 @@ pub fn AssemblyFunction::output(
   if self.asm_export {
     logger.write_string(".global \{name}\n")
   }
+  if self.static_data {
+    logger.write_string(".data\n")
+  }
   logger.write_string("\{name}:\n")
   for rv_asm in self.body {
     Show::output(rv_asm, logger)
     logger.write_string("\n")
+  }
+  if self.static_data {
+    logger.write_string(".text\n")
   }
 }
 
@@ -49,7 +56,7 @@ pub fn emit(input : @ssa.Ssa) -> Array[AssemblyFunction] {
           DoubleValue(_) => body.push(Data(".double", elems))
         }
       }
-      functions.push({ name, asm_export: false, body })
+      functions.push({ name, asm_export: false, body, static_data: true })
     }
 
     get_elems(static_array.label.0, static_array.elements)
@@ -278,6 +285,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
     name: func.name,
     asm_export: func.name == "minimbt_main",
     body: asm_instructions,
+    static_data: false,
   }
 }
 
