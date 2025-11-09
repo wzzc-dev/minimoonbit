@@ -106,6 +106,7 @@ pub(all) struct Function {
   name : String // 函数名
   params : Array[Value] // 函数参数
   closure_param : Array[Value] // 闭包参数
+  ty : Type // 函数类型
   return_type : Type // 返回类型
   blocks : Array[BasicBlock] // 基本块列表
 } derive(Show)

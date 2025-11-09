@@ -5,7 +5,7 @@ pub fn emit_closure_creation(
   func_name : String,
   free_vars : Array[@ssa.Value],
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   instrs.push(Comment("MakeClosure: " + func_name))
   let (result_reg, load_instrs) = get_register_or_spill_load(
@@ -67,7 +67,7 @@ pub fn emit_closure_call(
   closure : @ssa.Func,
   args : Array[@ssa.Value],
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   match closure {
     @ssa.Func::Call(callee) => {
@@ -84,20 +84,47 @@ pub fn emit_closure_call(
 
   // 3. 将显式参数放入参数寄存器（从A1开始）
   for i, arg in args {
-    let (arg_reg, load_instrs) = get_register_or_spill_load(arg.id, allocator)
-    instrs.append(load_instrs)
-    let param_reg = match i {
-      0 => A1 // 第一个显式参数放到A1
-      1 => A2 // 第二个显式参数放到A2
-      2 => A3
-      3 => A4
-      4 => A5
-      5 => A6
-      6 => A7
-      _ => @util.die("TODO")
-    }
-    if arg_reg != param_reg {
-      instrs.push(Mv(param_reg, arg_reg))
+    match arg.ty {
+      Float => {
+        let (arg_freg, load_instrs) = get_float_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        instrs.append(load_instrs)
+        let param_freg = match i {
+          0 => Fa1 // 第一个显式参数放到A1
+          1 => Fa2 // 第二个显式参数放到A2
+          2 => Fa3
+          3 => Fa4
+          4 => Fa5
+          5 => Fa6
+          6 => Fa7
+          _ => @util.die("TODO")
+        }
+        if arg_freg != param_freg {
+          instrs.push(FmvD(param_freg, arg_freg))
+        }
+      }
+      _ => {
+        let (arg_reg, load_instrs) = get_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        instrs.append(load_instrs)
+        let param_reg = match i {
+          0 => A1 // 第一个显式参数放到A1
+          1 => A2 // 第二个显式参数放到A2
+          2 => A3
+          3 => A4
+          4 => A5
+          5 => A6
+          6 => A7
+          _ => @util.die("TODO")
+        }
+        if arg_reg != param_reg {
+          instrs.push(Mv(param_reg, arg_reg))
+        }
+      }
     }
   }
 
@@ -107,21 +134,6 @@ pub fn emit_closure_call(
   instrs.push(Jalr(T1))
 
   // 5. 将返回值移动到结果寄存器
-  let (result_reg, load_result_instrs) = get_register_or_spill_load(
-    result_val.id,
-    allocator,
-  )
-  instrs.append(load_result_instrs)
-  if result_reg != A0 {
-    instrs.push(Mv(result_reg, A0))
-  }
-
-  // 如果结果需要溢出，生成存储指令
-  let spill_instrs = generate_spill_store_if_needed(
-    result_val.id,
-    result_reg,
-    allocator,
-  )
-  instrs.append(spill_instrs)
+  instrs.append(emit_move_result_to_result_register(result_val, allocator))
   instrs
 }

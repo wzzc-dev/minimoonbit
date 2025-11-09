@@ -4,7 +4,7 @@ pub fn emit_get_element_instruction(
   tuple_val : @ssa.Value,
   index : Int,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   let (tuple_reg, tuple_spill_loads) = get_register_or_spill_load(
     tuple_val.id,

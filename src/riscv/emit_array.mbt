@@ -5,7 +5,7 @@ pub fn emit_array_access_instruction(
   array_val : @ssa.Value,
   index_val : @ssa.Value,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   instrs.push(Comment("ArrayGet: accessing array element"))
 
@@ -114,7 +114,7 @@ pub fn emit_array_store_instruction(
   index_val : @ssa.Value,
   value_val : @ssa.Value,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   instrs.push(Comment("ArrayPut: storing array element"))
 

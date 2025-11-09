@@ -6,7 +6,7 @@ pub fn emit_binary_integer_instruction(
   rhs : @ssa.Value,
   emitter : (Reg, Reg, Reg) -> RvAsm,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   let (rs1, load1) = get_register_or_spill_load(lhs.id, allocator)
   let (rs2, load2) = get_register_or_spill_load(rhs.id, allocator)

@@ -3,7 +3,7 @@ pub fn emit_tuple_instruction(
   result : @ssa.Value,
   values : Array[@ssa.Value],
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise{
   let instrs = []
   // 计算元组大小：每个元素8字节，共values.length()个元素
   let tuple_size = values.length() * 8

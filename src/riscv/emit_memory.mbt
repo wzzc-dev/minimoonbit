@@ -4,7 +4,7 @@ pub fn emit_memory_load_instruction(
   result_val : @ssa.Value,
   address_val : @ssa.Value,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   let (rd, load_rd) = get_register_or_spill_load(
     result_val.id,
@@ -33,7 +33,7 @@ pub fn emit_memory_store_instruction(
   address_val : @ssa.Value,
   value_val : @ssa.Value,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   let (addr_reg, load_addr) = get_register_or_spill_load(
     address_val.id,
@@ -56,7 +56,7 @@ pub fn emit_memory_allocation(
   result_val : @ssa.Value,
   ty : @ssa.Type,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   let (result_reg, load_instrs) = get_register_or_spill_load(
     result_val.id,

@@ -33,7 +33,7 @@ pub fn get_register_or_spill_load(
   value_id : Int,
   allocator : RegisterAllocator,
   fallback? : Reg = reg_swap,
-) -> (Reg, Array[RvAsm]) {
+) -> (Reg, Array[RvAsm]) raise {
   match allocator.value_to_reg.get(value_id) {
     Some(reg) => (reg, [])
     None =>
@@ -50,7 +50,7 @@ pub fn get_register_or_spill_load(
           (fallback, [load_instr])
         }
         None =>
-          @util.die(
+          fail(
             "Value " + value_id.to_string() + " has no register or spill slot",
           )
       }
@@ -83,7 +83,9 @@ pub fn get_float_register_or_spill_load(
         }
         None =>
           @util.die(
-            "Value " + value_id.to_string() + " has no register or spill slot",
+            "Value " +
+            value_id.to_string() +
+            " has no float register or spill slot",
           )
       }
   }
@@ -196,7 +198,7 @@ fn store_value_to_allocator_freg_or_spill(
   value : @ssa.Value,
   input_freg : FReg,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let result = []
   match allocator.value_to_freg.get(value.id) {
     Some(freg) => if freg != input_freg { result.push(FmvD(freg, input_freg)) }
@@ -212,20 +214,20 @@ fn store_value_to_allocator_freg_or_spill(
               allocator.saved_callee_regs.length() * 8),
             }),
           )
-        None =>
-          @util.die("TODO: 普通参数需要分配寄存器或溢出栈槽")
+        None => fail("store_value_to_allocator_freg_or_spill 分配寄存器或溢出栈槽: " + value.id.to_string())
       }
   }
   result
 }
 // 移动基本块参数到目标寄存器或溢出栈槽
+
 ///|
 fn move_block_params_to_target_reg_or_spill(
   block_map : @hashmap.HashMap[@ssa.Block, @ssa.BasicBlock],
   args : Array[@ssa.Value],
   target : @ssa.Block,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let result = []
   let target_block = block_map.get(target)
   if target_block is None {
@@ -247,17 +249,38 @@ fn move_block_params_to_target_reg_or_spill(
     if arg.ty == @ssa.Type::Unit {
       continue
     }
-
-    // args 对应的值移动到 target 对应的参数寄存器或栈位置
-    let (arg_reg, spill_instrs) = get_register_or_spill_load(arg.id, allocator)
-    result.append(spill_instrs)
-    result.append(
-      store_value_to_allocator_reg_or_spill(
-        target.params[i],
-        arg_reg,
-        allocator,
-      ),
-    )
+    match arg.ty {
+      Float(_) => {
+        // args 对应的值移动到 target 对应的参数寄存器或栈位置
+        let (arg_freg, spill_instrs) = get_float_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        result.append(spill_instrs)
+        result.append(
+          store_value_to_allocator_freg_or_spill(
+            target.params[i],
+            arg_freg,
+            allocator,
+          ),
+        )
+      }
+      _ => {
+        // args 对应的值移动到 target 对应的参数寄存器或栈位置
+        let (arg_reg, spill_instrs) = get_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        result.append(spill_instrs)
+        result.append(
+          store_value_to_allocator_reg_or_spill(
+            target.params[i],
+            arg_reg,
+            allocator,
+          ),
+        )
+      }
+    }
   }
   result
 }

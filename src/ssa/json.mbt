@@ -326,6 +326,7 @@ pub fn Function::from_json(json : Json) -> Function raise {
       "name": String(name),
       "params": Array(params),
       "closure_param": Array(closure_param),
+      "ty": ty,
       "return_type": return_type,
       "blocks": Array(blocks),
       ..
@@ -349,6 +350,7 @@ pub fn Function::from_json(json : Json) -> Function raise {
         name,
         params: params_res,
         closure_param: closure_param_res,
+        ty: Type::from_json(ty),
         return_type: Type::from_json(return_type),
         blocks: blocks_res,
       }

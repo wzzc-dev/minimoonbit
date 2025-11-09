@@ -4,7 +4,7 @@ pub fn emit_bool_constant_instruction(
   result_val : @ssa.Value,
   value : Bool,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   let (rd, load_instrs) = get_register_or_spill_load(result_val.id, allocator)
   instrs.append(load_instrs)

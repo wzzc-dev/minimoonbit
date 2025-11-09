@@ -5,7 +5,7 @@ pub fn emit_function_call_instruction(
   func : @ssa.Func,
   args : Array[@ssa.Value],
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let instrs = []
   match func {
     Label(_) => ()
@@ -89,6 +89,37 @@ pub fn emit_function_call_instruction(
     }
   }
   // 5. 将返回值移动到结果寄存器
+  instrs.append(emit_move_result_to_result_register(result_val, allocator))
+  instrs
+}
+
+///|
+/// 生成函数引用调用指令
+pub fn emit_function_ref_call_instruction(
+  result_val : @ssa.Value,
+  label : String,
+  _args : Array[@ssa.Value],
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let instrs = []
+  let (result_reg, load_instrs) = get_register_or_spill_load(
+    result_val.id,
+    allocator,
+  )
+  instrs.push(La(T0, label))
+  if result_reg != T0 {
+    instrs.push(Mv(result_reg, T0))
+  }
+  instrs.append(load_instrs)
+  instrs
+}
+
+///|
+fn emit_move_result_to_result_register(
+  result_val : @ssa.Value,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let instrs = []
   match result_val.ty {
     Float => {
       let (result_freg, load_result_instrs) = get_float_register_or_spill_load(
@@ -129,25 +160,4 @@ pub fn emit_function_call_instruction(
       instrs
     }
   }
-}
-
-///|
-/// 生成函数引用调用指令
-pub fn emit_function_ref_call_instruction(
-  result_val : @ssa.Value,
-  label : String,
-  _args : Array[@ssa.Value],
-  allocator : RegisterAllocator,
-) -> Array[RvAsm] {
-  let instrs = []
-  let (result_reg, load_instrs) = get_register_or_spill_load(
-    result_val.id,
-    allocator,
-  )
-  instrs.push(La(T0, label))
-  if result_reg != T0 {
-    instrs.push(Mv(result_reg, T0))
-  }
-  instrs.append(load_instrs)
-  instrs
 }

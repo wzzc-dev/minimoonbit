@@ -49,7 +49,7 @@ pub fn convert_function(
     convert_type(fundef.ty),
   )
   for func in functions {
-    func_env = func_env.add(func.name, func.return_type)
+    func_env = func_env.add(func.name, func.ty)
   }
   let context = {
     current_block: entry_block,
@@ -82,6 +82,7 @@ pub fn convert_function(
     name: fundef.name.0.to_string(),
     params: regular_params,
     closure_param: free_var_params,
+    ty: convert_type(fundef.ty),
     return_type: match fundef.ty {
       @closure.LowType::DirectFn(_, ret) => convert_type(ret)
       @closure.LowType::ClosureFn(_, ret) => convert_type(ret)
@@ -90,7 +91,6 @@ pub fn convert_function(
     blocks: updated_blocks,
   }
 }
-
 ///|
 ///| 转换主函数体为SSA形式
 pub fn convert_main_function(

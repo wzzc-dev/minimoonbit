@@ -376,7 +376,12 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
       }
 
       // 使用缓存的类型推断函数确定返回类型
-      let return_type = cached_infer_type(@closure.Expr::CallDirect(label, args), current_context)
+      let func_type = cached_infer_type(@closure.Expr::CallDirect(label, args), current_context)
+      let return_type = match func_type {
+        Type::Function(_, ret_type) => ret_type
+        _ => @util.die("CallDirect: not a function type: " + func_type.to_string() + " for function: " + label.0.to_string())
+      }
+      
       let opcode = match context.var_env.get(label.0.to_string()) {
         Some(v) => Opcode::Call(Func::Call(v), arg_values)
         None => Opcode::Call(Func::Label(label.0), arg_values)
@@ -454,11 +459,18 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         }
       }
 
-
+      let func_type = cached_infer_type(@closure.Expr::CallClosure(n, xs), current_context)
+      let return_type = match func_type {
+        Type::Function(_, ret_type) => ret_type
+        _ => @util.die("CallClosure: not a function type: " + func_type.to_string() + " for function: " + func_name)
+      }
       // 闭包调用时，需要先传递捕获的变量（自由变量），然后传递调用时的参数
       // 但在当前的CallClosure实现中，我们只需要传递调用参数
       // 因为捕获的变量已经在闭包创建时绑定了
-      let result_value = Value::{ id: new_value_id(), ty: Type::Int }
+      let result_value = Value::{ id: new_value_id(), ty: return_type }
+      // println("CallClosure result_value: " + result_value.to_string())
+      // println("CallClosure name: " + func_name)
+
       let instruction = Instruction::{
         result: result_value,
         opcode: opcode,
