@@ -150,7 +150,7 @@ pub fn infer_expression_type(expr : @closure.Expr, context : Context) -> Type {
     FAdd(_, _) | FSub(_, _) | FMul(_, _) | FDiv(_, _) | FMod(_) => Type::Float
     IfEq(_, _, e1, _) | IfLe(_, _, e1, _) | IfLt(_, _, e1, _) =>
       infer_expression_type(e1, context)
-    Let(_, e2, _) => infer_expression_type(e2, context)
+    Let(_, _, e2) => infer_expression_type(e2, context)
     While(_, _) => Type::Unit
     MakeTuple(elements) => {
       let element_types = []

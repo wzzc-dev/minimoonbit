@@ -225,7 +225,7 @@ fn move_block_params_to_target_reg_or_spill(
   }
   let target = target_block.unwrap()
   if args.length() != target.params.length() {
-    @util.die(
+    @util.logger(
       "Jump 参数数量与目标块参数数量不匹配: " +
       "block " +
       target.id.to_string() +

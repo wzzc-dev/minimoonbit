@@ -370,7 +370,7 @@ pub fn Function::from_json(json : Json) -> Function raise {
 ///|
 /// Program结构体的JSON序列化
 pub fn Program::to_json(self : Program) -> Json {
-  { "functions": self.functions.map(Function::to_json) }
+  { "functions": self.functions.map(Function::to_json), "static_arrays": self.static_arrays.map(@closure.StaticArrayData::to_json) }
 }
 
 ///|

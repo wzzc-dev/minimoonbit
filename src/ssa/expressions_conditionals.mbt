@@ -1,11 +1,3 @@
-///| 条件表达式处理模块
-
-///|
-
-///| 提供将闭包IR中的条件表达式（IfEq、IfLe、IfLt）转换为SSA指令的功能
-
-///|
-
 ///|
 /// 转换条件表达式为SSA指令
 pub fn convert_conditional(
@@ -53,9 +45,6 @@ pub fn convert_conditional(
   let else_block_id = new_block_id()
   let merge_block_id = new_block_id()
 
-  // 创建合并值 - 用于接收两个分支的返回值
-  let merge_value_type = infer_expression_type(e1, context2)
-  let merge_value = Value::{ id: new_value_id(), ty: merge_value_type }
 
   // 分析两个分支中修改的变量
   let then_modified_vars = analyze_modified_variables(e1, context2.var_env)
@@ -72,17 +61,28 @@ pub fn convert_conditional(
         let param_value = Value::{ id: new_value_id(), ty: original_value.ty }
         merge_params.push(param_value)
       }
-      None => ()
+      None => @util.die("Failed to get modified variable value")
     }
   }
 
-  // 如果有变量修改，将合并值作为第一个参数
-  let final_merge_params = if merge_params.length() > 0 {
-    [merge_value] + merge_params
-  } else {
-    [merge_value]
+  // @util.logger("merge_params: " + merge_params.to_string())
+
+  let merge_value = match infer_expression_type(e1, context2) {
+    Unit => None
+    ty => Some(Value::{ id: new_value_id(), ty })
   }
 
+  let result_value = match merge_value {
+    Some(v) => [v]
+    None => []
+  }
+  // 如果有变量修改，将合并值作为第一个参数
+  let final_merge_params = if merge_params.length() > 0 {
+    result_value + merge_params
+  } else {
+    result_value
+  }
+  // println("final_merge_params: " + final_merge_params.to_string())
   // 创建then块
   let then_block = BasicBlock::{
     id: then_block_id,
@@ -135,26 +135,11 @@ pub fn convert_conditional(
   // 转换then分支
   let then_result = convert_expr(context_with_blocks, e1)
   let then_context = then_result.context
-  let then_branch_value = match then_result.value {
-    Some(v) => v
-    None => {
-      // 如果分支没有返回值，但有修改变量，使用第一个修改变量的值
-      let var_names = then_modified_vars.keys().to_array()
-      if var_names.length() > 0 {
-        let first_var_name = var_names[0]
-        match then_context.var_env.get(first_var_name) {
-          Some(var_val) => var_val
-          None =>
-            @util.die("Failed to get modified variable value in then branch")
-        }
-      } else {
-        Value::{ id: new_value_id(), ty: Type::Unit }
-      }
-    }
+  let then_args = match then_result.value {
+    Some(v) => [v]
+    None => []
   }
 
-  // 为then分支准备参数
-  let then_args = [then_branch_value]
   // 添加修改变量的值
   let var_names = all_modified_vars.keys().to_array()
   for i = 0; i < var_names.length(); i = i + 1 {
@@ -183,37 +168,13 @@ pub fn convert_conditional(
   // 转换else分支
   let else_result = convert_expr(else_context, e2)
   let final_else_context = else_result.context
-  let else_branch_value = match else_result.value {
-    Some(v) => v
-    None => {
-      // 如果分支没有返回值，但有修改变量，使用第一个修改变量的值
-      let var_names = else_modified_vars.keys().to_array()
-      if var_names.length() > 0 {
-        let first_var_name = var_names[0]
-        match final_else_context.var_env.get(first_var_name) {
-          Some(var_val) => var_val
-          None =>
-            @util.die("Failed to get modified variable value in else branch")
-        }
-      } else {
-        // 如果 else 分支没有返回值和修改变量，尝试使用外部环境中的值
-        let var_names = all_modified_vars.keys().to_array()
-        if var_names.length() > 0 {
-          let first_var_name = var_names[0]
-          match context2.var_env.get(first_var_name) {
-            Some(var_val) => var_val
-            None => Value::{ id: new_value_id(), ty: Type::Unit }
-          }
-        } else {
-          Value::{ id: new_value_id(), ty: Type::Unit }
-        }
-      }
-    }
+  let else_args = match else_result.value {
+    Some(v) => [v]
+    None => []
   }
 
-  // 为else分支准备参数
-  let else_args = [else_branch_value]
   // 添加修改变量的值
+  // let var_names = all_modified_vars.keys().to_array()
   for i = 0; i < var_names.length(); i = i + 1 {
     let var_name = var_names[i]
     let var_value = match final_else_context.var_env.get(var_name) {
@@ -240,12 +201,15 @@ pub fn convert_conditional(
   final_context = add_block_to_context(final_context, updated_else_block)
   final_context = add_block_to_context(final_context, merge_block)
   final_context = update_current_block(final_context, merge_block)
+  // @util.logger("final_merge_params: " + final_merge_params.to_string())
+  // @util.logger("var_names: " + var_names.to_string())
 
   // 更新变量环境，使合并后的值可以被访问
   let mut updated_var_env = context2.var_env
   for i = 0; i < var_names.length(); i = i + 1 {
     let var_name = var_names[i]
-    let param_index = if merge_params.length() > 0 { i + 1 } else { 0 }
+    let param_index = if result_value.length() > 0 { i + 1 } else { i }
+    // @util.logger("var_name: " + var_name + " param_index: " + param_index.to_string())
     if param_index < final_merge_params.length() {
       updated_var_env = updated_var_env.add(
         var_name,
@@ -253,9 +217,13 @@ pub fn convert_conditional(
       )
     }
   }
+  // @util.logger("updated_var_env: " + updated_var_env.to_string())
   final_context = update_var_env(final_context, updated_var_env)
 
   // 返回合并值作为结果
   // @util.logger("IfExpr result: " + merge_value.to_string())
-  ExprResult::{ value: Some(merge_value), context: final_context }
+  match merge_value {
+    Some(v) => ExprResult::{ value: Some(v), context: final_context }
+    None => ExprResult::{ value: None, context: final_context }
+  }
 }
