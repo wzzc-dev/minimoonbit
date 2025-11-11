@@ -34,7 +34,7 @@ pub fn AssemblyFunction::output(
 /// 实现线性扫描寄存器分配算法
 pub fn emit(input : @ssa.Ssa) -> Array[AssemblyFunction] {
   let functions = []
-  // println("emit riscv for ssa program: \n" + input.to_json().stringify())
+  println("emit riscv for ssa program: \n" + input.to_json().stringify())
   for static_array in input.program.static_arrays {
     fn get_elems(name : String, arr : Array[@closure.LowTypeValue]) {
       let body = []
@@ -79,11 +79,11 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
   let (live_intervals, param_ids, kill_points) = compute_live_intervals_for_function(
     func,
   )
-  // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
+  @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
   let allocator = linear_scan_register_allocation(
     live_intervals, param_ids, kill_points,
   )
-  // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
+  @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
   let asm_instructions = []
 
   // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间

@@ -1,8 +1,11 @@
-///| 活跃变量分析模块
+///| 基于def-use链的活跃区间分析模块
 
 ///|
 
-///| 为SSA IR实现活跃变量分析，计算每个值的生命周期区间
+///| 为SSA IR实现基于def-use链的直接活跃区间计算
+///| 在SSA形式下，每个值只定义一次，因此活跃区间可以直接计算：
+///| 活跃区间 = [定义位置, 最后使用位置 + 1]
+///| 无需传统的活跃变量分析迭代计算
 
 ///|
 /// 生命周期区间，表示一个SSA值的活跃范围
@@ -18,96 +21,76 @@ struct LiveInterval {
   is_call_result : Bool // 是否是函数调用结果
 } derive(Show)
 
-///| 计算SSA函数的活跃区间
+///| 基于def-use链直接计算SSA函数的活跃区间
 
 ///|
-
-///|
-/// 跟踪每个值的实际最后一次使用位置，确保寄存器分配准确
+///| 在SSA形式下，每个值只定义一次，因此活跃区间可以直接通过def-use链计算：
+///| 活跃区间 = [定义位置, 最后使用位置 + 1]
+///| 无需传统的活跃变量分析迭代计算
 pub fn compute_live_intervals_for_function(
   func : @ssa.Function,
 ) -> (Array[LiveInterval], @sorted_map.SortedMap[Int, Int], Array[Int]) {
-  let mut intervals = @immut/hashmap.new()
-  let mut last_use_positions = @immut/hashmap.new()
+  let mut def_positions = @immut/hashmap.new()  // 值ID -> 定义位置
+  let mut last_use_positions = @immut/hashmap.new()  // 值ID -> 最后使用位置
+  let mut value_types = @immut/hashmap.new()  // 值ID -> 类型
+  let mut block_param_indices = @immut/hashmap.new()  // 值ID -> 块参数索引
+  let mut is_call_results = @immut/hashmap.new()  // 值ID -> 是否是函数调用结果
   let mut instruction_count = 0
 
-  // 1. 首先记录参数的定义位置，设置合理的初始活跃区间
+  // 处理函数参数：在位置0定义
   let func_param_ids = @sorted_map.new()
   let has_closure = func.closure_param.length() > 0
-  for i, param in func.params {
+  for i, param in func.params + func.closure_param {
     let value_id = param.id
     func_param_ids.set(value_id, i + has_closure.to_int())
-    // 参数在函数开始时（位置0）定义，先设置结束位置为0
-    intervals = intervals.add(value_id, {
-      value_id,
-      block_param_index: None,
-      ty: param.ty,
-      start: 0,
-      end: 0,
-      reg: None,
-      freg: None,
-      spill_slot: None,
-      is_call_result: false,
-    })
+    def_positions = def_positions.add(value_id, 0)
+    value_types = value_types.add(value_id, param.ty)
+    block_param_indices = block_param_indices.add(value_id, None)
+    is_call_results = is_call_results.add(value_id, false)
   }
-  // @util.logger("func name: " + func.name + " func_param_ids: " + func_param_ids.to_string())
+
   let kill_points = []
 
-  // 遍历所有基本块和指令，计算每个值的定义和使用位置
+  // 单次遍历所有基本块和指令，收集def-use信息
   for block in func.blocks {
-    // 基本块参数在块开始时定义
-    // 基本块参数的开始位置是当前指令位置，结束位置稍后根据使用情况更新
+    // 处理基本块参数：在基本块入口处定义
     for i, param in block.params {
       let value_id = param.id
-      intervals = intervals.add(value_id, {
-        value_id,
-        block_param_index: Some(i + 1),
-        ty: param.ty,
-        start: instruction_count,
-        end: instruction_count,
-        reg: None,
-        freg: None,
-        spill_slot: None,
-        is_call_result: false,
-      })
+      def_positions = def_positions.add(value_id, instruction_count)
+      value_types = value_types.add(value_id, param.ty)
+      block_param_indices = block_param_indices.add(value_id, Some(i + 1))
+      is_call_results = is_call_results.add(value_id, false)
     }
-    // 不在这里递增instruction_count，因为基本块参数的定义位置与第一条指令相同
 
-    // 处理块内指令
+    // 处理基本块内的指令
     for instr in block.instructions {
+      // 记录kill points（函数调用位置）
       match instr.opcode {
         Call(_) | CallRef(_, _) | CallClosure(_, _) | MakeClosure(_) =>
           kill_points.push(instruction_count)
         _ => ()
       }
 
-      // 首先记录指令使用的值的最后使用位置
+      // 收集当前指令使用的所有值
       let used_value_ids = get_instruction_uses_ids(instr)
       for used_id in used_value_ids {
-
-        // 记录该值的最后使用位置
+        // 更新该值的最后使用位置
         last_use_positions = last_use_positions.add(used_id, instruction_count)
 
-        // 如果没有找到定义，可能是函数参数，创建一个区间
-        match intervals.get(used_id) {
-          None =>
-            intervals = intervals.add(used_id, {
-              value_id: used_id,
-              block_param_index: None,
-              ty: instr.result.ty,
-              start: 0, // 对于参数，假设从位置0开始
-              end: instruction_count, // 当前指令位置
-              reg: None,
-              freg: None,
-              spill_slot: None,
-              is_call_result: false,
-            })
-          Some(_) => () // 已存在的区间，稍后统一更新结束位置
+        // 如果是未知的值（可能是函数参数），记录其类型
+        if not(value_types.contains(used_id)) {
+          value_types = value_types.add(used_id, instr.result.ty)
+          block_param_indices = block_param_indices.add(used_id, None)
+          is_call_results = is_call_results.add(used_id, false)
         }
       }
 
       // 记录当前指令定义的值
       let def_value_id = instr.result.id
+      def_positions = def_positions.add(def_value_id, instruction_count)
+      value_types = value_types.add(def_value_id, instr.result.ty)
+      block_param_indices = block_param_indices.add(def_value_id, None)
+
       // 检查是否是函数调用结果
       let is_call_result = match instr.opcode {
         @ssa.Opcode::Call(_, _)
@@ -116,61 +99,53 @@ pub fn compute_live_intervals_for_function(
         | @ssa.Opcode::MakeClosure(_) => true
         _ => false
       }
-      intervals = intervals.add(def_value_id, {
-        value_id: def_value_id,
-        block_param_index: None,
-        ty: instr.result.ty,
-        start: instruction_count,
-        end: instruction_count,
-        reg: None,
-        freg: None,
-        spill_slot: None,
-        is_call_result,
-      })
+      is_call_results = is_call_results.add(def_value_id, is_call_result)
+
       instruction_count = instruction_count + 1
     }
 
     // 处理终止指令
     let term_uses = get_terminator_uses_ids(block.terminator)
     for used_id in term_uses {
-      // 记录该值的最后使用位置
+      // 更新该值的最后使用位置
       last_use_positions = last_use_positions.add(used_id, instruction_count)
 
-      // 如果没有找到定义，可能是函数参数，创建一个区间
-      match intervals.get(used_id) {
-        None =>
-          intervals = intervals.add(used_id, {
-            value_id: used_id,
-            block_param_index: None,
-            ty: Unit,
-            start: 0, // 对于参数，假设从位置0开始
-            end: instruction_count, // 当前指令位置
-            reg: None,
-            freg: None,
-            spill_slot: None,
-            is_call_result: false,
-          })
-        Some(_) => () // 已存在的区间，稍后统一更新结束位置
+      // 如果是未知的值，记录其类型
+      if not(value_types.contains(used_id)) {
+        value_types = value_types.add(used_id, Unit)
+        block_param_indices = block_param_indices.add(used_id, None)
+        is_call_results = is_call_results.add(used_id, false)
       }
     }
     instruction_count = instruction_count + 1
   }
 
-  // 3. 最后统一更新所有值的end为实际最后一次使用位置
+  // 直接构建活跃区间：[定义位置, 最后使用位置 + 1]
   let result = []
-  intervals.each(fn(value_id, interval) {
-    // 检查该值是否有记录的最后使用位置
-    let updated_end = match last_use_positions.get(value_id) {
-      Some(pos) => pos + 1 // 活跃区间应该包含最后使用的指令
-      None => interval.end
+  def_positions.each(fn(value_id, def_pos) {
+    let ty = value_types.get(value_id).unwrap()
+    let block_param_index = block_param_indices.get(value_id).unwrap()
+    let is_call_result = is_call_results.get(value_id).unwrap()
+
+    // 计算活跃区间的结束位置
+    let end_pos = match last_use_positions.get(value_id) {
+      Some(use_pos) => use_pos + 1  // 活跃区间包含最后使用的指令
+      None => def_pos + 1  // 如果没有被使用，活跃区间仅包含定义指令
     }
 
-    // 对于函数参数，使用实际的最后使用位置，不延长生命周期
-    // 这样可以避免寄存器被长时间占用
-    let final_end = updated_end
-    result.push({ ..interval, end: final_end })
+    result.push({
+      value_id,
+      block_param_index,
+      ty,
+      start: def_pos,
+      end: end_pos,
+      reg: None,
+      freg: None,
+      spill_slot: None,
+      is_call_result,
+    })
   })
-  // @util.logger("func name: " + func.name + " kill_points: " + kill_points.to_string())
+
   (result, func_param_ids, kill_points)
 }
 
