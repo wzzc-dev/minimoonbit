@@ -209,10 +209,20 @@ fn allocate_normal_register(
     spill_at_interval(allocator, interval)
   } else {
     match interval.block_param_index {
-      Some(index) => {
+      Some(_index) => {
         // 基本块参数，分配到对应的寄存器
-        let reg = reg_temp_list[index]
-        if allocator.available_regs.contains(reg) {
+        let mut reg = Zero 
+        for r in reg_saved_list[2:] {
+          if allocator.available_regs.contains(r) {
+            reg = r
+            break
+          }
+        }
+        if reg != Zero {
+      // Some(index) => {
+      //   // 基本块参数，分配到对应的寄存器
+      //   let reg = reg_temp_list[index]
+      //   if allocator.available_regs.contains(reg) {
           allocate_reg(allocator, reg, interval)
         } else {
           spill_at_interval(allocator, interval)

@@ -12,6 +12,7 @@ fn emit_terminator_with_regalloc(
         Some(val) =>
           // Check if the return value is a float
           match val.ty {
+            Unit => ()
             @ssa.Type::Float =>
               result.append(allocate_value_to_dest_freg(val, Fa0, allocator))
             _ => result.append(allocate_value_to_dest_reg(val, A0, allocator))
