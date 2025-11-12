@@ -53,6 +53,10 @@ pub fn compute_live_intervals_for_function(
   // @util.logger("func name: " + func.name + " func_param_ids: " + func_param_ids.to_string())
   let kill_points = []
 
+  // 2. 构建控制流图和循环信息
+  let (_block_positions, loop_info) = analyze_control_flow(func)
+  // @util.logger("block_positions: " + block_positions.to_string())
+  // @util.logger("loop_info: " + loop_info.to_string())
   // 遍历所有基本块和指令，计算每个值的定义和使用位置
   for block in func.blocks {
     // 基本块参数在块开始时定义
@@ -152,38 +156,24 @@ pub fn compute_live_intervals_for_function(
         Some(_) => () // 已存在的区间，稍后统一更新结束位置
       }
     }
-    // 处理循环跳转
-    match block.terminator {
-      Branch(_) => ()
-      Jump(target, _) => {
-        if target.id < block.id.id {
-          for value_id, interval in intervals {
-            let target_interval = match intervals.get(target.id) {
-              Some(interval) => interval
-              None => @util.die("jump target not found: " + target.id.to_string())
-            }
-            // @util.logger("target interval: " + target_interval.to_string())
-            if interval.start < target_interval.start && interval.end < target_interval.end {
-              // @util.logger("update interval: " + interval.to_string())
-              last_use_positions = last_use_positions.add(value_id, instruction_count)
-            }
-          }
-        }
-      }
-      Return(_) => ()
-    }
+    
     instruction_count = instruction_count + 1
   }
 
-  // 直接构建活跃区间：[定义位置, 最后使用位置 + 1]
+  // 构建活跃区间，考虑循环结构的影响
   let result = []
   intervals.each(fn(value_id, interval) {
-    // 检查该值是否有记录的最后使用位置
     let updated_end = match last_use_positions.get(value_id) {
       Some(pos) => pos + 1 // 活跃区间应该包含最后使用的指令
       None => interval.end
     }
-    let final_end = updated_end
+    let interval = { ..interval, end: updated_end }
+
+    // 检查该值是否在循环中使用，如果是则扩展活跃区间
+    // @util.logger("is_used_in_loop : " + (interval, loop_info).to_string())
+    let final_end = used_in_loop_pos(interval, loop_info)
+    // @util.logger("value_id: " + value_id.to_string() + " final_end: " + final_end.to_string() + "\n")
+    // @util.logger("value_id: " + value_id.to_string() + " interval: " + interval.to_string() + " final_end: " + final_end.to_string() + "\n")
     result.push({ ..interval, end: final_end })
   })
   // @util.logger("func name: " + func.name + " kill_points: " + kill_points.to_string())
@@ -332,4 +322,93 @@ fn get_terminator_uses_ids(term : @ssa.Terminator) -> Array[Int] {
     _ => ()
   }
   uses
+}
+
+pub struct LoopInfo {
+  loop_head_block_id: Int
+  loop_blocks: Array[Int]
+  start_pos: Int
+  end_pos: Int
+} derive (ToJson, Show)
+///|
+/// 分析控制流图，识别循环结构
+fn analyze_control_flow(func : @ssa.Function) -> (@immut/hashmap.HashMap[Int, (Int, Int)], Array[LoopInfo]) {
+  let mut block_positions = @immut/hashmap.new()
+  let loop_info =[]
+  let mut instruction_count = 0
+
+  // 记录每个基本块的指令位置范围
+  for block in func.blocks {
+    let start_pos = instruction_count
+    for _ in block.instructions {
+      instruction_count = instruction_count + 1
+    }
+    let end_pos = instruction_count + 1 // +1 for terminator
+    block_positions = block_positions.add(block.id.id, (start_pos, end_pos))
+    instruction_count = end_pos
+  }
+
+  // 识别循环结构：通过后向边检测
+  for block in func.blocks {
+    match block.terminator {
+      @ssa.Terminator::Jump(target_block, _) => {
+        // 检查是否跳回到前面已经处理过的块（循环）
+        match block_positions.get(target_block.id) {
+          Some((target_start, _)) => {
+            match block_positions.get(block.id.id) {
+              Some((current_start, current_end)) => {
+                if target_start <= current_start {
+                  // 发现循环：从当前块跳回到前面的块
+                  let loop_blocks = [target_block.id, block.id.id]
+                  loop_info.push({loop_head_block_id: target_block.id, loop_blocks: loop_blocks, start_pos: target_start, end_pos: current_end}) // 使用目标块ID作为循环头
+                }
+              }
+              None => ()
+            }
+          }
+          None => ()
+        }
+      }
+      @ssa.Terminator::Branch(_, _true_block, _, _false_block, _) => {
+        // 检查两个分支是否形成循环
+        // for target_block in [true_block, false_block] {
+        //   match block_positions.get(target_block.id) {
+        //     Some((target_start, _)) => {
+        //       match block_positions.get(block.id.id) {
+        //         Some((current_start, _)) => {
+        //           if target_start <= current_start {
+        //             // 发现循环
+        //             let loop_blocks = [target_block.id, block.id.id]
+        //             loop_info.push({loop_head_block_id: target_block.id, loop_blocks: loop_blocks, start_pos: target_start, end_pos: current_start}) // 使用目标块ID作为循环头
+        //           }
+        //         }
+        //         None => ()
+        //       }
+        //     }
+        //     None => ()
+        //   }
+        // }
+        ()
+      }
+      _ => ()
+    }
+  }
+  // @util.logger("block_positions: " + block_positions.to_string())
+  (block_positions, loop_info)
+}
+
+///|
+/// 检查值是否在循环中使用
+fn used_in_loop_pos(
+  interval : LiveInterval,
+  loop_info : Array[LoopInfo],
+) -> Int {
+  let mut end_pos = interval.end
+  for _, loop_blocks in loop_info {
+    if interval.start <= loop_blocks.start_pos && interval.end >= loop_blocks.start_pos {
+      // @util.logger("interval: " + interval.to_string() + "\nloop_info: " + loop_info.to_string()+"\n\n")
+      end_pos = @cmp.maximum(end_pos, loop_blocks.end_pos)
+    }
+  }
+  end_pos
 }

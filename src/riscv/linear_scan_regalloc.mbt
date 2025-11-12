@@ -258,11 +258,12 @@ fn allocate_normal_register(
           }
         }
         if reg == Zero {
-          @util.die(
-            "No available register for allocation: " + interval.to_string(),
-          )
+          spill_at_interval(allocator, interval)
+        } else {
+          // 没有可用寄存器，需要溢出
+          allocate_reg(allocator, reg, interval)
+
         }
-        allocate_reg(allocator, reg, interval)
       }
     }
     // @util.logger(" allocate reg: " + reg.to_string() + " interval: " + interval.to_string())
