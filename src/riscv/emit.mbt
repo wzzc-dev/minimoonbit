@@ -86,14 +86,9 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
     allocator.saved_callee_regs.length() * 8 +
     allocator.saved_callee_fregs.length() * 8
   
-  let saved_caller_size =
-    allocator.saved_caller_regs.length() * 8 +
-    allocator.saved_caller_fregs.length() * 8
-  
   let framesize = 24 +
     spill_size +
-    saved_callee_size +
-    saved_caller_size
+    saved_callee_size
   
   // 函数序言
   asm_instructions.push(Addi(Sp, Sp, -framesize)) // 分配栈帧
@@ -135,10 +130,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
                   asm_instructions.push(
                     Fsd(Ft0, {
                       base: Fp,
-                      offset: -(24 +
-                      spill_offset +
-                      saved_callee_size +
-                      saved_caller_size),
+                      offset: -(24 + spill_offset + saved_callee_size),
                     }),
                   )
                 }
@@ -158,10 +150,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
                   asm_instructions.push(
                     Sd(T0, {
                       base: Fp,
-                      offset: -(24 +
-                      spill_offset +
-                      saved_callee_size +
-                      saved_caller_size),
+                      offset: -(24 + spill_offset + saved_callee_size),
                     }),
                   )
                 }
@@ -258,8 +247,9 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
     // asm_instructions.append(param_instrs)
 
     // 生成指令
+    let mut current_index = 0
     for instr in block.instructions {
-      let asm_instrs = emit_instruction_with_regalloc(instr, allocator) catch {
+      let asm_instrs = emit_instruction_with_regalloc(instr, allocator, live_intervals, current_index) catch {
         e =>
           @util.die(
             "Compilation error: [Instruction]: " +
@@ -269,6 +259,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
           )
       }
       asm_instructions.append(asm_instrs)
+      current_index = current_index + 1
     }
     let block_map = @hashmap.new()
     for b in func.blocks {
@@ -298,6 +289,8 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
 fn emit_instruction_with_regalloc(
   instr : @ssa.Instruction,
   allocator : RegisterAllocator,
+  live_intervals : Array[LiveInterval],
+  instr_index : Int,
 ) -> Array[RvAsm] raise {
   // @util.logger("emit_instruction_with_regalloc: {}" + instr.to_string())
   match instr.opcode {
@@ -438,7 +431,7 @@ fn emit_instruction_with_regalloc(
       )
     // 函数调用
     @ssa.Opcode::Call(name, args) =>
-      emit_function_call_instruction(instr.result, name, args, allocator)
+      emit_function_call_instruction(instr.result, name, args, allocator, live_intervals, instr_index)
     // 函数引用调用
     @ssa.Opcode::CallRef(name, args) =>
       emit_function_ref_call_instruction(instr.result, name, args, allocator)

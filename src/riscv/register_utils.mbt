@@ -7,14 +7,12 @@ pub fn generate_spill_store_if_needed(
 ) -> Array[RvAsm] {
   let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
     allocator.saved_callee_fregs.length() * 8
-  let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
-    allocator.saved_caller_fregs.length() * 8
   match allocator.value_to_spill.get(value_id) {
     Some(spill_offset) =>
       [
         Sd(reg, {
           base: Fp,
-          offset: -(24 + spill_offset + saved_callee_size + saved_caller_size),
+          offset: -(24 + spill_offset + saved_callee_size),
         }),
       ]
     None => [] // 不需要溢出存储
@@ -36,12 +34,10 @@ pub fn get_register_or_spill_load(
         Some(spill_offset) => {
           let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
             allocator.saved_callee_fregs.length() * 8
-          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
-            allocator.saved_caller_fregs.length() * 8
           // 值被溢出到内存，需要加载
           let load_instr = Ld(fallback, {
             base: Fp,
-            offset: -(24 + spill_offset + saved_callee_size + saved_caller_size),
+            offset: -(24 + spill_offset + saved_callee_size),
           })
           (fallback, [load_instr])
         }
@@ -68,12 +64,10 @@ pub fn get_float_register_or_spill_load(
         Some(spill_offset) => {
           let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
             allocator.saved_callee_fregs.length() * 8
-          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
-            allocator.saved_caller_fregs.length() * 8
           // 值被溢出到内存，需要加载
           let load_instr = Fld(fallback, {
             base: Fp,
-            offset: -(24 + spill_offset + saved_callee_size + saved_caller_size),
+            offset: -(24 + spill_offset + saved_callee_size),
           })
           (fallback, [load_instr])
         }
@@ -96,14 +90,12 @@ pub fn generate_float_spill_store_if_needed(
 ) -> Array[RvAsm] {
   let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
     allocator.saved_callee_fregs.length() * 8
-  let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
-    allocator.saved_caller_fregs.length() * 8
   match allocator.value_to_spill.get(value_id) {
     Some(spill_offset) =>
       [
         Fsd(freg, {
           base: Fp,
-          offset: -(24 + spill_offset + saved_callee_size + saved_caller_size),
+          offset: -(24 + spill_offset + saved_callee_size),
         }),
       ]
     None => [] // 不需要溢出存储
@@ -124,15 +116,10 @@ fn allocate_value_to_dest_reg(
         Some(spill_offset) => {
           let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
             allocator.saved_callee_fregs.length() * 8
-          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
-            allocator.saved_caller_fregs.length() * 8
           result.push(
             Ld(dest_reg, {
               base: Fp,
-              offset: -(24 +
-              spill_offset +
-              saved_callee_size +
-              saved_caller_size),
+              offset: -(24 + spill_offset + saved_callee_size),
             }),
           )
         }
@@ -160,15 +147,10 @@ fn allocate_value_to_dest_freg(
         Some(spill_offset) => {
           let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
             allocator.saved_callee_fregs.length() * 8
-          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
-            allocator.saved_caller_fregs.length() * 8
           result.push(
             Fld(dest_freg, {
               base: Fp,
-              offset: -(24 +
-              spill_offset +
-              saved_callee_size +
-              saved_caller_size),
+              offset: -(24 + spill_offset + saved_callee_size),
             }),
           )
         }
@@ -197,15 +179,10 @@ fn store_value_to_allocator_reg_or_spill(
         Some(spill_offset) => {
           let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
             allocator.saved_callee_fregs.length() * 8
-          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
-            allocator.saved_caller_fregs.length() * 8
           result.push(
             Sd(input_reg, {
               base: Fp,
-              offset: -(24 +
-              spill_offset +
-              saved_callee_size +
-              saved_caller_size),
+              offset: -(24 + spill_offset + saved_callee_size),
             }),
           )
         }
@@ -234,15 +211,10 @@ fn store_value_to_allocator_freg_or_spill(
         Some(spill_offset) => {
           let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
             allocator.saved_callee_fregs.length() * 8
-          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
-            allocator.saved_caller_fregs.length() * 8
           result.push(
             Fsd(input_freg, {
               base: Fp,
-              offset: -(24 +
-              spill_offset +
-              saved_callee_size +
-              saved_caller_size),
+              offset: -(24 + spill_offset + saved_callee_size),
             }),
           )
         }
