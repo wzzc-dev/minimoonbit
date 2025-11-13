@@ -82,11 +82,19 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
 
   // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间
   let spill_size = allocator.next_spill_slot
-  let framesize = 24 +
-    spill_size +
+  let saved_callee_size =
     allocator.saved_callee_regs.length() * 8 +
     allocator.saved_callee_fregs.length() * 8
-
+  
+  let saved_caller_size =
+    allocator.saved_caller_regs.length() * 8 +
+    allocator.saved_caller_fregs.length() * 8
+  
+  let framesize = 24 +
+    spill_size +
+    saved_callee_size +
+    saved_caller_size
+  
   // 函数序言
   asm_instructions.push(Addi(Sp, Sp, -framesize)) // 分配栈帧
   asm_instructions.push(Sd(Ra, { base: Sp, offset: framesize - 8 })) // 保存返回地址
@@ -129,7 +137,8 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
                       base: Fp,
                       offset: -(24 +
                       spill_offset +
-                      allocator.saved_callee_regs.length() * 8),
+                      saved_callee_size +
+                      saved_caller_size),
                     }),
                   )
                 }
@@ -151,7 +160,8 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
                       base: Fp,
                       offset: -(24 +
                       spill_offset +
-                      allocator.saved_callee_regs.length() * 8),
+                      saved_callee_size +
+                      saved_caller_size),
                     }),
                   )
                 }

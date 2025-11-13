@@ -80,7 +80,7 @@ pub fn compute_live_intervals_for_function(
     for instr in block.instructions {
       // 记录kill points（函数调用位置）
       match instr.opcode {
-        Call(_) | CallRef(_, _) | CallClosure(_, _) | MakeClosure(_) =>
+        Call(_) | CallRef(_, _) | CallClosure(_, _) | MakeClosure(_) | Tuple(_) =>
           kill_points.push(instruction_count)
         _ => ()
       }

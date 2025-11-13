@@ -26,10 +26,18 @@ fn emit_terminator_with_regalloc(
 
       // 计算栈帧大小：与函数序言中的计算保持一致
       let spill_size = allocator.next_spill_slot
+      let saved_callee_size =
+        allocator.saved_callee_regs.length() * 8 +
+        allocator.saved_callee_fregs.length() * 8
+      
+      let saved_caller_size =
+        allocator.saved_caller_regs.length() * 8 +
+        allocator.saved_caller_fregs.length() * 8
+      
       let framesize = 24 +
         spill_size +
-        saved_callee_regs.length() * 8 +
-        saved_callee_fregs.length() * 8
+        saved_callee_size +
+        saved_caller_size
 
       // 恢复被调用者保存的寄存器从栈上
       let mut offset = 24
@@ -76,6 +84,13 @@ fn emit_terminator_with_regalloc(
           block_map, true_args, true_block, allocator,
         ),
       )
+      let saved_callee_size =
+        allocator.saved_callee_regs.length() * 8 +
+        allocator.saved_callee_fregs.length() * 8
+      
+      let saved_caller_size =
+        allocator.saved_caller_regs.length() * 8 +
+        allocator.saved_caller_fregs.length() * 8
       let cond_reg = match allocator.value_to_reg.get(cond.id) {
         Some(cond_reg) => cond_reg
         None =>
@@ -86,7 +101,8 @@ fn emit_terminator_with_regalloc(
                   base: Fp,
                   offset: -(24 +
                   spill_offset +
-                  allocator.saved_callee_regs.length() * 8),
+                  saved_callee_size +
+                  saved_caller_size),
                 }),
               )
               T0

@@ -5,12 +5,16 @@ pub fn generate_spill_store_if_needed(
   reg : Reg,
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
+  let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
+    allocator.saved_callee_fregs.length() * 8
+  let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
+    allocator.saved_caller_fregs.length() * 8
   match allocator.value_to_spill.get(value_id) {
     Some(spill_offset) =>
       [
         Sd(reg, {
           base: Fp,
-          offset: -(24 + spill_offset + allocator.saved_callee_regs.length() * 8),
+          offset: -(24 + spill_offset + saved_callee_size + saved_caller_size),
         }),
       ]
     None => [] // 不需要溢出存储
@@ -30,12 +34,14 @@ pub fn get_register_or_spill_load(
       // 值没有寄存器分配，检查是否被溢出
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
+          let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
+            allocator.saved_callee_fregs.length() * 8
+          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
+            allocator.saved_caller_fregs.length() * 8
           // 值被溢出到内存，需要加载
           let load_instr = Ld(fallback, {
             base: Fp,
-            offset: -(24 +
-            spill_offset +
-            allocator.saved_callee_regs.length() * 8),
+            offset: -(24 + spill_offset + saved_callee_size + saved_caller_size),
           })
           (fallback, [load_instr])
         }
@@ -60,12 +66,14 @@ pub fn get_float_register_or_spill_load(
       // 值没有寄存器分配，检查是否被溢出
       match allocator.value_to_spill.get(value_id) {
         Some(spill_offset) => {
+          let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
+            allocator.saved_callee_fregs.length() * 8
+          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
+            allocator.saved_caller_fregs.length() * 8
           // 值被溢出到内存，需要加载
           let load_instr = Fld(fallback, {
             base: Fp,
-            offset: -(24 +
-            spill_offset +
-            allocator.saved_callee_fregs.length() * 8),
+            offset: -(24 + spill_offset + saved_callee_size + saved_caller_size),
           })
           (fallback, [load_instr])
         }
@@ -86,14 +94,16 @@ pub fn generate_float_spill_store_if_needed(
   freg : FReg,
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] {
+  let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
+    allocator.saved_callee_fregs.length() * 8
+  let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
+    allocator.saved_caller_fregs.length() * 8
   match allocator.value_to_spill.get(value_id) {
     Some(spill_offset) =>
       [
         Fsd(freg, {
           base: Fp,
-          offset: -(24 +
-          spill_offset +
-          allocator.saved_callee_fregs.length() * 8),
+          offset: -(24 + spill_offset + saved_callee_size + saved_caller_size),
         }),
       ]
     None => [] // 不需要溢出存储
@@ -111,16 +121,22 @@ fn allocate_value_to_dest_reg(
     Some(reg) => if reg != dest_reg { result.push(Mv(dest_reg, reg)) }
     None =>
       match allocator.value_to_spill.get(value.id) {
-        Some(spill_offset) =>
+        Some(spill_offset) => {
+          let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
+            allocator.saved_callee_fregs.length() * 8
+          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
+            allocator.saved_caller_fregs.length() * 8
           result.push(
             Ld(dest_reg, {
               base: Fp,
               offset: -(24 +
               spill_offset +
-              allocator.saved_callee_regs.length() * 8),
+              saved_callee_size +
+              saved_caller_size),
             }),
           )
-        None => 
+        }
+        None =>
           fail(
             "allocate_value_to_dest_reg 分配寄存器或溢出栈槽 value_id=" +
             value.id.to_string(),
@@ -141,16 +157,22 @@ fn allocate_value_to_dest_freg(
     Some(freg) => if freg != dest_freg { result.push(FmvD(dest_freg, freg)) }
     None =>
       match allocator.value_to_spill.get(value.id) {
-        Some(spill_offset) =>
+        Some(spill_offset) => {
+          let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
+            allocator.saved_callee_fregs.length() * 8
+          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
+            allocator.saved_caller_fregs.length() * 8
           result.push(
             Fld(dest_freg, {
               base: Fp,
               offset: -(24 +
               spill_offset +
-              allocator.saved_callee_regs.length() * 8),
+              saved_callee_size +
+              saved_caller_size),
             }),
           )
-        None => 
+        }
+        None =>
           fail(
             "allocate_value_to_dest_freg 分配寄存器或溢出栈槽 value_id=" +
             value.id.to_string(),
@@ -172,16 +194,22 @@ fn store_value_to_allocator_reg_or_spill(
     None =>
       // 检查该参数是否之前已经被计算/溢出
       match allocator.value_to_spill.get(value.id) {
-        Some(spill_offset) =>
+        Some(spill_offset) => {
+          let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
+            allocator.saved_callee_fregs.length() * 8
+          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
+            allocator.saved_caller_fregs.length() * 8
           result.push(
             Sd(input_reg, {
               base: Fp,
               offset: -(24 +
               spill_offset +
-              allocator.saved_callee_regs.length() * 8),
+              saved_callee_size +
+              saved_caller_size),
             }),
           )
-        None => 
+        }
+        None =>
           fail(
             "store_value_to_allocator_reg_or_spill 分配寄存器或溢出栈槽 value_id=" +
             value.id.to_string(),
@@ -203,15 +231,21 @@ fn store_value_to_allocator_freg_or_spill(
     None =>
       // 检查该参数是否之前已经被计算/溢出
       match allocator.value_to_spill.get(value.id) {
-        Some(spill_offset) =>
+        Some(spill_offset) => {
+          let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
+            allocator.saved_callee_fregs.length() * 8
+          let saved_caller_size = allocator.saved_caller_regs.length() * 8 +
+            allocator.saved_caller_fregs.length() * 8
           result.push(
             Fsd(input_freg, {
               base: Fp,
               offset: -(24 +
               spill_offset +
-              allocator.saved_callee_regs.length() * 8),
+              saved_callee_size +
+              saved_caller_size),
             }),
           )
+        }
         None =>
           fail(
             "store_value_to_allocator_freg_or_spill 分配寄存器或溢出栈槽 value_id=" +

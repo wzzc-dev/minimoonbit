@@ -25,6 +25,10 @@ struct RegisterAllocator {
   saved_callee_regs : Array[Reg]
   // 需要保存的浮点寄存器列表
   saved_callee_fregs : Array[FReg]
+  // 调用者保存的寄存器列表
+  saved_caller_regs : Array[Reg]
+  // 调用者保存的浮点寄存器列表
+  saved_caller_fregs : Array[FReg]
 } derive(Show)
 
 ///|
@@ -53,6 +57,10 @@ pub fn linear_scan_register_allocation(
     saved_callee_regs: [],
     // 需要保存的浮点寄存器列表
     saved_callee_fregs: [],
+    // 调用者保存的寄存器列表
+    saved_caller_regs: [],
+    // 调用者保存的浮点寄存器列表
+    saved_caller_fregs: [],
   }
 
   // 按开始位置排序区间
@@ -343,6 +351,7 @@ fn allocate_reg(
     allocator.available_regs.remove(reg)
     allocator.value_to_reg = allocator.value_to_reg.add(interval.value_id, reg)
     track_callee_saved_reg(allocator, reg)
+    track_caller_saved_reg(allocator, reg)
     let new_interval = { ..interval, reg: Some(reg) }
     insert_active_interval(allocator, new_interval)
   } else {
@@ -364,6 +373,7 @@ fn allocate_freg(
       freg,
     )
     track_callee_saved_freg(allocator, freg)
+    track_caller_saved_freg(allocator, freg)
     let new_interval = { ..interval, freg: Some(freg) }
     insert_active_interval(allocator, new_interval)
   } else {
@@ -398,6 +408,30 @@ fn track_callee_saved_freg(allocator : RegisterAllocator, freg : FReg) -> Unit {
     _ => ()
   }
 }
+
+fn track_caller_saved_reg(allocator : RegisterAllocator, reg : Reg) -> Unit {
+  match reg {
+    A0 | A1 | A2 | A3 | A4 | A5 | A6 | A7 | T0 | T1 | T2 | T3 | T4 | T5 | T6 =>
+      if not(allocator.saved_caller_regs.contains(reg)) {
+        allocator.saved_caller_regs.push(reg)
+      }
+    _ => ()
+  }
+}
+
+///|
+/// 跟踪需要保存的caller-saved寄存器
+fn track_caller_saved_freg(allocator : RegisterAllocator, freg : FReg) -> Unit {
+  match freg {
+    Fa0 | Fa1 | Fa2 | Fa3 | Fa4 | Fa5 | Fa6 | Fa7 | Ft0 | Ft1 | Ft2 | Ft3 | Ft4 | Ft5 | Ft6 =>
+      if not(allocator.saved_caller_fregs.contains(freg)) {
+        allocator.saved_caller_fregs.push(freg)
+      }
+    _ => ()
+  }
+}
+
+
 
 ///|
 /// 移除已结束的活跃区间（处理所有类型）
