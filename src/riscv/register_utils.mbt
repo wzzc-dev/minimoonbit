@@ -105,7 +105,7 @@ fn allocate_value_to_dest_reg(
   value : @ssa.Value,
   dest_reg : Reg,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let result = []
   match allocator.value_to_reg.get(value.id) {
     Some(reg) => if reg != dest_reg { result.push(Mv(dest_reg, reg)) }
@@ -120,7 +120,11 @@ fn allocate_value_to_dest_reg(
               allocator.saved_callee_regs.length() * 8),
             }),
           )
-        None => @util.die("TODO: 跳转参数需要溢出栈槽")
+        None => 
+          fail(
+            "allocate_value_to_dest_reg 分配寄存器或溢出栈槽 value_id=" +
+            value.id.to_string(),
+          )
       }
   }
   result
@@ -131,7 +135,7 @@ fn allocate_value_to_dest_freg(
   value : @ssa.Value,
   dest_freg : FReg,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let result = []
   match allocator.value_to_freg.get(value.id) {
     Some(freg) => if freg != dest_freg { result.push(FmvD(dest_freg, freg)) }
@@ -146,7 +150,11 @@ fn allocate_value_to_dest_freg(
               allocator.saved_callee_regs.length() * 8),
             }),
           )
-        None => @util.die("TODO: 跳转参数需要溢出栈槽")
+        None => 
+          fail(
+            "allocate_value_to_dest_freg 分配寄存器或溢出栈槽 value_id=" +
+            value.id.to_string(),
+          )
       }
   }
   result
@@ -157,7 +165,7 @@ fn store_value_to_allocator_reg_or_spill(
   value : @ssa.Value,
   input_reg : Reg,
   allocator : RegisterAllocator,
-) -> Array[RvAsm] {
+) -> Array[RvAsm] raise {
   let result = []
   match allocator.value_to_reg.get(value.id) {
     Some(reg) => if reg != input_reg { result.push(Mv(reg, input_reg)) }
@@ -173,7 +181,11 @@ fn store_value_to_allocator_reg_or_spill(
               allocator.saved_callee_regs.length() * 8),
             }),
           )
-        None => @util.die("TODO: 参数需要分配寄存器或溢出栈槽")
+        None => 
+          fail(
+            "store_value_to_allocator_reg_or_spill 分配寄存器或溢出栈槽 value_id=" +
+            value.id.to_string(),
+          )
       }
   }
   result
@@ -202,7 +214,7 @@ fn store_value_to_allocator_freg_or_spill(
           )
         None =>
           fail(
-            "store_value_to_allocator_freg_or_spill 分配寄存器或溢出栈槽: " +
+            "store_value_to_allocator_freg_or_spill 分配寄存器或溢出栈槽 value_id=" +
             value.id.to_string(),
           )
       }

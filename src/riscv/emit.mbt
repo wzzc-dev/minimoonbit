@@ -15,16 +15,10 @@ pub fn AssemblyFunction::output(
   if self.asm_export {
     logger.write_string(".global \{name}\n")
   }
-  if self.static_data {
-    logger.write_string(".data\n")
-  }
   logger.write_string("\{name}:\n")
   for rv_asm in self.body {
     Show::output(rv_asm, logger)
     logger.write_string("\n")
-  }
-  if self.static_data {
-    logger.write_string(".text\n")
   }
 }
 

@@ -219,10 +219,6 @@ fn allocate_normal_register(
           }
         }
         if reg != Zero {
-      // Some(index) => {
-      //   // 基本块参数，分配到对应的寄存器
-      //   let reg = reg_temp_list[index]
-      //   if allocator.available_regs.contains(reg) {
           allocate_reg(allocator, reg, interval)
         } else {
           spill_at_interval(allocator, interval)
@@ -262,7 +258,6 @@ fn allocate_normal_register(
         } else {
           // 没有可用寄存器，需要溢出
           allocate_reg(allocator, reg, interval)
-
         }
       }
     }
@@ -284,10 +279,16 @@ fn allocate_normal_float_register(
     spill_at_interval(allocator, interval)
   } else {
     match interval.block_param_index {
-      Some(index) => {
+      Some(_index) => {
         // 基本块参数，分配到对应的寄存器
-        let freg = freg_temp_list[index]
-        if allocator.available_fregs.contains(freg) {
+        let mut freg = Fa0 
+        for r in freg_saved_list[2:] {
+          if allocator.available_fregs.contains(r) {
+            freg = r
+            break
+          }
+        }
+        if freg != Ft0 {
           allocate_freg(allocator, freg, interval)
         } else {
           spill_at_interval(allocator, interval)
