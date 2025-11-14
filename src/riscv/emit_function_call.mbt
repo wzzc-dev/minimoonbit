@@ -188,7 +188,7 @@ fn value_is_live_across_call(
 ) -> Bool {
   for interval in live_intervals {
     if interval.value_id == value_id {
-      return interval.end > call_point
+      return interval.end > call_point && interval.start <= call_point
     }
   }
   false
@@ -243,7 +243,7 @@ fn save_caller_saved_regs(
       if value_is_live_across_call(
           value_id, current_instruction_index, live_intervals,
         ) {
-        // 这个值在调用后还需要使用，需要保存
+        // 这个值在调用后还需要使用，且已经被定义，需要保存
         instrs.push(Sd(reg, { base: Sp, offset: spill_offset }))
         spill_offset += 8
       }
