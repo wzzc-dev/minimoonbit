@@ -12,11 +12,22 @@ pub fn to_ssa(input : @closure.Program) -> Ssa {
   // 初始化SSA程序
   let functions = []
 
+  // 预先创建函数类型环境，以支持相互递归函数
+  let mut func_env = @immut/hashmap.new()
+  for fundef in input.fundefs {
+    if not(@typing.extenv.contains(fundef.old_name.to_string())) {
+      func_env = func_env.add(
+        fundef.name.0.to_string(),
+        convert_type(fundef.ty),
+      )
+    }
+  }
+
   // 转换每个函数定义
   for fundef in input.fundefs {
     if not(@typing.extenv.contains(fundef.old_name.to_string())) {
       let block_id = new_block_id()
-      let ssa_func = convert_function(block_id, fundef, functions)
+      let ssa_func = convert_function_with_env(block_id, fundef, func_env)
       // @util.logger("convert_function: " + ssa_func.to_json().stringify())
       functions.push(ssa_func)
     }
