@@ -73,7 +73,10 @@ pub fn convert_conditional(
   }
 
   let result_value = match merge_value {
-    Some(v) => [v]
+    Some(v) => match v.ty {
+      Type::Unit => []
+      _ => [v]
+    }
     None => []
   }
   // 如果有变量修改，将合并值作为第一个参数
@@ -82,7 +85,6 @@ pub fn convert_conditional(
   } else {
     result_value
   }
-  // println("final_merge_params: " + final_merge_params.to_string())
   // 创建then块
   let then_block = BasicBlock::{
     id: then_block_id,
