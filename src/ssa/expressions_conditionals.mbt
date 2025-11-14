@@ -136,7 +136,12 @@ pub fn convert_conditional(
   let then_result = convert_expr(context_with_blocks, e1)
   let then_context = then_result.context
   let then_args = match then_result.value {
-    Some(v) => [v]
+    Some(v) => {
+      match v.ty {
+        Type::Unit => []
+        _ => [v]
+      }
+    }
     None => []
   }
 
@@ -169,7 +174,12 @@ pub fn convert_conditional(
   let else_result = convert_expr(else_context, e2)
   let final_else_context = else_result.context
   let else_args = match else_result.value {
-    Some(v) => [v]
+    Some(v) => {
+      match v.ty {
+        Type::Unit => []
+        _ => [v]
+      }
+    }
     None => []
   }
 
