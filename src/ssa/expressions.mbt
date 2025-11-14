@@ -21,9 +21,14 @@ pub fn convert_expr(
 ) -> ExprResult raise {
   // @util.logger("convert_expr: " + expr.to_string())
   match expr {
-    Unit =>
+    Unit => {
+      let result_value = Value::{
+        id: new_value_id(),
+        ty: Type::Unit,
+      }
       // Unit值，不产生实际值
-      ExprResult::{ value: None, context }
+      ExprResult::{ value: Some(result_value), context }
+    }
     MakeTuple(elements) => {
       // 元组创建
       let mut current_context = context
@@ -381,7 +386,7 @@ pub fn convert_expr(
             Err(_) => {
               // 变量未找到，返回None并记录警告
               @util.logger(
-                "Warning: Variable or function not found: " + var_name,
+                "Warning: Variable or function not found: " + var_name + " in context.var_env: " + context.var_env.to_string(),
               )
               ExprResult::{ value: None, context }
             }
@@ -389,7 +394,7 @@ pub fn convert_expr(
       }
     }
     Let((name, ty), e1, e2) => {
-
+      // @util.logger("Let: " + name.to_string() + " = " + e1.to_string())
       // Let绑定：先计算e1
       let result1 = convert_expr(context, e1)
       let result1_value = result1.value
@@ -409,7 +414,8 @@ pub fn convert_expr(
             var_env: updated_var_env,
             func_env: context1.func_env,
           }
-
+          // @util.logger("Let: " + name.to_string() + " = " + value.to_string())
+          // @util.logger("Let: " + name.to_string() + " context.var_env: " + updated_var_env.to_string())
           // 计算e2，使用更新后的环境
           let result2 = convert_expr(updated_context, e2)
           result2
