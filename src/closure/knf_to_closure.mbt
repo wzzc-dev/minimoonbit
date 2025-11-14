@@ -92,6 +92,8 @@ fn knf_to_closure(
         _ => ty_to_low_type(ty)
       }
       let env = env.add(x, ty)
+      // @util.logger("let: " + (x, ty).to_string())
+      // @util.logger("env: " + env.to_string())
       Let((x, ty), body, knf_to_closure(funcdefs, env, static_arrays, cont))
     }
     LetRec({ name, ty, args, body }, cont) => {
@@ -130,7 +132,7 @@ fn knf_to_closure(
         true => {
           let closure : Closure = {
             name: name.to_string(),
-            actual_free_vars: fv_to_array(free_vars).map(fv => fv.0),
+            actual_free_vars: fv_to_array(free_vars),
           }
           MakeClosure(
             (name, gen_func_type(ty, is_closure, funcdefs, env, body)),
@@ -302,6 +304,7 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
     }
     Var(x) => {
       // 获取变量的实际类型，而不是默认为Unit
+      // @util.logger("fv: " + x.to_string()   + ", env: " + env.to_string())
       let ty = match env.get(x) {
         Some(t) => t
         None => Unit
@@ -336,8 +339,21 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
       result.union(@hashset.of([new_fv(name, Ptr)]))
     }
     Get(a, b) => @hashset.of([new_fv(a, Ptr), new_fv(b, Int)])
-    Put(a, b, c) =>
-      @hashset.of([new_fv(a, Ptr), new_fv(b, Int), new_fv(c, Ptr)])
+    Put(a, b, c) => {
+      let a_ty = match env.get(a) {
+        Some(ty) => ty
+        None => Unit
+      }
+      let b_ty = match env.get(b) {
+        Some(ty) => ty
+        None => Int
+      }
+      let c_ty = match env.get(c) {
+        Some(ty) => ty
+        None => Ptr
+      }
+      @hashset.of([new_fv(a, a_ty), new_fv(b, b_ty), new_fv(c, c_ty)])
+    }
     ExternalArray(_) => @hashset.new()
     ExternalFunctionApplication(_, arr_name) =>
       @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))

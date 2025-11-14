@@ -112,7 +112,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
       } else {
         // 生成 bind 调用来创建闭包
         let free_vars = Array::join(
-          env.actual_free_vars.map(fn(v) { v.name.to_string() }),
+          env.actual_free_vars.map(fn(v) { v.0.to_string() }),
           ",",
         )
         "  \{func.to_string()}.bind(null, [\{free_vars}])"

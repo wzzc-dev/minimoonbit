@@ -203,8 +203,11 @@ pub fn Closure::from_json(json : Json) -> Closure raise {
   match json {
     { "name": String(name), "actual_free_vars": Array(actual_free_vars), .. } => {
       let actual_free_vars_res = []
-      for n in actual_free_vars {
-        actual_free_vars_res.push(Name::from_json(n))
+      for it in actual_free_vars {
+        match it {
+          [n, t] => actual_free_vars_res.push((Name::from_json(n), LowType::from_json(t)))
+          _ => fail("invalid json")
+        }
       }
       { name: Label(name), actual_free_vars: actual_free_vars_res }
     }

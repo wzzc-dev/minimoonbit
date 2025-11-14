@@ -27,14 +27,18 @@ pub fn to_ssa(input : @closure.Program) -> Ssa {
   for fundef in input.fundefs {
     if not(@typing.extenv.contains(fundef.old_name.to_string())) {
       let block_id = new_block_id()
-      let ssa_func = convert_function_with_env(block_id, fundef, func_env)
+      let ssa_func = try convert_function_with_env(block_id, fundef, func_env) catch {
+        e => @util.die("Error converting function " + fundef.name.0.to_string() + ": " + e.to_string())
+      }
       // @util.logger("convert_function: " + ssa_func.to_json().stringify())
       functions.push(ssa_func)
     }
   }
 
   // 转换主函数体
-  let main_func = convert_main_function(input.body, functions)
+  let main_func = try convert_main_function(input.body, functions) catch {
+    e => @util.die("Error converting main function: " + e.to_string())
+  }
   functions.push(main_func)
   { program: { functions, static_arrays: input.static_arrays } }
 }

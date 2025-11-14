@@ -7,7 +7,7 @@ pub fn convert_conditional(
   y : @types.Name,
   e1 : @closure.Expr,
   e2 : @closure.Expr,
-) -> ExprResult {
+) -> ExprResult raise{
   // 先转换条件表达式的左操作数
   let result1 = convert_expr(context, @closure.Expr::Var(x))
   let context1 = result1.context

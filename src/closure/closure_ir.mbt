@@ -64,7 +64,7 @@ pub(all) enum Expr {
 ///|
 pub(all) struct Closure {
   name : Label
-  actual_free_vars : Array[Name]
+  actual_free_vars : Array[(Name, LowType)]
 } derive(Show, ToJson)
 
 ///|

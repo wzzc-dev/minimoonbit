@@ -12,7 +12,7 @@ pub fn convert_function_with_env(
   block_id : Block,
   fundef : @closure.FuncDef,
   func_env : @immut/hashmap.HashMap[String, Type],
-) -> Function {
+) -> Function raise {
   // 创建函数参数（包括正常参数和自由变量）
   let regular_params = fundef.args.map(fn(arg) {
     Value::{ id: new_value_id(), ty: convert_type(arg.1) }
@@ -101,7 +101,7 @@ pub fn convert_function(
   block_id : Block,
   fundef : @closure.FuncDef,
   functions : Array[Function],
-) -> Function {
+) -> Function raise{
   // 创建函数参数（包括正常参数和自由变量）
   let regular_params = fundef.args.map(fn(arg) {
     Value::{ id: new_value_id(), ty: convert_type(arg.1) }
@@ -192,7 +192,7 @@ pub fn convert_function(
 pub fn convert_main_function(
   body : @closure.Expr,
   functions : Array[Function],
-) -> Function {
+) -> Function raise {
   let block_id = new_block_id()
   convert_function(
     block_id,

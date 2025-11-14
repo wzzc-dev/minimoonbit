@@ -4,7 +4,7 @@ pub fn convert_while(
   context : Context,
   cond_expr : @closure.Expr,
   body_expr : @closure.Expr,
-) -> ExprResult {
+) -> ExprResult raise {
   // 创建While循环需要的块
   let loop_header_block_id = new_block_id() // 循环头块（条件检查）
   let modified_vars = analyze_modified_variables(body_expr, context.var_env)

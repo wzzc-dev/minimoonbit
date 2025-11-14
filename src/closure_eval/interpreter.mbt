@@ -244,7 +244,7 @@ pub fn ClosureInterpreter::eval(
         .or_error(Failure("closure not found: " + n.to_string()))
       let fv = []
       for x in c.actual_free_vars {
-        fv.push(find(env, x))
+        fv.push(find(env, x.0))
       }
       let new_env = env.add(n, Closure(closure, fv))
       self.eval(new_env, e)

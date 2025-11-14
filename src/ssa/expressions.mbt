@@ -15,7 +15,10 @@ pub struct ExprResult {
 
 ///|
 /// 转换闭包IR表达式为SSA指令
-pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
+pub fn convert_expr(
+  context : Context,
+  expr : @closure.Expr,
+) -> ExprResult raise {
   // @util.logger("convert_expr: " + expr.to_string())
   match expr {
     Unit =>
@@ -56,7 +59,11 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
     LetTuple(pattern_vars, tuple_name, body_expr) => {
       // 元组解构：let (x1, x2, ...) = tuple_name in body_expr
       // 获取元组值
-      let tuple_value = context.var_env.get(tuple_name.to_string()).unwrap()
+      let tuple_value = match context.var_env.get(tuple_name.to_string()) {
+        Some(v) => v
+        None =>
+          fail("LetTuple: tuple name not found: " + tuple_name.to_string())
+      }
 
       // 为每个模式变量创建元组获取指令
       let mut current_context = context
@@ -99,7 +106,11 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
     }
     TupleGet(tuple_name, tuple_type, index) => {
       // 元组访问：tuple_name.index
-      let tuple_value = context.var_env.get(tuple_name.to_string()).unwrap()
+      let tuple_value = match context.var_env.get(tuple_name.to_string()) {
+        Some(v) => v
+        None =>
+          fail("TupleGet: tuple name not found: " + tuple_name.to_string())
+      }
       let element_type = if index == 0 {
         convert_type(tuple_type)
       } else {
@@ -173,14 +184,32 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
     ArrayPut(array_name, index_name, value_name) => {
       // 数组赋值：array[index] = value
       // 获取数组、索引和值的Value
-      let array_value = context.var_env.get(array_name.to_string()).unwrap()
-      let index_value = context.var_env.get(index_name.to_string()).unwrap()
-      let value_to_store = context.var_env.get(value_name.to_string()).unwrap()
+      let array_value = match context.var_env.get(array_name.to_string()) {
+        Some(v) => v
+        None =>
+          fail("ArrayPut: array name not found: " + array_name.to_string())
+      }
+      let index_value = match context.var_env.get(index_name.to_string()) {
+        Some(v) => v
+        None =>
+          fail("ArrayPut: index name not found: " + index_name.to_string())
+      }
+      let value_to_store = match context.var_env.get(value_name.to_string()) {
+        Some(v) => v
+        None =>
+          fail("ArrayPut: value name not found: " + value_name.to_string())
+      }
 
       // 验证数组类型
       match array_value.ty {
         Type::Array(_) => () // 验证确实是数组类型
-        _ => @util.die("Expected array type in ArrayPut")
+        _ =>
+          fail(
+            "Expected array type in ArrayPut: " +
+            array_name.to_string() +
+            ", actual type: " +
+            array_value.ty.to_string(),
+          )
       }
 
       // 创建ArrayPut指令
@@ -197,8 +226,16 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
     ArrayGet(array_name, index_name) => {
       // 数组访问：array[index]
       // 获取数组和索引的值
-      let array_value = context.var_env.get(array_name.to_string()).unwrap()
-      let index_value = context.var_env.get(index_name.to_string()).unwrap()
+      let array_value = match context.var_env.get(array_name.to_string()) {
+        Some(v) => v
+        None =>
+          fail("ArrayGet: array name not found: " + array_name.to_string())
+      }
+      let index_value = match context.var_env.get(index_name.to_string()) {
+        Some(v) => v
+        None =>
+          fail("ArrayGet: index name not found: " + index_name.to_string())
+      }
 
       // 创建结果值 - 数组元素的类型需要从数组类型中推断
       let element_type = match array_value.ty {
@@ -288,8 +325,14 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
     | FDiv(x, y)
     | FMod(x, y) => {
       // 获取两个操作数的值
-      let value1 = context.var_env.get(x.to_string()).unwrap()
-      let value2 = context.var_env.get(y.to_string()).unwrap()
+      let value1 = match context.var_env.get(x.to_string()) {
+        Some(v) => v
+        None => fail("Add: x name not found: " + x.to_string())
+      }
+      let value2 = match context.var_env.get(y.to_string()) {
+        Some(v) => v
+        None => fail("Add: y name not found: " + y.to_string())
+      }
 
       // 确定运算类型和结果类型
       let (op_type, result_type) = match expr {
@@ -442,7 +485,21 @@ pub fn convert_expr(context : Context, expr : @closure.Expr) -> ExprResult {
         opcode: Opcode::MakeClosure(
           name.to_string(),
           c.actual_free_vars.map(fn(fv) {
-            context.var_env.get(fv.to_string()).unwrap()
+            match context.var_env.get(fv.0.to_string()) {
+              Some(v) => v
+              None =>
+                fail(
+                  "MakeClosure: free var not found: " +
+                  fv.to_string() +
+                  " in closure: " +
+                  " MakeClosure((name, ty), c, e): " +
+                  ((name, ty), c, e).to_string() +
+                  " free_vars: " +
+                  c.actual_free_vars.to_string() + 
+                  " context.var_env: " +
+                  context.var_env.to_string(),  
+                )
+            }
           }),
         ),
       }
