@@ -72,8 +72,15 @@ pub fn convert_conditional(
     ty => Some(Value::{ id: new_value_id(), ty })
   }
 
+  fn get_ty(ty : Type) -> Type {
+    match ty {
+      Type::Function(_, ty) => get_ty(ty)
+      _ => ty
+    }
+  }
+
   let result_value = match merge_value {
-    Some(v) => match v.ty {
+    Some(v) => match get_ty(v.ty) {
       Type::Unit => []
       _ => [v]
     }
@@ -85,6 +92,7 @@ pub fn convert_conditional(
   } else {
     result_value
   }
+  // @util.logger("final_merge_params: " + final_merge_params.to_string())
   // 创建then块
   let then_block = BasicBlock::{
     id: then_block_id,
@@ -213,7 +221,7 @@ pub fn convert_conditional(
   final_context = add_block_to_context(final_context, updated_else_block)
   final_context = add_block_to_context(final_context, merge_block)
   final_context = update_current_block(final_context, merge_block)
-  // @util.logger("final_merge_params: " + final_merge_params.to_string())
+  // @util.logger("merge_block: " + merge_block.to_string())
   // @util.logger("var_names: " + var_names.to_string())
 
   // 更新变量环境，使合并后的值可以被访问
@@ -234,6 +242,8 @@ pub fn convert_conditional(
 
   // 返回合并值作为结果
   // @util.logger("IfExpr result: " + merge_value.to_string())
+  // @util.logger("expr: " + expr.to_string())
+  // @util.logger("final_context: " + final_context.to_string())
   match merge_value {
     Some(v) => ExprResult::{ value: Some(v), context: final_context }
     None => ExprResult::{ value: None, context: final_context }
