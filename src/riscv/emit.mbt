@@ -457,6 +457,6 @@ fn emit_instruction_with_regalloc(
     @ssa.Opcode::MakeClosure(func_name, free_vars) =>
       emit_closure_creation(instr.result, func_name, free_vars, allocator)
     @ssa.Opcode::CallClosure(closure, args) =>
-      emit_closure_call(instr.result, closure, args, allocator)
+      emit_closure_call(instr.result, closure, args, allocator, live_intervals, instr_index)
   }
 }

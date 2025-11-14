@@ -67,8 +67,16 @@ pub fn emit_closure_call(
   closure : @ssa.Func,
   args : Array[@ssa.Value],
   allocator : RegisterAllocator,
+  live_intervals : Array[LiveInterval],
+  current_instruction_index : Int,
 ) -> Array[RvAsm] raise {
   let instrs = []
+
+  let saved_caller_regs = save_caller_saved_regs(
+    live_intervals, current_instruction_index, allocator,
+  )
+  instrs.append(saved_caller_regs)
+
   match closure {
     @ssa.Func::Call(callee) => {
       let (closure_reg, load_closure_instrs) = get_register_or_spill_load(
@@ -132,6 +140,11 @@ pub fn emit_closure_call(
   instrs.push(Comment("Extract function pointer and call"))
   instrs.push(Ld(T1, { base: A0, offset: 0 })) // 函数指针在偏移0处，从当前闭包对象A0获取
   instrs.push(Jalr(T1))
+
+  let restored_caller_regs = restore_caller_saved_regs(
+    live_intervals, current_instruction_index, allocator,
+  )
+  instrs.append(restored_caller_regs)
 
   // 5. 将返回值移动到结果寄存器
   instrs.append(emit_move_result_to_result_register(result_val, allocator))
