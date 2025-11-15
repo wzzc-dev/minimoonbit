@@ -88,8 +88,13 @@ pub fn emit_closure_call(
     @ssa.Func::Label(_) => ()
   }
 
-  // 3. 将显式参数放入参数寄存器（从A1开始）
-  for i, arg in args {
+  // 3. 将显式参数放入参数寄存器（从A1/Fa1开始，因为A0是闭包指针）
+  // 分别跟踪整数和浮点参数计数，遵循RISC-V ABI规范
+  let mut int_arg_count = 0
+  let mut float_arg_count = 0
+  let mut stack_offset = 0
+
+  for arg in args {
     match arg.ty {
       Float => {
         let (arg_freg, load_instrs) = get_float_register_or_spill_load(
@@ -97,18 +102,26 @@ pub fn emit_closure_call(
           allocator,
         )
         instrs.append(load_instrs)
-        let param_freg = match i {
-          0 => Fa1 // 第一个显式参数放到A1
-          1 => Fa2 // 第二个显式参数放到A2
-          2 => Fa3
-          3 => Fa4
-          4 => Fa5
-          5 => Fa6
-          6 => Fa7
-          _ => @util.die("TODO")
-        }
-        if arg_freg != param_freg {
-          instrs.push(FmvD(param_freg, arg_freg))
+
+        if float_arg_count < 7 {  // 闭包函数中，Fa0被占用，只能用Fa1-Fa7
+          let param_freg = match float_arg_count {
+            0 => Fa1  // 第一个浮点参数用Fa1（Fa0保留）
+            1 => Fa2
+            2 => Fa3
+            3 => Fa4
+            4 => Fa5
+            5 => Fa6
+            6 => Fa7
+            _ => @util.die("TODO")
+          }
+          if arg_freg != param_freg {
+            instrs.push(FmvD(param_freg, arg_freg))
+          }
+          float_arg_count += 1
+        } else {
+          // 超过7个浮点参数，溢出到栈
+          instrs.push(Fsd(arg_freg, { base: Sp, offset: stack_offset }))
+          stack_offset += 8
         }
       }
       _ => {
@@ -117,18 +130,26 @@ pub fn emit_closure_call(
           allocator,
         )
         instrs.append(load_instrs)
-        let param_reg = match i {
-          0 => A1 // 第一个显式参数放到A1
-          1 => A2 // 第二个显式参数放到A2
-          2 => A3
-          3 => A4
-          4 => A5
-          5 => A6
-          6 => A7
-          _ => @util.die("TODO")
-        }
-        if arg_reg != param_reg {
-          instrs.push(Mv(param_reg, arg_reg))
+
+        if int_arg_count < 7 {  // 闭包函数中，A0被占用，只能用A1-A7
+          let param_reg = match int_arg_count {
+            0 => A1   // 第一个整数参数用A1（A0用于闭包指针）
+            1 => A2
+            2 => A3
+            3 => A4
+            4 => A5
+            5 => A6
+            6 => A7
+            _ => @util.die("TODO")
+          }
+          if arg_reg != param_reg {
+            instrs.push(Mv(param_reg, arg_reg))
+          }
+          int_arg_count += 1
+        } else {
+          // 超过7个整数参数，溢出到栈
+          instrs.push(Sd(arg_reg, { base: Sp, offset: stack_offset }))
+          stack_offset += 8
         }
       }
     }

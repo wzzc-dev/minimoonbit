@@ -38,8 +38,8 @@ pub fn emit_binary_float_instruction(
     result_val.id,
     allocator,
   )
-  let (rs1, load_rs1) = get_float_register_or_spill_load(lhs.id, allocator, fallback=Fa0)
-  let (rs2, load_rs2) = get_float_register_or_spill_load(rhs.id, allocator, fallback=Fa1)
+  let (rs1, load_rs1) = get_float_register_or_spill_load(lhs.id, allocator, fallback=Ft0)
+  let (rs2, load_rs2) = get_float_register_or_spill_load(rhs.id, allocator, fallback=Ft1)
   instrs.append(float_spill_loads)
   instrs.append(load_rs1)
   instrs.append(load_rs2)

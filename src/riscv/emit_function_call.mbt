@@ -23,16 +23,23 @@ pub fn emit_function_call_instruction(
       instrs.append(load_func_instrs)
     }
   }
-  for i, arg in args {
-    if i < 8 {
-      match arg.ty {
-        Float => {
-          let (arg_freg, load_instrs) = get_float_register_or_spill_load(
-            arg.id,
-            allocator,
-          )
-          instrs.append(load_instrs)
-          let param_freg = match i {
+  // 分别跟踪整数和浮点参数计数，遵循RISC-V ABI规范
+  let mut int_arg_count = 0
+  let mut float_arg_count = 0
+  let mut stack_offset = 0
+
+  for arg in args {
+    match arg.ty {
+      Float => {
+        let (arg_freg, load_instrs) = get_float_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        instrs.append(load_instrs)
+
+        if float_arg_count < 8 {
+          // 使用浮点参数寄存器 Fa0-Fa7
+          let param_freg = match float_arg_count {
             0 => Fa0
             1 => Fa1
             2 => Fa2
@@ -46,16 +53,25 @@ pub fn emit_function_call_instruction(
           if arg_freg != param_freg {
             instrs.push(FmvD(param_freg, arg_freg))
           }
+          float_arg_count += 1
+        } else {
+          // 超过8个浮点参数，溢出到栈
+          instrs.push(Fsd(arg_freg, { base: Sp, offset: stack_offset }))
+          stack_offset += 8
         }
-        _ => {
-          let (arg_reg, load_instrs) = get_register_or_spill_load(
-            arg.id,
-            allocator,
-          )
-          instrs.append(load_instrs)
-          let param_reg = match i {
-            0 => A0 // 第一个显式参数放到A0
-            1 => A1 // 第二个显式参数放到A1
+      }
+      _ => {
+        let (arg_reg, load_instrs) = get_register_or_spill_load(
+          arg.id,
+          allocator,
+        )
+        instrs.append(load_instrs)
+
+        if int_arg_count < 8 {
+          // 使用整数参数寄存器 A0-A7
+          let param_reg = match int_arg_count {
+            0 => A0
+            1 => A1
             2 => A2
             3 => A3
             4 => A4
@@ -67,25 +83,11 @@ pub fn emit_function_call_instruction(
           if arg_reg != param_reg {
             instrs.push(Mv(param_reg, arg_reg))
           }
-        }
-      }
-    } else {
-      match arg.ty {
-        Float => {
-          let (arg_freg, load_instrs) = get_float_register_or_spill_load(
-            arg.id,
-            allocator,
-          )
-          instrs.append(load_instrs)
-          instrs.push(Fsd(arg_freg, { base: Sp, offset: (i - 8) * 8 }))
-        }
-        _ => {
-          let (arg_reg, load_instrs) = get_register_or_spill_load(
-            arg.id,
-            allocator,
-          )
-          instrs.append(load_instrs)
-          instrs.push(Sd(arg_reg, { base: Sp, offset: (i - 8) * 8 }))
+          int_arg_count += 1
+        } else {
+          // 超过8个整数参数，溢出到栈
+          instrs.push(Sd(arg_reg, { base: Sp, offset: stack_offset }))
+          stack_offset += 8
         }
       }
     }

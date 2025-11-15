@@ -160,77 +160,126 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
       }
     }
 
-    // 2. 然后设置普通参数（从A1开始）
-    for i, param in func.params {
+    // 2. 然后设置普通参数（闭包函数中A0被占用）
+    // 分别跟踪整数和浮点参数计数，遵循RISC-V ABI规范
+    let mut int_param_count = 0
+    let mut float_param_count = 0
+    let mut stack_param_index = 0  // 统一跟踪栈参数索引
+
+    for param in func.params {
       match param.ty {
         Float => {
-          let input_freg = match i {
-            0 => Fa1
-            1 => Fa2
-            2 => Fa3
-            3 => Fa4
-            4 => Fa5
-            5 => Fa6
-            6 => Fa7
-            _ => @util.die("TODO: 普通参数超过8个")
+          if float_param_count < 7 {  // 闭包函数中Fa0被占用，只能用Fa1-Fa7
+            let input_freg = match float_param_count {
+              0 => Fa1  // 第一个浮点参数用Fa1
+              1 => Fa2
+              2 => Fa3
+              3 => Fa4
+              4 => Fa5
+              5 => Fa6
+              6 => Fa7
+              _ => @util.die("TODO: 普通参数超过8个")
+            }
+            asm_instructions.append(
+              store_value_to_allocator_freg_or_spill(param, input_freg, allocator),
+            )
+            float_param_count += 1
+          } else {
+            // 超过7个浮点参数，从栈加载
+            asm_instructions.append(
+              store_value_to_freg_or_spill_from_stack(param, stack_param_index, allocator),
+            )
+            stack_param_index += 1
+            float_param_count += 1
           }
-          asm_instructions.append(
-            store_value_to_allocator_freg_or_spill(param, input_freg, allocator),
-          )
         }
         _ => {
-          // 普通参数从A1开始（A0被闭包参数占用）
-          let input_reg = match i {
-            0 => A1
-            1 => A2
-            2 => A3
-            3 => A4
-            4 => A5
-            5 => A6
-            6 => A7
-            _ => @util.die("TODO")
+          if int_param_count < 7 {  // 闭包函数中A0被占用，只能用A1-A7
+            let input_reg = match int_param_count {
+              0 => A1   // 第一个整数参数用A1
+              1 => A2
+              2 => A3
+              3 => A4
+              4 => A5
+              5 => A6
+              6 => A7
+              _ => @util.die("TODO")
+            }
+            asm_instructions.append(
+              store_value_to_allocator_reg_or_spill(param, input_reg, allocator),
+            )
+            int_param_count += 1
+          } else {
+            // 超过7个整数参数，从栈加载
+            asm_instructions.append(
+              store_value_to_reg_or_spill_from_stack(param, stack_param_index, allocator),
+            )
+            stack_param_index += 1
+            int_param_count += 1
           }
-          asm_instructions.append(
-            store_value_to_allocator_reg_or_spill(param, input_reg, allocator),
-          )
         }
       }
     }
   } else {
     // 函数没有闭包参数，普通参数从A0开始
-    for i, param in func.params {
+    // 分别跟踪整数和浮点参数计数，遵循RISC-V ABI规范
+    let mut int_param_count = 0
+    let mut float_param_count = 0
+    let mut stack_param_index = 0  // 统一跟踪栈参数索引
+
+    for param in func.params {
       match param.ty {
         Float => {
-          let input_freg = match i {
-            0 => Fa0
-            1 => Fa1
-            2 => Fa2
-            3 => Fa3
-            4 => Fa4
-            5 => Fa5
-            6 => Fa6
-            7 => Fa7
-            _ => Ft0
+          if float_param_count < 8 {  // 可以使用Fa0-Fa7
+            let input_freg = match float_param_count {
+              0 => Fa0
+              1 => Fa1
+              2 => Fa2
+              3 => Fa3
+              4 => Fa4
+              5 => Fa5
+              6 => Fa6
+              7 => Fa7
+              _ => @util.die("TODO: 浮点参数超过8个")
+            }
+            asm_instructions.append(
+              store_value_to_allocator_freg_or_spill(param, input_freg, allocator),
+            )
+            float_param_count += 1
+          } else {
+            // 超过8个浮点参数，从栈加载
+            asm_instructions.append(
+              store_value_to_freg_or_spill_from_stack(param, stack_param_index, allocator),
+            )
+            stack_param_index += 1
+            float_param_count += 1
           }
-          asm_instructions.append(
-            store_value_to_allocator_freg_or_spill(param, input_freg, allocator),
-          )
         }
         _ => {
-          let input_reg = match i {
-            0 => A0
-            1 => A1
-            2 => A2
-            3 => A3
-            4 => A4
-            5 => A5
-            6 => A6
-            7 => A7
-            _ => @util.die("TODO: 参数超过8个")
+          if int_param_count < 8 {  // 可以使用A0-A7
+            let input_reg = match int_param_count {
+              0 => A0
+              1 => A1
+              2 => A2
+              3 => A3
+              4 => A4
+              5 => A5
+              6 => A6
+              7 => A7
+              _ => @util.die("TODO: 参数超过8个")
+            }
+            asm_instructions.append(
+              store_value_to_allocator_reg_or_spill(param, input_reg, allocator),
+            )
+            int_param_count += 1
+          } else {
+            // 超过8个整数参数，从栈加载
+            asm_instructions.append(
+              store_value_to_reg_or_spill_from_stack(param, stack_param_index, allocator),
+            )
+            stack_param_index += 1
+            int_param_count += 1
           }
-          asm_instructions.append(
-            store_value_to_allocator_reg_or_spill(param, input_reg, allocator),
-          )
         }
       }
     }

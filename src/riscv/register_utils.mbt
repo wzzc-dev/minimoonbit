@@ -292,3 +292,83 @@ fn move_block_params_to_target_reg_or_spill(
   }
   result
 }
+
+///|
+/// 从栈加载参数到寄存器或溢出槽（整数参数）
+fn store_value_to_reg_or_spill_from_stack(
+  value : @ssa.Value,
+  stack_index : Int,  // 栈上参数的索引（0开始）
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let result = []
+  let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
+    allocator.saved_callee_fregs.length() * 8
+
+  match allocator.value_to_reg.get(value.id) {
+    Some(reg) => {
+      // 从栈加载到分配的寄存器
+      let stack_offset = stack_index * 8 + 16  // 16字节用于调用者保存区域
+      result.push(Ld(reg, { base: Sp, offset: stack_offset }))
+    }
+    None => {
+      // 检查该参数是否需要溢出到栈槽
+      match allocator.value_to_spill.get(value.id) {
+        Some(spill_offset) => {
+          // 从栈参数位置加载到临时寄存器，然后存储到溢出槽
+          let stack_offset = stack_index * 8 + 16
+          result.push(Ld(T0, { base: Sp, offset: stack_offset }))
+          result.push(Sd(T0, {
+            base: Fp,
+            offset: -(24 + spill_offset + saved_callee_size),
+          }))
+        }
+        None =>
+          fail(
+            "store_value_to_reg_or_spill_from_stack 分配寄存器或溢出栈槽 value_id=" +
+            value.id.to_string(),
+          )
+      }
+    }
+  }
+  result
+}
+
+///|
+/// 从栈加载参数到浮点寄存器或溢出槽（浮点参数）
+fn store_value_to_freg_or_spill_from_stack(
+  value : @ssa.Value,
+  stack_index : Int,  // 栈上参数的索引（0开始）
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let result = []
+  let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
+    allocator.saved_callee_fregs.length() * 8
+
+  match allocator.value_to_freg.get(value.id) {
+    Some(freg) => {
+      // 从栈加载到分配的浮点寄存器
+      let stack_offset = stack_index * 8 + 16  // 16字节用于调用者保存区域
+      result.push(Fld(freg, { base: Sp, offset: stack_offset }))
+    }
+    None => {
+      // 检查该参数是否需要溢出到栈槽
+      match allocator.value_to_spill.get(value.id) {
+        Some(spill_offset) => {
+          // 从栈参数位置加载到临时浮点寄存器，然后存储到溢出槽
+          let stack_offset = stack_index * 8 + 16
+          result.push(Fld(Ft0, { base: Sp, offset: stack_offset }))
+          result.push(Fsd(Ft0, {
+            base: Fp,
+            offset: -(24 + spill_offset + saved_callee_size),
+          }))
+        }
+        None =>
+          fail(
+            "store_value_to_freg_or_spill_from_stack 分配寄存器或溢出栈槽 value_id=" +
+            value.id.to_string(),
+          )
+      }
+    }
+  }
+  result
+}
