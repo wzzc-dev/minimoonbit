@@ -163,10 +163,25 @@ fn knf_to_closure(
           }
         None => false
       }
-      match is_closure_func || is_closure_var {
+
+      let mut result =  match is_closure_func || is_closure_var {
         true => CallClosure(name, args_name)
         false => CallDirect(name.to_string(), args_name)
       }
+      for arg_name in args_name {
+        match funcdefs.search_by(fn(def) { def.old_name == arg_name }) {
+          Some(index) => {
+            let def = funcdefs.get(index).unwrap()
+            let closure : Closure = {
+              name: def.old_name.to_string(),
+              actual_free_vars: def.formal_free_vars,
+            }
+            result = MakeClosure((arg_name, def.ty), closure, result)
+          }
+          None => ()
+        }
+      }
+      result
     }
     Var(n) => Var(n)
     Tuple(arr_name) => MakeTuple(arr_name)

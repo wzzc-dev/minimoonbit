@@ -27,8 +27,8 @@ pub fn emit_closure_creation(
   instrs.push(Call(Label("minimbt_malloc")))
 
   // 3. 存储函数指针到闭包对象的偏移0处
-  instrs.push(La(S11, Label(func_name)))
-  instrs.push(Sd(S11, { base: A0, offset: 0 }))
+  instrs.push(La(T0, Label(func_name)))
+  instrs.push(Sd(T0, { base: A0, offset: 0 }))
   if free_vars.length() > 0 {
     // 有自由变量，存储它们
     for i, free_var in free_vars {
@@ -41,8 +41,6 @@ pub fn emit_closure_creation(
       // 存储到闭包对象的偏移 (i+1)*8 处
       instrs.push(Sd(var_reg, { base: A0, offset: (i + 1) * 8 }))
     }
-  } else {
-    @util.die("No free vars for closure " + func_name)
   }
 
   // 4. 将闭包对象指针移动到结果寄存器

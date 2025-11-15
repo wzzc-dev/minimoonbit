@@ -73,23 +73,23 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
   let (live_intervals, param_ids, kill_points) = compute_live_intervals_for_function(
     func,
   )
-  // @util.logger("func name: " + func.name + " live_intervals: " + live_intervals.to_string())
+  // @util.logger(
+  //   "func name: " + func.name + " live_intervals: " + live_intervals.to_string(),
+  // )
   let allocator = linear_scan_register_allocation(
     live_intervals, param_ids, kill_points,
   )
-  // @util.logger("func name: " + func.name + " allocator: " + allocator.to_string())
+  // @util.logger(
+  //   "func name: " + func.name + " allocator: " + allocator.to_string(),
+  // )
   let asm_instructions = []
 
   // 计算栈帧大小：基础24字节 + spill槽空间 + 被调用者保存寄存器空间
   let spill_size = allocator.next_spill_slot
-  let saved_callee_size =
-    allocator.saved_callee_regs.length() * 8 +
+  let saved_callee_size = allocator.saved_callee_regs.length() * 8 +
     allocator.saved_callee_fregs.length() * 8
-  
-  let framesize = 24 +
-    spill_size +
-    saved_callee_size
-  
+  let framesize = 24 + spill_size + saved_callee_size
+
   // 函数序言
   asm_instructions.push(Addi(Sp, Sp, -framesize)) // 分配栈帧
   asm_instructions.push(Sd(Ra, { base: Sp, offset: framesize - 8 })) // 保存返回地址
@@ -249,7 +249,9 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
     // 生成指令
     let mut current_index = 0
     for instr in block.instructions {
-      let asm_instrs = emit_instruction_with_regalloc(instr, allocator, live_intervals, current_index) catch {
+      let asm_instrs = emit_instruction_with_regalloc(
+        instr, allocator, live_intervals, current_index,
+      ) catch {
         e =>
           @util.die(
             "Compilation error: [Instruction]: " +
@@ -431,7 +433,14 @@ fn emit_instruction_with_regalloc(
       )
     // 函数调用
     @ssa.Opcode::Call(name, args) =>
-      emit_function_call_instruction(instr.result, name, args, allocator, live_intervals, instr_index)
+      emit_function_call_instruction(
+        instr.result,
+        name,
+        args,
+        allocator,
+        live_intervals,
+        instr_index,
+      )
     // 函数引用调用
     @ssa.Opcode::CallRef(name, args) =>
       emit_function_ref_call_instruction(instr.result, name, args, allocator)
@@ -457,6 +466,13 @@ fn emit_instruction_with_regalloc(
     @ssa.Opcode::MakeClosure(func_name, free_vars) =>
       emit_closure_creation(instr.result, func_name, free_vars, allocator)
     @ssa.Opcode::CallClosure(closure, args) =>
-      emit_closure_call(instr.result, closure, args, allocator, live_intervals, instr_index)
+      emit_closure_call(
+        instr.result,
+        closure,
+        args,
+        allocator,
+        live_intervals,
+        instr_index,
+      )
   }
 }

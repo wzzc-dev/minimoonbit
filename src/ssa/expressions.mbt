@@ -554,7 +554,7 @@ pub fn convert_expr(
               @util.logger(
                 "Error: Function not found for CallClosure: " + func_name,
               )
-              Opcode::Call(Func::Label(func_name), call_arg_values)
+              @util.die("CallClosure: Function not found: " + func_name)
             }
           }
       }

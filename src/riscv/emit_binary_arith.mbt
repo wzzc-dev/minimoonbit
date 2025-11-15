@@ -8,8 +8,8 @@ pub fn emit_binary_integer_instruction(
   allocator : RegisterAllocator,
 ) -> Array[RvAsm] raise {
   let instrs = []
-  let (rs1, load1) = get_register_or_spill_load(lhs.id, allocator)
-  let (rs2, load2) = get_register_or_spill_load(rhs.id, allocator)
+  let (rs1, load1) = get_register_or_spill_load(lhs.id, allocator, fallback=T0)
+  let (rs2, load2) = get_register_or_spill_load(rhs.id, allocator, fallback=T1)
   let (rd, load_rd) = get_register_or_spill_load(result_val.id, allocator)
   instrs.append(load1)
   instrs.append(load2)
@@ -38,8 +38,8 @@ pub fn emit_binary_float_instruction(
     result_val.id,
     allocator,
   )
-  let (rs1, load_rs1) = get_float_register_or_spill_load(lhs.id, allocator)
-  let (rs2, load_rs2) = get_float_register_or_spill_load(rhs.id, allocator)
+  let (rs1, load_rs1) = get_float_register_or_spill_load(lhs.id, allocator, fallback=Fa0)
+  let (rs2, load_rs2) = get_float_register_or_spill_load(rhs.id, allocator, fallback=Fa1)
   instrs.append(float_spill_loads)
   instrs.append(load_rs1)
   instrs.append(load_rs2)
@@ -65,10 +65,12 @@ pub fn emit_float_mod_operation(
   let (rd, load_result_instrs) = get_float_register_or_spill_load(
     result_val.id,
     allocator,
+    fallback=Ft0,
   )
   let (rs1, load_lhs_instrs) = get_float_register_or_spill_load(
     lhs.id,
     allocator,
+    fallback=Ft1,
   )
   let (rs2, load_rhs_instrs) = get_float_register_or_spill_load(
     rhs.id,
