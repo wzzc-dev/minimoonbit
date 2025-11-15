@@ -105,7 +105,7 @@ fn knf_to_closure(
       let mut env = env
       for arg in args {
         free_vars.remove(new_fv(arg.0, Unit))
-        env = env.add(arg.0, arr_ty_to_low_type(arg.1))
+        env = env.add(arg.0, ty_to_low_type(arg.1))
       }
       free_vars.remove(new_fv(name, Unit))
       let is_closure = not(free_vars.is_empty())
@@ -117,7 +117,7 @@ fn knf_to_closure(
           old_name: name,
           is_closure,
           ty: gen_func_type(ty, is_closure, funcdefs, env, body),
-          args: args.map(name_ty => (name_ty.0, arr_ty_to_low_type(name_ty.1))),
+          args: args.map(name_ty => (name_ty.0, ty_to_low_type(name_ty.1))), // 使用ty_to_low_type而不是arr_ty_to_low_type
           formal_free_vars: fv_to_array(free_vars),
           body,
         }
@@ -144,16 +144,16 @@ fn knf_to_closure(
       }
     }
     Apply(name, args_name) => {
+      // 获取被调用函数的定义，以确定参数类型
+      let caller_def = match funcdefs.search_by(fn(def) { def.old_name == name }) {
+        None => None // 外部函数
+        Some(index) => funcdefs.get(index)
+      }
 
-      // 检查是否是函数定义中的函数
-      let is_closure_func = match
-        funcdefs.search_by(fn(def) { def.old_name == name }) {
-        None => false // 外部函数默认不是闭包
-        Some(index) =>
-          match funcdefs.get(index) {
-            Some(def) => def.is_closure
-            None => false
-          }
+      // 检查被调用函数是否是闭包
+      let is_closure_func = match caller_def {
+        Some(def) => def.is_closure
+        None => false
       }
       let is_closure_var = match env.get(name) {
         Some(ty) =>
@@ -164,22 +164,47 @@ fn knf_to_closure(
         None => false
       }
 
-      let mut result =  match is_closure_func || is_closure_var {
+      let mut result = match is_closure_func || is_closure_var {
         true => CallClosure(name, args_name)
         false => CallDirect(name.to_string(), args_name)
       }
-      for arg_name in args_name {
+
+      // 为函数参数创建闭包（从右到左处理，以保持正确的变量绑定顺序）
+      let mut i = args_name.length() - 1
+      while i >= 0 {
+        let arg_name = args_name[i]
         match funcdefs.search_by(fn(def) { def.old_name == arg_name }) {
           Some(index) => {
             let def = funcdefs.get(index).unwrap()
-            let closure : Closure = {
-              name: def.old_name.to_string(),
-              actual_free_vars: def.formal_free_vars,
+            // 检查被调用函数对应位置的参数类型
+            let should_create_closure = match caller_def {
+              Some(caller) => {
+                if i < caller.args.length() {
+                  let param_type = caller.args[i].1
+                  match param_type {
+                    ClosureFn(_, _) => true
+                    DirectFn(_, _) => false
+                    _ => false // 非函数类型参数
+                  }
+                } else {
+                  false // 参数数量不匹配
+                }
+              }
+              None => false // 外部函数假设不需要闭包
             }
-            result = MakeClosure((arg_name, def.ty), closure, result)
+
+            // 只有在参数类型期望闭包时才创建闭包
+            if should_create_closure && def.is_closure {
+              let closure : Closure = {
+                name: def.old_name.to_string(),
+                actual_free_vars: def.formal_free_vars,
+              }
+              result = MakeClosure((arg_name, def.ty), closure, result)
+            }
           }
-          None => ()
+          None => () // 不是函数定义，无需处理
         }
+        i = i - 1
       }
       result
     }

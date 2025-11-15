@@ -148,33 +148,3 @@ fn ty_to_low_type(ty : Type) -> LowType {
   }
 }
 
-///|
-fn arr_ty_to_low_type(ty : Type) -> LowType {
-  match ty {
-    Unit => Unit
-    Bool => Bool
-    Int => Int
-    Double => Double
-    Tuple(arr_ty) => Tuple(arr_ty.map(ty => ty_to_low_type(ty)))
-    Array(ty) => Array(ty_to_low_type(ty))
-    Var(ty) =>
-      match ty.val {
-        Some(UserDefineType(_, fields)) => {
-          let fields_ty = fields.val.map(field => ty_to_low_type(field.1))
-          Tuple(fields_ty)
-        }
-        Some(ty) => ty_to_low_type(ty)
-        _ => @util.die("ty_to_low_type: Var" + ty.to_string())
-      }
-    Ptr => Ptr
-    Enum(_name, _) | Struct(_name, _) =>
-      @util.die("ty_to_low_type: Enum or Struct" + ty.to_string())
-    UserDefineType(_, fields) => {
-      let fields_ty = fields.val.map(field => ty_to_low_type(field.1))
-      Tuple(fields_ty)
-    }
-    ArrayData(_) => @util.die("ty_to_low_type: ArrayData" + ty.to_string())
-    Fun(args_ty, ret_ty) =>
-      ClosureFn(args_ty.map(ty => ty_to_low_type(ty)), ty_to_low_type(ret_ty))
-  }
-}
