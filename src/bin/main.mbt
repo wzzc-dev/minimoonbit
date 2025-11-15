@@ -109,7 +109,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
       let source_code = self.source_code.unwrap()
       let parsed = @parser.parse_from_string(source_code)
       self.ast = Some(parsed)
-      // @util.logger("parsed ast: " + parsed.to_json().stringify())
+      @util.debug("parsed ast: " + parsed.to_json().stringify())
     }
     Typecheck => {
       let typechecked = try? @typing.typing(self.ast.unwrap())
@@ -126,7 +126,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
       )
       // @util.logger("preprocessed ast: " + pre.to_json().stringify())
       let knf = try? self.knf_env.to_knf(pre)
-      // @util.logger("knf ir: " + knf.unwrap().to_json().stringify())
+      @util.debug("knf ir: " + knf.unwrap().to_json().stringify())
       match knf {
         Ok(_) => self.knf = Some(knf.unwrap())
         Err(e) => @util.die(e.to_json().to_string())
@@ -143,12 +143,12 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
         Map::new(),
         // Map::from_iter(externals().iter()),
       )
-      // @util.logger("closure ir: \n" + closure_ir.to_json().stringify())
+      @util.debug("closure ir: \n" + closure_ir.to_json().stringify())
       self.closure_ir = Some(closure_ir)
     }
     Ssa => {
       let ssa = @ssa.to_ssa(self.closure_ir.unwrap())
-      // @util.logger("ssa ir: \n" + ssa.to_json().stringify())
+      @util.debug("ssa ir: \n" + ssa.to_json().stringify())
       self.ssa = Some(ssa)
     }
     Asm =>

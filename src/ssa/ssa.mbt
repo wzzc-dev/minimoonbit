@@ -122,7 +122,8 @@ pub(all) enum Type {
   Float
   Bool
   Pointer(Type)
-  Function(Array[Type], Type)
+  DirectFn(Array[Type], Type) // 直接函数：参数类型, 返回类型
+  ClosureFn(Array[Type], Type) // 闭包函数：参数类型, 返回类型
   Tuple(Array[Type])
   Array(Type)
 } derive(Show, Eq, Hash)

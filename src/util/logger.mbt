@@ -5,3 +5,9 @@ pub fn logger(msg : String) -> Unit {
     println("logger: " + msg)
   }
 }
+pub fn debug(msg : String) -> Unit {
+  let debug = false
+  if debug {
+    println("logger: " + msg)
+  }
+}

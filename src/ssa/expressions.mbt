@@ -460,7 +460,8 @@ pub fn convert_expr(
         current_context,
       )
       let return_type = match func_type {
-        Type::Function(_, ret_type) => ret_type
+        Type::DirectFn(_, ret_type) => ret_type
+        Type::ClosureFn(_, ret_type) => ret_type
         _ =>
           @util.die(
             "CallDirect: not a function type: " +
@@ -470,7 +471,17 @@ pub fn convert_expr(
           )
       }
       let opcode = match context.var_env.get(label.0.to_string()) {
-        Some(v) => Opcode::Call(Func::Call(v), arg_values)
+        Some(v) => {
+          // 检查变量类型来决定是直接函数调用还是闭包调用
+          match v.ty {
+            Type::DirectFn(_, _) => {
+              // 直接函数：如果是变量引用，使用变量调用
+              Opcode::Call(Func::Call(v), arg_values)
+            }
+            Type::ClosureFn(_, _) => Opcode::Call(Func::Call(v), arg_values) // 闭包函数
+            _ => Opcode::Call(Func::Call(v), arg_values) // 默认使用变量调用
+          }
+        }
         None => Opcode::Call(Func::Label(label.0), arg_values)
       }
       let result_value = Value::{ id: new_value_id(), ty: return_type }
@@ -563,7 +574,8 @@ pub fn convert_expr(
         current_context,
       )
       let return_type = match func_type {
-        Type::Function(_, ret_type) => ret_type
+        Type::DirectFn(_, ret_type) => ret_type
+        Type::ClosureFn(_, ret_type) => ret_type
         _ =>
           @util.die(
             "CallClosure: not a function type: " +

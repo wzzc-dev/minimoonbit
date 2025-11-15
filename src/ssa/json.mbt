@@ -401,9 +401,13 @@ pub fn Type::to_json(self : Type) -> Json {
     Type::Float => "Float"
     Type::Bool => "Bool"
     Type::Pointer(ty) => ["Pointer", ty.to_json()]
-    Type::Function(args, ret) => {
+    Type::DirectFn(args, ret) => {
       let args_json = args.map(Type::to_json)
-      ["Function", args_json, ret.to_json()]
+      ["DirectFn", args_json, ret.to_json()]
+    }
+    Type::ClosureFn(args, ret) => {
+      let args_json = args.map(Type::to_json)
+      ["ClosureFn", args_json, ret.to_json()]
     }
     Type::Tuple(elements) => {
       let elements_json = elements.map(Type::to_json)
@@ -422,12 +426,19 @@ pub fn Type::from_json(json : Json) -> Type raise {
     "Float" => Type::Float
     "Bool" => Type::Bool
     ["Pointer", ty] => Type::Pointer(Type::from_json(ty))
-    ["Function", Array(args), ret] => {
+    ["DirectFn", Array(args), ret] => {
       let args_res = []
       for a in args {
         args_res.push(Type::from_json(a))
       }
-      Type::Function(args_res, Type::from_json(ret))
+      Type::DirectFn(args_res, Type::from_json(ret))
+    }
+    ["ClosureFn", Array(args), ret] => {
+      let args_res = []
+      for a in args {
+        args_res.push(Type::from_json(a))
+      }
+      Type::ClosureFn(args_res, Type::from_json(ret))
     }
     ["Tuple", Array(elements)] => {
       let elements_res = []

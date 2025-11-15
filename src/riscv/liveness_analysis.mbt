@@ -34,6 +34,25 @@ pub fn compute_live_intervals_for_function(
   // 1. 首先记录参数的定义位置，设置合理的初始活跃区间
   let func_param_ids = @sorted_map.new()
   let has_closure = func.closure_param.length() > 0
+
+  // 处理闭包参数（自由变量）
+  for closure_param in func.closure_param {
+    let value_id = closure_param.id
+    // 闭包参数在函数开始时（位置0）定义，先设置结束位置为0
+    intervals = intervals.add(value_id, {
+      value_id,
+      block_param_index: None,
+      ty: closure_param.ty,
+      start: 0,
+      end: 0,
+      reg: None,
+      freg: None,
+      spill_slot: None,
+      is_call_result: false,
+    })
+  }
+
+  // 处理普通参数
   for i, param in func.params {
     let value_id = param.id
     func_param_ids.set(value_id, i + has_closure.to_int())

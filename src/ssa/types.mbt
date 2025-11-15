@@ -9,9 +9,9 @@ pub fn convert_type(ty : @closure.LowType) -> Type {
     Int => Type::Int
     Double => Type::Float
     DirectFn(args, ret) =>
-      Type::Function(args.map(convert_type), convert_type(ret))
+      Type::DirectFn(args.map(convert_type), convert_type(ret))
     ClosureFn(args, ret) =>
-      Type::Function(args.map(convert_type), convert_type(ret))
+      Type::ClosureFn(args.map(convert_type), convert_type(ret))
     Tuple(elements) => Type::Tuple(elements.map(convert_type))
     Array(element) => Type::Array(convert_type(element))
     Ptr => Type::Pointer(Type::Int)
@@ -27,7 +27,7 @@ pub fn convert_type_from_types(ty : @types.Type) -> Type {
     @types.Type::Int => Type::Int
     @types.Type::Double => Type::Float
     @types.Type::Fun(args, ret) =>
-      Type::Function(
+      Type::DirectFn(
         args.map(convert_type_from_types),
         convert_type_from_types(ret),
       )

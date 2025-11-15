@@ -74,7 +74,8 @@ pub fn convert_conditional(
 
   fn get_ty(ty : Type) -> Type {
     match ty {
-      Type::Function(_, ty) => get_ty(ty)
+      Type::DirectFn(_, ty) => get_ty(ty)
+      Type::ClosureFn(_, ty) => get_ty(ty)
       _ => ty
     }
   }
