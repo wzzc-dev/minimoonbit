@@ -246,7 +246,7 @@ pub fn convert_expr(
       let element_type = match array_value.ty {
         Type::Array(elem_type) => elem_type
         _ =>
-          @util.die(
+          fail(
             "Expected array type in ArrayGet: name " +
             array_name.to_string() +
             ", type: " +

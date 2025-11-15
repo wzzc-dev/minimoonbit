@@ -411,7 +411,7 @@ fn expire_old_intervals_all(
   let mut i = 0
   while i < allocator.active_intervals.length() {
     let interval = allocator.active_intervals[i]
-    if interval.end <= current_pos {
+    if interval.end < current_pos {
       // 区间已结束，释放寄存器
       match interval.reg {
         Some(reg) =>

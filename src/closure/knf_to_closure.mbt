@@ -344,16 +344,37 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
         @hashset.from_array(a.map(name => new_fv(name, Unit))),
       )
     }
-    Tuple(arr_name) =>
-      @hashset.from_array(arr_name.map(name => new_fv(name, Ptr)))
+    Tuple(arr_name) => {
+      // 获取元组的实际类型信息
+      let tuple_fvs = []
+      for name in arr_name {
+        let ty = match env.get(name) {
+          Some(t) => t
+          None => Ptr  // 默认为Ptr，但优先使用环境中的类型
+        }
+        tuple_fvs.push(new_fv(name, ty))
+      }
+      @hashset.from_array(tuple_fvs)
+    }
     LetTuple(arr_name_ty, name, cont) => {
       let result = fv(env, cont)
       for _, name_ty in arr_name_ty {
         result.remove(new_fv(name_ty.0, Ptr))
       }
-      result.union(@hashset.of([new_fv(name, Ptr)]))
+      let name_ty = match env.get(name) {
+        Some(t) => t
+        None => Ptr  // 默认为Ptr，但优先使用环境中的类型
+      }
+      result.union(@hashset.of([new_fv(name, name_ty)]))
     }
-    Get(a, b) => @hashset.of([new_fv(a, Ptr), new_fv(b, Int)])
+    Get(a, b) => {
+      // 获取数组/元组的实际类型
+      let a_ty = match env.get(a) {
+        Some(t) => t
+        None => Ptr  // 默认为Ptr，但优先使用环境中的类型
+      }
+      @hashset.of([new_fv(a, a_ty), new_fv(b, Int)])
+    }
     Put(a, b, c) => {
       let a_ty = match env.get(a) {
         Some(ty) => ty

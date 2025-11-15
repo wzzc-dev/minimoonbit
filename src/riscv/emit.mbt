@@ -134,7 +134,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
                     }),
                   )
                 }
-                None => @util.die("TODO")
+                None => fail("Closure parameter {} has no register or spill slot" + closure_param.id.to_string())
               }
           }
         _ =>
@@ -154,7 +154,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
                     }),
                   )
                 }
-                None => @util.die("TODO: 闭包参数需要溢出栈槽")
+                None => fail("Closure parameter {} has no register or spill slot" + closure_param.id.to_string())
               }
           }
       }
