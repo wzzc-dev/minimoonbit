@@ -321,8 +321,8 @@ pub fn Function::to_json(self : Function) -> Json {
   {
     "name": self.name,
     "params": self.params.map(Value::to_json),
-    "closure_param": self.closure_param.map(Value::to_json),
-    "return_type": self.return_type.to_json(),
+    "closure_vars": self.closure_vars.map(Value::to_json),
+    "ty": self.ty.to_json(),
     "blocks": self.blocks.map(BasicBlock::to_json),
   }
 }
@@ -334,9 +334,8 @@ pub fn Function::from_json(json : Json) -> Function raise {
     {
       "name": String(name),
       "params": Array(params),
-      "closure_param": Array(closure_param),
+      "closure_vars": Array(closure_vars),
       "ty": ty,
-      "return_type": return_type,
       "blocks": Array(blocks),
       ..
     } => {
@@ -346,9 +345,9 @@ pub fn Function::from_json(json : Json) -> Function raise {
           value => params_res.push(Value::from_json(value))
         }
       }
-      let closure_param_res = []
-      for cp in closure_param {
-        closure_param_res.push(Value::from_json(cp))
+      let closure_vars_res = []
+      for cv in closure_vars {
+        closure_vars_res.push(Value::from_json(cv))
       }
       let blocks_res = []
       for b in blocks {
@@ -357,9 +356,8 @@ pub fn Function::from_json(json : Json) -> Function raise {
       Function::{
         name,
         params: params_res,
-        closure_param: closure_param_res,
+        closure_vars: closure_vars_res,
         ty: Type::from_json(ty),
-        return_type: Type::from_json(return_type),
         blocks: blocks_res,
       }
     }

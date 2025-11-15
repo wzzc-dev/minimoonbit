@@ -14,23 +14,29 @@ pub fn emit_closure_creation(
   )
   instrs.append(load_instrs)
 
-  // 总是创建闭包对象
-  // 1. 计算需要的内存大小 (函数指针 + 自由变量)
-  let size = if free_vars.length() * 8 + 8 < 16 {
-    16
+  // 优化：根据自由变量数量决定分配策略
+  if free_vars.length() == 0 {
+    // 无自由变量：直接使用函数指针，无需堆分配
+    instrs.push(Comment("Direct function pointer (no closure allocation)"))
+    instrs.push(La(result_reg, Label(func_name)))
   } else {
-    free_vars.length() * 8 + 8
-  }
+    // 有自由变量：需要堆分配闭包对象
 
-  // 2. 调用 malloc 分配内存
-  instrs.push(Li(A0, size.to_string()))
-  instrs.push(Call(Label("minimbt_malloc")))
+    // 1. 计算需要的内存大小 (函数指针 + 自由变量)
+    let size = free_vars.length() * 8 + 8
+    // 对齐到16字节边界以提高内存访问效率
+    let aligned_size = if size % 16 == 0 { size } else { size + (16 - size % 16) }
 
-  // 3. 存储函数指针到闭包对象的偏移0处
-  instrs.push(La(T0, Label(func_name)))
-  instrs.push(Sd(T0, { base: A0, offset: 0 }))
-  if free_vars.length() > 0 {
-    // 有自由变量，存储它们
+    // 2. 调用 malloc 分配内存
+    instrs.push(Comment("Allocate closure object: " + aligned_size.to_string() + " bytes"))
+    instrs.push(Li(A0, aligned_size.to_string()))
+    instrs.push(Call(Label("minimbt_malloc")))
+
+    // 3. 存储函数指针到闭包对象的偏移0处
+    instrs.push(La(T0, Label(func_name)))
+    instrs.push(Sd(T0, { base: A0, offset: 0 }))
+
+    // 4. 存储自由变量到闭包对象
     for i, free_var in free_vars {
       // 获取自由变量的寄存器
       let (var_reg, load_instrs) = get_register_or_spill_load(
@@ -41,11 +47,11 @@ pub fn emit_closure_creation(
       // 存储到闭包对象的偏移 (i+1)*8 处
       instrs.push(Sd(var_reg, { base: A0, offset: (i + 1) * 8 }))
     }
-  }
 
-  // 4. 将闭包对象指针移动到结果寄存器
-  if result_reg != A0 {
-    instrs.push(Mv(result_reg, A0))
+    // 5. 将闭包对象指针移动到结果寄存器
+    if result_reg != A0 {
+      instrs.push(Mv(result_reg, A0))
+    }
   }
 
   // 如果结果需要溢出，生成存储指令

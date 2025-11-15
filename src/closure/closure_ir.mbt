@@ -62,11 +62,6 @@ pub(all) enum Expr {
 } derive(Show, ToJson)
 
 ///|
-pub(all) struct Closure {
-  func_name : Label
-} derive(Show, ToJson)
-
-///|
 pub(all) struct FuncDef {
   name : Label
   old_name : Name

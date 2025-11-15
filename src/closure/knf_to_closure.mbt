@@ -263,12 +263,8 @@ pub(all) struct FreeVarWithType {
 } derive(Show)
 
 ///|
-impl Hash for FreeVarWithType with hash_combine(_self, _state) {
-  fn _hash_combine(self : FreeVarWithType, state : Hasher) -> Unit {
+impl Hash for FreeVarWithType with hash_combine(self, state) {
     self.name.hash_combine(state)
-  }
-
-
 }
 
 ///|

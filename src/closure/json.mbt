@@ -183,23 +183,6 @@ pub fn LowType::from_json(json : Json) -> LowType raise {
 }
 
 ///|
-pub fn Closure::to_json(self : Closure) -> Json {
-  {
-    "func_name": self.func_name.inner().to_json(),
-  }
-}
-
-///|
-pub fn Closure::from_json(json : Json) -> Closure raise {
-  match json {
-    { "func_name": String(func_name), .. } => {
-      { func_name: Label(func_name) }
-    }
-    _ => fail("invalid json")
-  }
-}
-
-///|
 pub fn FuncDef::to_json(self : FuncDef) -> Json {
   {
     "name": self.name.inner().to_json(),

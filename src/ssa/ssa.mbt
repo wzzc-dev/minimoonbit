@@ -100,12 +100,30 @@ pub(all) enum Terminator {
 /// 函数定义
 pub(all) struct Function {
   name : String // 函数名
-  params : Array[Value] // 函数参数
-  closure_param : Array[Value] // 闭包参数
-  ty : Type // 函数类型
-  return_type : Type // 返回类型
+  params : Array[Value] // 函数参数（不包括闭包参数）
+  closure_vars : Array[Value] // 闭包捕获的变量
+  ty : Type // 函数类型（包含参数、返回类型和闭包信息）
   blocks : Array[BasicBlock] // 基本块列表
 } derive(Show)
+
+///|
+/// Function 的便捷访问方法
+pub fn Function::return_type(self : Function) -> Type {
+  self.ty.get_return_type()
+}
+
+///|
+pub fn Function::all_params(self : Function) -> Array[Value] {
+  // 返回所有参数：普通参数 + 闭包变量
+  let all = self.params.copy()
+  all.append(self.closure_vars)
+  all
+}
+
+///|
+pub fn Function::is_closure(self : Function) -> Bool {
+  self.ty.is_closure_function()
+}
 
 ///|
 /// SSA程序
@@ -126,6 +144,33 @@ pub(all) enum Type {
   Tuple(Array[Type])
   Array(Type)
 } derive(Show, Eq, Hash)
+
+///|
+/// 从函数类型中提取返回类型
+pub fn Type::get_return_type(self : Type) -> Type {
+  match self {
+    Function(_, ret_type, _) => ret_type
+    _ => Unit  // 非函数类型的默认返回类型
+  }
+}
+
+///|
+/// 从函数类型中提取参数类型列表
+pub fn Type::get_param_types(self : Type) -> Array[Type] {
+  match self {
+    Function(param_types, _, _) => param_types
+    _ => []  // 非函数类型没有参数
+  }
+}
+
+///|
+/// 检查是否为闭包函数类型
+pub fn Type::is_closure_function(self : Type) -> Bool {
+  match self {
+    Function(_, _, is_closure) => is_closure
+    _ => false
+  }
+}
 
 ///|
 /// SSA中间表示主结构

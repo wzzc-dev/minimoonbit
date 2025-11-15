@@ -107,22 +107,22 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
     asm_instructions.push(Fsd(freg, { base: Fp, offset: -offset }))
     offset += 8
   }
-  if func.closure_param.length() > 0 {
-    // 函数有闭包参数（自由变量），需要从参数寄存器加载
-    // 闭包参数在A0，普通参数从A1开始
+  if func.closure_vars.length() > 0 {
+    // 函数有闭包变量（自由变量），需要从参数寄存器加载
+    // 闭包变量在A0，普通参数从A1开始
 
-    // 1. 首先设置闭包参数（自由变量）
+    // 1. 首先设置闭包变量（自由变量）
     // 闭包对象指针在A0，从其中加载各个自由变量
-    for i, closure_param in func.closure_param {
-      match closure_param.ty {
+    for i, closure_var in func.closure_vars {
+      match closure_var.ty {
         Float =>
-          match allocator.value_to_freg.get(closure_param.id) {
+          match allocator.value_to_freg.get(closure_var.id) {
             Some(freg) =>
               asm_instructions.push(
                 Fld(freg, { base: A0, offset: (i + 1) * 8 }),
               )
             None =>
-              match allocator.value_to_spill.get(closure_param.id) {
+              match allocator.value_to_spill.get(closure_var.id) {
                 Some(spill_offset) => {
                   asm_instructions.push(
                     Fld(Ft0, { base: A0, offset: (i + 1) * 8 }),
@@ -134,15 +134,15 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
                     }),
                   )
                 }
-                None => fail("Closure parameter {} has no register or spill slot" + closure_param.id.to_string())
+                None => fail("Closure parameter {} has no register or spill slot" + closure_var.id.to_string())
               }
           }
         _ =>
-          match allocator.value_to_reg.get(closure_param.id) {
+          match allocator.value_to_reg.get(closure_var.id) {
             Some(reg) =>
               asm_instructions.push(Ld(reg, { base: A0, offset: (i + 1) * 8 }))
             None =>
-              match allocator.value_to_spill.get(closure_param.id) {
+              match allocator.value_to_spill.get(closure_var.id) {
                 Some(spill_offset) => {
                   asm_instructions.push(
                     Ld(T0, { base: A0, offset: (i + 1) * 8 }),
@@ -154,7 +154,7 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
                     }),
                   )
                 }
-                None => fail("Closure parameter {} has no register or spill slot" + closure_param.id.to_string())
+                None => fail("Closure parameter {} has no register or spill slot" + closure_var.id.to_string())
               }
           }
       }

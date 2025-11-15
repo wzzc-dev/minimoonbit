@@ -85,12 +85,8 @@ pub fn convert_function_with_env(
   {
     name: fundef.name.0.to_string(),
     params: regular_params,
-    closure_param: free_var_params,
+    closure_vars: free_var_params,
     ty: convert_type(fundef.ty),
-    return_type: match fundef.ty {
-      @closure.LowType::Function(_, ret, _) => convert_type(ret)
-      _ => @util.die("unexpected fundef type: " + fundef.ty.to_string())
-    },
     blocks: updated_blocks,
   }
 }
@@ -173,12 +169,8 @@ pub fn convert_function(
   {
     name: fundef.name.0.to_string(),
     params: regular_params,
-    closure_param: free_var_params,
+    closure_vars: free_var_params,
     ty: convert_type(fundef.ty),
-    return_type: match fundef.ty {
-      @closure.LowType::Function(_, ret, _) => convert_type(ret)
-      _ => @util.die("unexpected fundef type: " + fundef.ty.to_string())
-    },
     blocks: updated_blocks,
   }
 }
