@@ -9,18 +9,11 @@ fn gen_func_type(
   // @util.logger("gen_func_type: " + ty.to_string() + " is_closure: " + is_closure.to_string() + " body: " + body.to_string())
   match ty {
     Fun(args, ty) =>
-      match is_closure {
-        true =>
-          ClosureFn(
-            args.map(ty => ty_to_low_type(ty)),
-            gen_body_ret_type(ty, fundefs, env, body),
-          )
-        false =>
-          DirectFn(
-            args.map(ty => ty_to_low_type(ty)),
-            gen_body_ret_type(ty, fundefs, env, body),
-          )
-      }
+      LowType::make_function(
+        args.map(ty => ty_to_low_type(ty)),
+        gen_body_ret_type(ty, fundefs, env, body),
+        is_closure,
+      )
     _ => @util.die("gen_func_type: " + ty.to_string())
   }
 }
@@ -42,7 +35,7 @@ fn gen_body_ret_type(
   body : Expr,
 ) -> LowType {
   match body {
-    MakeClosure((_, ret_ty), _, _) => ret_ty
+    MakeClosure(_, _, ret_expr) => gen_body_ret_type(ty, funcdefs, env, ret_expr)
     Let(_, _, body) => gen_body_ret_type(ty, funcdefs, env, body)
     CallClosure(name, _) =>
       match funcdefs.search_by(fn(f) { f.name.0 == name.name.unwrap() }) {
@@ -57,14 +50,13 @@ fn gen_body_ret_type(
         None =>
           match env.get(name) {
             Some(ty) =>
-              match ty {
-                ClosureFn(_, ret_ty) => ret_ty
-                DirectFn(_, ret_ty) => ret_ty
-                _ =>
+              match ty.function_type() {
+                Some((_, ret_ty, _)) => ret_ty
+                None =>
                   @util.die(
                     "gen_body_ret_type var1: " +
                     name.name.unwrap() +
-                    " not found",
+                    " not a function type",
                   )
               }
             None =>
@@ -78,11 +70,10 @@ fn gen_body_ret_type(
         Some(index) =>
           match funcdefs.get(index) {
             Some(f) =>
-              match f.ty {
-                DirectFn(_, ret_ty) => ret_ty
-                ClosureFn(_, ret_ty) => ret_ty
-                _ =>
-                  @util.die("gen_body_ret_type dir: " + name.0 + " not found")
+              match f.ty.function_type() {
+                Some((_, ret_ty, _)) => ret_ty
+                None =>
+                  @util.die("gen_body_ret_type dir: " + name.0 + " not a function type")
               }
             None =>
               @util.die("gen_body_ret_type dir1: " + name.0 + " not found")
@@ -144,7 +135,11 @@ fn ty_to_low_type(ty : Type) -> LowType {
     }
     ArrayData(_) => @util.die("ty_to_low_type: ArrayData" + ty.to_string())
     Fun(args_ty, ret_ty) =>
-      DirectFn(args_ty.map(ty => ty_to_low_type(ty)), ty_to_low_type(ret_ty))
+      LowType::make_function(
+        args_ty.map(ty => ty_to_low_type(ty)),
+        ty_to_low_type(ret_ty),
+        false, // 直接函数默认不是闭包
+      )
   }
 }
 

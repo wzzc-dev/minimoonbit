@@ -22,7 +22,7 @@ pub fn emit(input : @closure.Program) -> String {
       output += Array::join(func.args.map(fn(arg) { arg.0.to_string() }), ", ")
       output += ") {\n"
       // 从环境变量中获取闭包
-      for i, fv in func.formal_free_vars {
+      for i, fv in func.free_vars {
         output += " const \{fv.0.to_string()} = env[\{i}];\n"
       }
       output += " return "
@@ -106,19 +106,19 @@ fn emit_expr(expr : @closure.Expr) -> String {
       emit_expr(e2) +
       ";\n" +
       "})()"
-    MakeClosure((func, _), env, e) =>
-      if env.actual_free_vars.length() == 0 {
+    MakeClosure(label, env, e) =>
+      if env.length() == 0 {
         emit_expr(e)
       } else {
         // 生成 bind 调用来创建闭包
         let free_vars = Array::join(
-          env.actual_free_vars.map(fn(v) { v.0.to_string() }),
+          env.map(fn(v) { v.to_string() }),
           ",",
         )
-        "  \{func.to_string()}.bind(null, [\{free_vars}])"
+        "  \{label.0.to_string()}.bind(null, [\{free_vars}])"
       }
-    CallClosure(func, args) => {
-      let mut result = func.to_string() + "("
+    CallClosure(label, args) => {
+      let mut result = label.to_string() + "("
       // 添加参数
       for i, arg in args {
         if i > 0 {
@@ -129,8 +129,8 @@ fn emit_expr(expr : @closure.Expr) -> String {
       result += ")"
       result
     }
-    CallDirect(func, args) => {
-      let mut result = func.0 + "("
+    CallDirect(label, args) => {
+      let mut result = label.0.to_string() + "("
       for i, arg in args {
         if i > 0 {
           result += ", "

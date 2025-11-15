@@ -219,7 +219,12 @@ pub fn infer_expression_type(expr : @closure.Expr, context : Context) -> Type {
               }
           }
       }
-    MakeClosure((_, ty), _, _) => convert_type(ty) // 闭包值的类型需要更精确的推断
+    MakeClosure(label, _, _) => {
+      match context.func_env.get(label.0.to_string()) {
+        Some(ty) => ty
+        None => Type::Int // 默认类型，应该报错
+      }
+    }
     Neg(_) => Type::Int
     Bool(_) => Type::Bool
     FNeg(_) => Type::Float

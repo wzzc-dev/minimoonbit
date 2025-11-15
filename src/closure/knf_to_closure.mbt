@@ -22,7 +22,7 @@ pub fn knf_program_to_closure(
       is_closure: false,
       ty: low_type,
       args: [],
-      formal_free_vars: [],
+      free_vars: [],
       body: Unit,
     })
   })
@@ -117,8 +117,8 @@ fn knf_to_closure(
           old_name: name,
           is_closure,
           ty: gen_func_type(ty, is_closure, funcdefs, env, body),
-          args: args.map(name_ty => (name_ty.0, ty_to_low_type(name_ty.1))), // 使用ty_to_low_type而不是arr_ty_to_low_type
-          formal_free_vars: fv_to_array(free_vars),
+          args: args.map(name_ty => (name_ty.0, ty_to_low_type(name_ty.1))),
+          free_vars: fv_to_array(free_vars),
           body,
         }
       }
@@ -130,13 +130,10 @@ fn knf_to_closure(
       funcdefs.push(def)
       match is_closure {
         true => {
-          let closure : Closure = {
-            name: name.to_string(),
-            actual_free_vars: fv_to_array(free_vars),
-          }
+          let free_var_names = fv_to_array(free_vars).map(fv => fv.0)
           MakeClosure(
-            (name, gen_func_type(ty, is_closure, funcdefs, env, body)),
-            closure,
+            name.to_string(),
+            free_var_names,
             knf_to_closure(funcdefs, env, static_arrays, cont),
           )
         }
@@ -157,9 +154,9 @@ fn knf_to_closure(
       }
       let is_closure_var = match env.get(name) {
         Some(ty) =>
-          match ty {
-            ClosureFn(_, _) => true
-            _ => false
+          match ty.function_type() {
+            Some((_, _, is_closure)) => is_closure
+            None => false
           }
         None => false
       }
@@ -181,10 +178,9 @@ fn knf_to_closure(
               Some(caller) => {
                 if i < caller.args.length() {
                   let param_type = caller.args[i].1
-                  match param_type {
-                    ClosureFn(_, _) => true
-                    DirectFn(_, _) => false
-                    _ => false // 非函数类型参数
+                  match param_type.function_type() {
+                    Some((_, _, is_closure)) => is_closure
+                    None => false // 非函数类型参数
                   }
                 } else {
                   false // 参数数量不匹配
@@ -195,11 +191,8 @@ fn knf_to_closure(
 
             // 只有在参数类型期望闭包时才创建闭包
             if should_create_closure && def.is_closure {
-              let closure : Closure = {
-                name: def.old_name.to_string(),
-                actual_free_vars: def.formal_free_vars,
-              }
-              result = MakeClosure((arg_name, def.ty), closure, result)
+              let free_var_names = def.free_vars.map(fv => fv.0)
+              result = MakeClosure(def.old_name.to_string(), free_var_names, result)
             }
           }
           None => () // 不是函数定义，无需处理

@@ -41,7 +41,7 @@ pub fn emit(input : @closure.Program) -> String {
 
       // 如果是闭包函数，添加局部变量声明用于加载自由变量
       if fundef.is_closure {
-        for i, name_ty in fundef.formal_free_vars {
+        for i, name_ty in fundef.free_vars {
           output += "    (local $" + name_ty.0.to_string() + " i32)\n"
           output += "    (local.set $" +
             name_ty.0.to_string() +
@@ -149,14 +149,14 @@ fn emit_expr(expr : @closure.Expr) -> String {
     Unit => "(i32.const 0)"
 
     // 修改闭包相关的处理
-    MakeClosure((name, _ty), closure, body) => {
+    MakeClosure(label, closure, body) => {
       let mut result = "(block\n"
       // 分配闭包环境的内存
       result += "  (local $env_ptr i32)\n"
       result += "  (local.set $env_ptr (global.get $heap))\n"
 
       // 存储环境变量
-      for i, env_var in closure.actual_free_vars {
+      for i, env_var in closure {
         result += "  (i32.store offset=" +
           (i * 4).to_string() +
           " (local.get $env_ptr) (local.get $" +
@@ -167,11 +167,11 @@ fn emit_expr(expr : @closure.Expr) -> String {
       // 更新堆指针
       result += "  (global.set $heap (i32.add (local.get $env_ptr) " +
         "(i32.const " +
-        (closure.actual_free_vars.length() * 4).to_string() +
+        (closure.length() * 4).to_string() +
         ")))\n"
 
       // 将环境指针绑定到名称
-      result += "  (local.set $" + name.to_string() + " (local.get $env_ptr))\n"
+      result += "  (local.set $" + label.0.to_string() + " (local.get $env_ptr))\n"
 
       // 继续处理body
       result += "  " + emit_expr(body) + ")"

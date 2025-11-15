@@ -238,30 +238,33 @@ pub fn ClosureInterpreter::eval(
       let new_env = env.add(x, v)
       self.eval(new_env, e2)
     }
-    MakeClosure((n, _), c, e) => {
+    MakeClosure(label, c, e) => {
       let closure = self.functions
-        .get(c.name.0)
-        .or_error(Failure("closure not found: " + n.to_string()))
+        .get(label.0)
+        .or_error(Failure("closure not found: " + label.0.to_string()))
       let fv = []
-      for x in c.actual_free_vars {
-        fv.push(find(env, x.0))
+      for x in c {
+        fv.push(find(env, x))
       }
-      let new_env = env.add(n, Closure(closure, fv))
+      let name =  try @closure.Name::from_string(label.0) catch {
+        e => fail("invalid closure name: " + label.0.to_string() + " " + e.to_string())
+      } 
+      let new_env = env.add(name, Closure(closure, fv))
       self.eval(new_env, e)
     }
-    CallDirect(l, xs) => {
+    CallDirect(label, xs) => {
       let args = []
       for x in xs {
         args.push(find(env, x))
       }
-      match self.functions.get(l.0) {
+      match self.functions.get(label.0) {
         Some(f) => self.eval_fn(f, args, [])
         None => {
           let ext_fn = self.extern_fns
-            .get(l.0)
+            .get(label.0)
             .or_error(
               Failure(
-                "Given function \{l} is not found in both internal and external functions",
+                "Given function \{label.0} is not found in both internal and external functions",
               ),
             )
           ext_fn(args)
@@ -379,8 +382,8 @@ pub fn ClosureInterpreter::eval_fn(
     let (x, _) = func.args[i]
     env = env.add(x, args[i])
   }
-  for i = 0; i < func.formal_free_vars.length(); i = i + 1 {
-    let (x, _) = func.formal_free_vars[i]
+  for i = 0; i < func.free_vars.length(); i = i + 1 {
+    let (x, _) = func.free_vars[i]
     env = env.add(x, fv[i])
   }
   env = env.add(func.old_name, Closure(func, fv))

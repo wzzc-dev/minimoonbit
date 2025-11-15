@@ -22,10 +22,7 @@ pub fn convert_expr(
   // @util.logger("convert_expr: " + expr.to_string())
   match expr {
     Unit => {
-      let result_value = Value::{
-        id: new_value_id(),
-        ty: Type::Unit,
-      }
+      let result_value = Value::{ id: new_value_id(), ty: Type::Unit }
       // Unit值，不产生实际值
       ExprResult::{ value: Some(result_value), context }
     }
@@ -386,7 +383,10 @@ pub fn convert_expr(
             Err(_) => {
               // 变量未找到，返回None并记录警告
               @util.logger(
-                "Warning: Variable or function not found: " + var_name + " in context.var_env: " + context.var_env.to_string(),
+                "Warning: Variable or function not found: " +
+                var_name +
+                " in context.var_env: " +
+                context.var_env.to_string(),
               )
               ExprResult::{ value: None, context }
             }
@@ -460,8 +460,7 @@ pub fn convert_expr(
         current_context,
       )
       let return_type = match func_type {
-        Type::DirectFn(_, ret_type) => ret_type
-        Type::ClosureFn(_, ret_type) => ret_type
+        Type::Function(_, ret_type, _) => ret_type
         _ =>
           @util.die(
             "CallDirect: not a function type: " +
@@ -471,17 +470,14 @@ pub fn convert_expr(
           )
       }
       let opcode = match context.var_env.get(label.0.to_string()) {
-        Some(v) => {
+        Some(v) =>
           // 检查变量类型来决定是直接函数调用还是闭包调用
           match v.ty {
-            Type::DirectFn(_, _) => {
-              // 直接函数：如果是变量引用，使用变量调用
+            Type::Function(_, _, _) =>
+              // 统一的函数类型处理
               Opcode::Call(Func::Call(v), arg_values)
-            }
-            Type::ClosureFn(_, _) => Opcode::Call(Func::Call(v), arg_values) // 闭包函数
             _ => Opcode::Call(Func::Call(v), arg_values) // 默认使用变量调用
           }
-        }
         None => Opcode::Call(Func::Label(label.0), arg_values)
       }
       let result_value = Value::{ id: new_value_id(), ty: return_type }
@@ -491,41 +487,54 @@ pub fn convert_expr(
       current_context.current_block.instructions.push(instruction)
       ExprResult::{ value: Some(result_value), context: current_context }
     }
-    MakeClosure((name, ty), c, e) => {
+    MakeClosure(func_name, free_var_names, e) => {
       // 闭包创建
+      // @util.logger("MakeClosure: " + func_name.to_string())
+      // @util.logger("MakeClosure free_var_names: " + free_var_names.to_string())
+      // @util.logger("MakeClosure e: " + e.to_string())
+      // @util.logger("MakeClosure context.var_env: " + context.var_env.to_string())
+      // @util.logger("MakeClosure context.func_env: " + context.func_env.to_string())
+
+      // 查找函数定义以获取类型信息
+      let func_ty = match context.func_env.get(func_name.0) {
+        Some(ty) => ty
+        None =>
+          fail("MakeClosure: function not found: " + func_name.to_string())
+      }
+
       // 创建闭包值
-      let closure_value = Value::{ id: new_value_id(), ty: convert_type(ty) }
+      let closure_value = Value::{ id: new_value_id(), ty: func_ty }
+
+      // 获取自由变量的值
+      let free_var_values = free_var_names.map(fn(var_name) {
+        match context.var_env.get(var_name.to_string()) {
+          Some(v) => v
+          None =>
+            fail(
+              "MakeClosure: free var not found: " +
+              var_name.to_string() +
+              " in closure: " +
+              func_name.to_string() +
+              " context.var_env: " +
+              context.var_env.to_string(),
+            )
+        }
+      })
 
       // 创建闭包创建指令
       let instruction = Instruction::{
         result: closure_value,
-        opcode: Opcode::MakeClosure(
-          name.to_string(),
-          c.actual_free_vars.map(fn(fv) {
-            match context.var_env.get(fv.0.to_string()) {
-              Some(v) => v
-              None =>
-                fail(
-                  "MakeClosure: free var not found: " +
-                  fv.to_string() +
-                  " in closure: " +
-                  " MakeClosure((name, ty), c, e): " +
-                  ((name, ty), c, e).to_string() +
-                  " free_vars: " +
-                  c.actual_free_vars.to_string() + 
-                  " context.var_env: " +
-                  context.var_env.to_string(),  
-                )
-            }
-          }),
-        ),
+        opcode: Opcode::MakeClosure(func_name.0, free_var_values),
       }
 
       // 更新当前块的指令列表
       context.current_block.instructions.push(instruction)
 
       // 将闭包值绑定到name变量
-      let updated_var_env = context.var_env.add(name.to_string(), closure_value)
+      let updated_var_env = context.var_env.add(
+        func_name.0,
+        closure_value,
+      )
       let intermediate_context = Context::{
         current_block: context.current_block,
         blocks: context.blocks,
@@ -574,8 +583,7 @@ pub fn convert_expr(
         current_context,
       )
       let return_type = match func_type {
-        Type::DirectFn(_, ret_type) => ret_type
-        Type::ClosureFn(_, ret_type) => ret_type
+        Type::Function(_, ret_type, _) => ret_type
         _ =>
           @util.die(
             "CallClosure: not a function type: " +

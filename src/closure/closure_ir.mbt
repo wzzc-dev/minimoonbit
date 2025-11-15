@@ -46,7 +46,7 @@ pub(all) enum Expr {
   IfLt(Name, Name, Expr, Expr)
   Let((Name, LowType), Expr, Expr)
   Var(Name)
-  MakeClosure((Name, LowType), Closure, Expr)
+  MakeClosure(Label, Array[Name], Expr)
   CallClosure(Name, Array[Name])
   CallDirect(Label, Array[Name])
   MakeTuple(Array[Name])
@@ -63,20 +63,19 @@ pub(all) enum Expr {
 
 ///|
 pub(all) struct Closure {
-  name : Label
-  actual_free_vars : Array[(Name, LowType)]
+  func_name : Label
 } derive(Show, ToJson)
 
 ///|
 pub(all) struct FuncDef {
   name : Label
   old_name : Name
-  /// true if the function is a closure function, and the closure will be available at `s11` on 
+  /// true if the function is a closure function, and the closure will be available at `s11` on
   /// function entry.
   is_closure : Bool
   ty : LowType
   args : Array[(Name, LowType)]
-  formal_free_vars : Array[(Name, LowType)]
+  free_vars : Array[(Name, LowType)]
   body : Expr
 } derive(Show, ToJson)
 

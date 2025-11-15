@@ -54,7 +54,7 @@ pub(all) enum Opcode {
   CallRef(String, Array[Value])
 
   // 闭包操作
-  MakeClosure(String, Array[Value]) // 创建闭包：变量名，函数名，自由变量列表
+  MakeClosure(String, Array[Value]) // 创建闭包：函数名，自由变量值列表
   CallClosure(Func, Array[Value]) // 调用闭包：闭包值，参数列表
 
   // 元组操作
@@ -122,8 +122,7 @@ pub(all) enum Type {
   Float
   Bool
   Pointer(Type)
-  DirectFn(Array[Type], Type) // 直接函数：参数类型, 返回类型
-  ClosureFn(Array[Type], Type) // 闭包函数：参数类型, 返回类型
+  Function(Array[Type], Type, Bool) // 统一函数类型：参数类型, 返回类型, 是否闭包
   Tuple(Array[Type])
   Array(Type)
 } derive(Show, Eq, Hash)

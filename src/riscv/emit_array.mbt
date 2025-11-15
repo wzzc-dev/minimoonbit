@@ -61,7 +61,7 @@ pub fn emit_array_access_instruction(
       )
       instrs.append(spill_instrs)
     }
-    @ssa.Type::DirectFn(_, _) | @ssa.Type::ClosureFn(_, _) => {
+    @ssa.Type::Function(_) => {
       let (result_reg, load_result_instrs) = get_register_or_spill_load(
         result_val.id,
         allocator,
@@ -145,7 +145,7 @@ pub fn emit_array_store_instruction(
       instrs.append(load_value_instrs)
       instrs.push(Sw(value_reg, { base: T0, offset: 0 }))
     }
-    @ssa.Type::DirectFn(_, _) | @ssa.Type::ClosureFn(_, _) => {
+    @ssa.Type::Function(_) => {
       let (value_reg, load_value_instrs) = get_register_or_spill_load(
         value_val.id,
         allocator,
