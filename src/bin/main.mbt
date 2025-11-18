@@ -109,7 +109,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
       let source_code = self.source_code.unwrap()
       let parsed = @parser.parse_from_string(source_code)
       self.ast = Some(parsed)
-      @util.debug("parsed ast: " + parsed.to_json().stringify())
+      @util.debug("parsed ast: \n" + parsed.to_json().stringify())
     }
     Typecheck => {
       let typechecked = try? @typing.typing(self.ast.unwrap())
@@ -126,7 +126,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
       )
       // @util.logger("preprocessed ast: " + pre.to_json().stringify())
       let knf = try? self.knf_env.to_knf(pre)
-      @util.debug("knf ir: " + knf.unwrap().to_json().stringify())
+      @util.debug("knf ir: \n" + knf.unwrap().to_json().stringify())
       match knf {
         Ok(_) => self.knf = Some(knf.unwrap())
         Err(e) => @util.die(e.to_json().to_string())
@@ -134,8 +134,10 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
     }
     KnfOpt => {
       let knf = self.knf.unwrap()
+      let optimized = self.knf_env.opt_pass(knf)
       // TODO: optimize
-      self.opt_knf = Some(knf)
+      self.opt_knf = Some(optimized)
+      @util.debug("optimized knf ir: \n" + self.opt_knf.unwrap().to_json().stringify())
     }
     Closure => {
       let closure_ir = @closure.knf_program_to_closure(
