@@ -46,7 +46,7 @@ fn add_interpreter_fns(interpreter : @knf_eval.KnfInterpreter) -> Unit {
   })
   interpreter.add_extern_fn("minimbt_abs_float", fn(args) {
     match args[0] {
-      Double(d) => Double(@double.abs(d))
+      Double(d) => Double(Double::abs(d))
       _ => @util.die("abs_float expects Double")
     }
   })
@@ -118,7 +118,7 @@ fn add_closure_interpreter_fns(
   })
   interpreter.add_extern_fn("minimbt_abs_float", fn(args) {
     match args[0] {
-      Double(d) => Double(@double.abs(d))
+      Double(d) => Double(Double::abs(d))
       _ => @util.die("abs_float expects Double")
     }
   })

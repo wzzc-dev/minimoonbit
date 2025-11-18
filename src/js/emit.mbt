@@ -22,7 +22,7 @@ pub fn emit(input : @closure.Program) -> String {
       output += Array::join(func.args.map(fn(arg) { arg.0.to_string() }), ", ")
       output += ") {\n"
       // 从环境变量中获取闭包
-      for i, fv in func.free_vars {
+      for i, fv in func.formal_free_vars {
         output += " const \{fv.0.to_string()} = env[\{i}];\n"
       }
       output += " return "
@@ -106,16 +106,16 @@ fn emit_expr(expr : @closure.Expr) -> String {
       emit_expr(e2) +
       ";\n" +
       "})()"
-    MakeClosure(label, env, e) =>
-      if env.length() == 0 {
+    MakeClosure((name, _), c, e) =>
+      if c.actual_free_vars.length() == 0 {
         emit_expr(e)
       } else {
         // 生成 bind 调用来创建闭包
         let free_vars = Array::join(
-          env.map(fn(v) { v.to_string() }),
+          c.actual_free_vars.map(fn(fv) { fv.to_string() }),
           ",",
         )
-        "  \{label.0.to_string()}.bind(null, [\{free_vars}])"
+        "  \{name.to_string()}.bind(null, [\{free_vars}])" 
       }
     CallClosure(label, args) => {
       let mut result = label.to_string() + "("
@@ -177,7 +177,7 @@ fn emit_expr(expr : @closure.Expr) -> String {
 }
 
 ///|
-pub let extenv = [
+pub let extenv:ReadOnlyArray[String] = [
   "read_int", "print_int", "read_char", "print_char", "print_newline", "print_endline",
   "int_of_float", "float_of_int", "truncate", "floor", "abs_float", "sqrt", "sin",
   "cos", "atan", "create_array", "create_float_array", "create_ptr_array",

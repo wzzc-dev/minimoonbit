@@ -53,6 +53,9 @@ pub(all) enum Opcode {
   // 函数引用
   CallRef(String, Array[Value])
 
+  // 静态数组引用
+  ArrayRef(String)
+
   // 闭包操作
   MakeClosure(String, Array[Value]) // 创建闭包：函数名，自由变量值列表
   CallClosure(Func, Array[Value]) // 调用闭包：闭包值，参数列表
@@ -140,7 +143,8 @@ pub(all) enum Type {
   Float
   Bool
   Pointer(Type)
-  Function(Array[Type], Type, Bool) // 统一函数类型：参数类型, 返回类型, 是否闭包
+  ClosureFn(Array[Type], Type) // 闭包函数类型：参数类型, 返回类型
+  DirectFn(Array[Type], Type) // 直接函数类型：参数类型, 返回类型
   Tuple(Array[Type])
   Array(Type)
 } derive(Show, Eq, Hash)
@@ -149,7 +153,7 @@ pub(all) enum Type {
 /// 从函数类型中提取返回类型
 pub fn Type::get_return_type(self : Type) -> Type {
   match self {
-    Function(_, ret_type, _) => ret_type
+    ClosureFn(_, ret_type) | DirectFn(_, ret_type) => ret_type
     _ => Unit  // 非函数类型的默认返回类型
   }
 }
@@ -158,7 +162,7 @@ pub fn Type::get_return_type(self : Type) -> Type {
 /// 从函数类型中提取参数类型列表
 pub fn Type::get_param_types(self : Type) -> Array[Type] {
   match self {
-    Function(param_types, _, _) => param_types
+    ClosureFn(param_types, _) | DirectFn(param_types, _) => param_types
     _ => []  // 非函数类型没有参数
   }
 }
@@ -167,7 +171,7 @@ pub fn Type::get_param_types(self : Type) -> Array[Type] {
 /// 检查是否为闭包函数类型
 pub fn Type::is_closure_function(self : Type) -> Bool {
   match self {
-    Function(_, _, is_closure) => is_closure
+    ClosureFn(_, _) => true
     _ => false
   }
 }

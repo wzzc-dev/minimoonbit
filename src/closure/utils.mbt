@@ -9,11 +9,22 @@ fn gen_func_type(
   // @util.logger("gen_func_type: " + ty.to_string() + " is_closure: " + is_closure.to_string() + " body: " + body.to_string())
   match ty {
     Fun(args, ty) =>
-      LowType::make_function(
-        args.map(ty => ty_to_low_type(ty)),
-        gen_body_ret_type(ty, fundefs, env, body),
-        is_closure,
-      )
+      if is_closure {
+        ClosureFn(
+          args.map(ty => ty_to_low_type(ty)),
+          gen_body_ret_type(ty, fundefs, env, body),
+        )
+      } else {
+        DirectFn(
+          args.map(ty => {
+            match ty_to_low_type(ty) {
+              DirectFn(arg_tys, ret_ty) => ClosureFn(arg_tys, ret_ty)
+              ty => ty
+            }
+          }),
+          gen_body_ret_type(ty, fundefs, env, body),
+        )
+      }
     _ => @util.die("gen_func_type: " + ty.to_string())
   }
 }
@@ -50,9 +61,9 @@ fn gen_body_ret_type(
         None =>
           match env.get(name) {
             Some(ty) =>
-              match ty.function_type() {
-                Some((_, ret_ty, _)) => ret_ty
-                None =>
+              match ty {
+                ClosureFn(_, ret_ty) | DirectFn(_, ret_ty) => ret_ty
+                _ =>
                   @util.die(
                     "gen_body_ret_type var1: " +
                     name.name.unwrap() +
@@ -70,9 +81,9 @@ fn gen_body_ret_type(
         Some(index) =>
           match funcdefs.get(index) {
             Some(f) =>
-              match f.ty.function_type() {
-                Some((_, ret_ty, _)) => ret_ty
-                None =>
+              match f.ty {
+                ClosureFn(_, ret_ty) | DirectFn(_, ret_ty) => ret_ty
+                _ =>
                   @util.die("gen_body_ret_type dir: " + name.0 + " not a function type")
               }
             None =>
@@ -135,10 +146,9 @@ fn ty_to_low_type(ty : Type) -> LowType {
     }
     ArrayData(_) => @util.die("ty_to_low_type: ArrayData" + ty.to_string())
     Fun(args_ty, ret_ty) =>
-      LowType::make_function(
+      DirectFn(
         args_ty.map(ty => ty_to_low_type(ty)),
         ty_to_low_type(ret_ty),
-        false, // 直接函数默认不是闭包
       )
   }
 }

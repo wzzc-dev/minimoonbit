@@ -5,7 +5,8 @@ pub(all) enum LowType {
   Bool
   Int
   Double
-  Function(Array[LowType], LowType, Bool) // params, result, is_closure
+  ClosureFn(Array[LowType], LowType) // (fn_ptr, closure_args...)
+  DirectFn(Array[LowType], LowType) // fn_ptr itself
   Tuple(Array[LowType])
   Array(LowType)
   Ptr
@@ -14,7 +15,7 @@ pub(all) enum LowType {
 ///|
 pub fn LowType::is_ptr_like(self : LowType) -> Bool {
   match self {
-    Function(_, _, _) | Tuple(_) | Array(_) | Ptr => true
+    ClosureFn(_) | DirectFn(_) | Tuple(_) | Array(_) | Ptr => true
     _ => false
   }
 }
@@ -35,26 +36,5 @@ pub fn LowType::size_of(self : LowType, size_of_ptr : Int) -> Int {
     Int => 4
     Double => 8
     _ => if self.is_ptr_like() { size_of_ptr } else { 4 }
-  }
-}
-
-///|
-pub fn LowType::function_type(self : LowType) -> (Array[LowType], LowType, Bool)? {
-  match self {
-    Function(params, result, is_closure) => Some((params, result, is_closure))
-    _ => None
-  }
-}
-
-///|
-pub fn LowType::make_function(params : Array[LowType], result : LowType, is_closure : Bool) -> LowType {
-  Function(params, result, is_closure)
-}
-
-///|
-pub fn LowType::is_function(self : LowType) -> Bool {
-  match self {
-    Function(_, _, _) => true
-    _ => false
   }
 }

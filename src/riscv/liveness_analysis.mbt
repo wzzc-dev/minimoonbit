@@ -305,6 +305,7 @@ fn get_instruction_uses_ids(instr : @ssa.Instruction) -> Array[Int] {
       for arg in arr {
         uses.push(arg.id)
       }
+    ArrayRef(_) => ()
     ArrayGet(arr, index) => {
       uses.push(arr.id)
       uses.push(index.id)

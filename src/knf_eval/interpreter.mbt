@@ -5,10 +5,10 @@ pub struct KnfInterpreter {
 }
 
 ///|
-pub typealias @types.Name
+pub type Name = @types.Name
 
 ///|
-pub typealias @immut/hashmap.HashMap[Name, Value] as InterpreterLocalVars
+pub type InterpreterLocalVars = @immut/hashmap.HashMap[Name, Value]
 
 ///|
 pub(all) enum Value {
@@ -53,7 +53,7 @@ pub fn KnfInterpreter::add_extern_fn(
 
 ///|
 fn find(env : InterpreterLocalVars, name : Name) -> Value raise Failure {
-  env.get(name).or_error(Failure("variable not found: \{name}"))
+  env.get(name).unwrap_or_error(Failure("variable not found: \{name}"))
 }
 
 ///|
@@ -256,7 +256,7 @@ pub fn KnfInterpreter::eval(
           }
           let f = self.extern_fns
             .get(name)
-            .or_error(Failure("extern fn not found \{name}"))
+            .unwrap_or_error(Failure("extern fn not found \{name}"))
           f(args)
         }
         _ => fail("type mismatch, apply expects Closure or ExternFn")
@@ -323,7 +323,7 @@ pub fn KnfInterpreter::eval(
     ExternalFunctionApplication(name, args) => {
       let f = self.extern_fns
         .get(name)
-        .or_error(Failure("extern fn not found \{name}"))
+        .unwrap_or_error(Failure("extern fn not found \{name}"))
       let argv = []
       for x in args {
         argv.push(find(env, x))

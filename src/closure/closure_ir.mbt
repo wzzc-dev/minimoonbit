@@ -17,10 +17,10 @@ pub(all) enum LowTypeValue {
 pub(all) struct Label(String) derive(Show, ToJson)
 
 ///|
-pub typealias @types.Name
+pub type Name =  @types.Name
 
 ///|
-pub typealias @types.Type
+pub type Type =  @types.Type
 
 ///|
 pub(all) enum Expr {
@@ -46,7 +46,7 @@ pub(all) enum Expr {
   IfLt(Name, Name, Expr, Expr)
   Let((Name, LowType), Expr, Expr)
   Var(Name)
-  MakeClosure(Label, Array[Name], Expr)
+  MakeClosure((Name, LowType), Closure, Expr)
   CallClosure(Name, Array[Name])
   CallDirect(Label, Array[Name])
   MakeTuple(Array[Name])
@@ -61,6 +61,12 @@ pub(all) enum Expr {
   StaticArrayRef(Label)
 } derive(Show, ToJson)
 
+pub struct Closure {
+  name : Label
+  actual_free_vars : Array[Name]
+} derive(Show, ToJson)
+
+
 ///|
 pub(all) struct FuncDef {
   name : Label
@@ -70,7 +76,7 @@ pub(all) struct FuncDef {
   is_closure : Bool
   ty : LowType
   args : Array[(Name, LowType)]
-  free_vars : Array[(Name, LowType)]
+  formal_free_vars : Array[(Name, LowType)]
   body : Expr
 } derive(Show, ToJson)
 

@@ -61,7 +61,7 @@ pub fn emit_array_access_instruction(
       )
       instrs.append(spill_instrs)
     }
-    @ssa.Type::Function(_) => {
+    @ssa.Type::DirectFn(_) => {
       let (result_reg, load_result_instrs) = get_register_or_spill_load(
         result_val.id,
         allocator,
@@ -145,7 +145,7 @@ pub fn emit_array_store_instruction(
       instrs.append(load_value_instrs)
       instrs.push(Sw(value_reg, { base: T0, offset: 0 }))
     }
-    @ssa.Type::Function(_) => {
+    @ssa.Type::DirectFn(_) => {
       let (value_reg, load_value_instrs) = get_register_or_spill_load(
         value_val.id,
         allocator,
@@ -162,5 +162,23 @@ pub fn emit_array_store_instruction(
       instrs.push(Sd(value_reg, { base: T0, offset: 0 }))
     }
   }
+  instrs
+}
+
+pub fn emit_array_ref_instruction(
+  result_val : @ssa.Value,
+  label : String,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let instrs = []
+  let (result_reg, load_instrs) = get_register_or_spill_load(
+    result_val.id,
+    allocator,
+  )
+  instrs.push(La(T0, label))
+  if result_reg != T0 {
+    instrs.push(Mv(result_reg, T0))
+  }
+  instrs.append(load_instrs)
   instrs
 }

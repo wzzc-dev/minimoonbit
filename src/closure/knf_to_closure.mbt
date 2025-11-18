@@ -1,5 +1,5 @@
 ///|
-pub typealias @immut/hashmap.HashMap[Name, LowType] as LocalEnv
+pub type LocalEnv = @immut/hashmap.HashMap[Name, LowType]
 
 ///|
 pub fn knf_program_to_closure(
@@ -22,7 +22,7 @@ pub fn knf_program_to_closure(
       is_closure: false,
       ty: low_type,
       args: [],
-      free_vars: [],
+      formal_free_vars: [],
       body: Unit,
     })
   })
@@ -117,8 +117,13 @@ fn knf_to_closure(
           old_name: name,
           is_closure,
           ty: gen_func_type(ty, is_closure, funcdefs, env, body),
-          args: args.map(name_ty => (name_ty.0, ty_to_low_type(name_ty.1))),
-          free_vars: fv_to_array(free_vars),
+          args: args.map(name_ty => (name_ty.0, {
+            match ty_to_low_type(name_ty.1) {
+              DirectFn(arg_tys, ret_ty) => ClosureFn(arg_tys, ret_ty)
+              ty => ty
+            }
+          })),
+          formal_free_vars: fv_to_array(free_vars),
           body,
         }
       }
@@ -131,9 +136,12 @@ fn knf_to_closure(
       match is_closure {
         true => {
           let free_var_names = fv_to_array(free_vars).map(fv => fv.0)
-          MakeClosure(
-            name.to_string(),
-            free_var_names,
+          let closure = {
+            name: name.to_string(),
+            actual_free_vars: free_var_names,
+          }
+          MakeClosure((name, def.ty),
+            closure,
             knf_to_closure(funcdefs, env, static_arrays, cont),
           )
         }
@@ -154,9 +162,10 @@ fn knf_to_closure(
       }
       let is_closure_var = match env.get(name) {
         Some(ty) =>
-          match ty.function_type() {
-            Some((_, _, is_closure)) => is_closure
-            None => false
+          match ty {
+            ClosureFn(_, _) => true
+            DirectFn(_, _) => false // 非函数类型参数
+            _ => false // 非函数类型参数
           }
         None => false
       }
@@ -173,27 +182,13 @@ fn knf_to_closure(
         match funcdefs.search_by(fn(def) { def.old_name == arg_name }) {
           Some(index) => {
             let def = funcdefs.get(index).unwrap()
-            // 检查被调用函数对应位置的参数类型
-            let should_create_closure = match caller_def {
-              Some(caller) => {
-                if i < caller.args.length() {
-                  let param_type = caller.args[i].1
-                  match param_type.function_type() {
-                    Some((_, _, is_closure)) => is_closure
-                    None => false // 非函数类型参数
-                  }
-                } else {
-                  false // 参数数量不匹配
-                }
-              }
-              None => false // 外部函数假设不需要闭包
+            let free_var_names = def.formal_free_vars.map(fv => fv.0)
+            let closure = {
+              name: def.name,
+              actual_free_vars: free_var_names,
             }
-
-            // 只有在参数类型期望闭包时才创建闭包
-            if should_create_closure && def.is_closure {
-              let free_var_names = def.free_vars.map(fv => fv.0)
-              result = MakeClosure(def.old_name.to_string(), free_var_names, result)
-            }
+            result = MakeClosure((def.old_name, def.ty), closure, result)
+            // @util.logger("make closure: " + result.to_string())
           }
           None => () // 不是函数定义，无需处理
         }
@@ -300,28 +295,28 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
     Int64(_) => @hashset.new()
     Double(_) => @hashset.new()
     Bool(_) => @hashset.new()
-    Neg(x) => @hashset.of([new_fv(x, Int)])
-    Add(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
-    Sub(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
-    Mul(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
-    Div(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
-    Mod(a, b) => @hashset.of([new_fv(a, Int), new_fv(b, Int)])
-    FNeg(x) => @hashset.of([new_fv(x, Double)])
-    FAdd(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
-    FSub(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
-    FMul(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
-    FDiv(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
-    FMod(a, b) => @hashset.of([new_fv(a, Double), new_fv(b, Double)])
+    Neg(x) => @hashset.from_array([new_fv(x, Int)])
+    Add(a, b) => @hashset.from_array([new_fv(a, Int), new_fv(b, Int)])
+    Sub(a, b) => @hashset.from_array([new_fv(a, Int), new_fv(b, Int)])
+    Mul(a, b) => @hashset.from_array([new_fv(a, Int), new_fv(b, Int)])
+    Div(a, b) => @hashset.from_array([new_fv(a, Int), new_fv(b, Int)])
+    Mod(a, b) => @hashset.from_array([new_fv(a, Int), new_fv(b, Int)])
+    FNeg(x) => @hashset.from_array([new_fv(x, Double)])
+    FAdd(a, b) => @hashset.from_array([new_fv(a, Double), new_fv(b, Double)])
+    FSub(a, b) => @hashset.from_array([new_fv(a, Double), new_fv(b, Double)])
+    FMul(a, b) => @hashset.from_array([new_fv(a, Double), new_fv(b, Double)])
+    FDiv(a, b) => @hashset.from_array([new_fv(a, Double), new_fv(b, Double)])
+    FMod(a, b) => @hashset.from_array([new_fv(a, Double), new_fv(b, Double)])
     IfEq(a, b, ka, kb) =>
-      @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
+      @hashset.from_array([new_fv(a, Unit), new_fv(b, Unit)])
       .union(fv(env, ka))
       .union(fv(env, kb))
     IfLe(a, b, ka, kb) =>
-      @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
+      @hashset.from_array([new_fv(a, Unit), new_fv(b, Unit)])
       .union(fv(env, ka))
       .union(fv(env, kb))
     IfLt(a, b, ka, kb) =>
-      @hashset.of([new_fv(a, Unit), new_fv(b, Unit)])
+      @hashset.from_array([new_fv(a, Unit), new_fv(b, Unit)])
       .union(fv(env, ka))
       .union(fv(env, kb))
     Let((x, _), e, cont) => {
@@ -338,7 +333,7 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
         Some(t) => t
         None => Unit
       }
-      @hashset.of([new_fv(x, ty)])
+      @hashset.from_array([new_fv(x, ty)])
     }
     LetRec({ name, ty: _, args, body }, cont) => {
       let x = fv(env, body)
@@ -354,7 +349,7 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
         Some(ty) => ty
         None => Unit
       }
-      @hashset.of([new_fv(f, ty)]).union(
+      @hashset.from_array([new_fv(f, ty)]).union(
         @hashset.from_array(a.map(name => new_fv(name, Unit))),
       )
     }
@@ -379,7 +374,7 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
         Some(t) => t
         None => Ptr  // 默认为Ptr，但优先使用环境中的类型
       }
-      result.union(@hashset.of([new_fv(name, name_ty)]))
+      result.union(@hashset.from_array([new_fv(name, name_ty)]))
     }
     Get(a, b) => {
       // 获取数组/元组的实际类型
@@ -387,7 +382,7 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
         Some(t) => t
         None => Ptr  // 默认为Ptr，但优先使用环境中的类型
       }
-      @hashset.of([new_fv(a, a_ty), new_fv(b, Int)])
+      @hashset.from_array([new_fv(a, a_ty), new_fv(b, Int)])
     }
     Put(a, b, c) => {
       let a_ty = match env.get(a) {
@@ -402,7 +397,7 @@ fn fv(env : LocalEnv, e : @knf.Knf) -> @hashset.HashSet[FreeVarWithType] {
         Some(ty) => ty
         None => Ptr
       }
-      @hashset.of([new_fv(a, a_ty), new_fv(b, b_ty), new_fv(c, c_ty)])
+      @hashset.from_array([new_fv(a, a_ty), new_fv(b, b_ty), new_fv(c, c_ty)])
     }
     ExternalArray(_) => @hashset.new()
     ExternalFunctionApplication(_, arr_name) =>

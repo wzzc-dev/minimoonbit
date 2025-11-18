@@ -8,11 +8,15 @@ pub fn convert_type(ty : @closure.LowType) -> Type {
     Bool => Type::Bool
     Int => Type::Int
     Double => Type::Float
-    Function(params, result, is_closure) =>
-      Type::Function(
+    ClosureFn(params, result) =>
+      Type::ClosureFn(
         params.map(convert_type),
         convert_type(result),
-        is_closure,
+      )
+    DirectFn(params, result) =>
+      Type::DirectFn(
+        params.map(convert_type),
+        convert_type(result),
       )
     Tuple(elements) => Type::Tuple(elements.map(convert_type))
     Array(element) => Type::Array(convert_type(element))
@@ -29,10 +33,9 @@ pub fn convert_type_from_types(ty : @types.Type) -> Type {
     @types.Type::Int => Type::Int
     @types.Type::Double => Type::Float
     @types.Type::Fun(args, ret) =>
-      Type::Function(
+      Type::DirectFn(
         args.map(convert_type_from_types),
         convert_type_from_types(ret),
-        false, // 从原始类型转换时默认为直接函数
       )
     @types.Type::Tuple(elements) =>
       Type::Tuple(elements.map(convert_type_from_types))

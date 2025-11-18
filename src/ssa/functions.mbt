@@ -17,7 +17,7 @@ pub fn convert_function_with_env(
   let regular_params = fundef.args.map(fn(arg) {
     Value::{ id: new_value_id(), ty: convert_type(arg.1) }
   })
-  let free_var_params = fundef.free_vars.map(fn(free_var) {
+  let free_var_params = fundef.formal_free_vars.map(fn(free_var) {
     Value::{ id: new_value_id(), ty: convert_type(free_var.1) }
   })
 
@@ -36,7 +36,7 @@ pub fn convert_function_with_env(
   // 创建变量环境，将函数参数添加到环境中
   // 注意：由于我们改变了参数顺序，需要相应调整索引
   let mut var_env = @immut/hashmap.new()
-  for i, free_var in fundef.free_vars {
+  for i, free_var in fundef.formal_free_vars {
     let free_var_name = free_var.0
     let free_var_value = free_var_params[i]
     var_env = var_env.add(free_var_name.to_string(), free_var_value)
@@ -101,7 +101,7 @@ pub fn convert_function(
   let regular_params = fundef.args.map(fn(arg) {
     Value::{ id: new_value_id(), ty: convert_type(arg.1) }
   })
-  let free_var_params = fundef.free_vars.map(fn(free_var) {
+  let free_var_params = fundef.formal_free_vars.map(fn(free_var) {
     Value::{ id: new_value_id(), ty: convert_type(free_var.1) }
   })
 
@@ -120,7 +120,7 @@ pub fn convert_function(
   // 创建变量环境，将函数参数添加到环境中
   // 注意：由于我们改变了参数顺序，需要相应调整索引
   let mut var_env = @immut/hashmap.new()
-  for i, free_var in fundef.free_vars {
+  for i, free_var in fundef.formal_free_vars {
     let free_var_name = free_var.0
     let free_var_value = free_var_params[i]
     var_env = var_env.add(free_var_name.to_string(), free_var_value)
@@ -190,9 +190,9 @@ pub fn convert_main_function(
       name: @closure.Label("minimbt_main"),
       old_name: (try? @types.Name::from_string("minimbt_main")).unwrap(),
       is_closure: false,
-      ty: @closure.LowType::Function([], @closure.LowType::Unit, false),
+      ty: @closure.LowType::DirectFn([], @closure.LowType::Unit),
       args: [],
-      free_vars: [],
+      formal_free_vars: [],
       body,
     },
     functions,

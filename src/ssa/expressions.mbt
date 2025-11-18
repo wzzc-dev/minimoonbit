@@ -139,7 +139,7 @@ pub fn convert_expr(
       // 创建外部数组引用指令（使用Call指令）
       let instruction = Instruction::{
         result: array_value,
-        opcode: Opcode::CallRef(label.0, []),
+        opcode: Opcode::ArrayRef(label.0),
       }
       context.current_block.instructions.push(instruction)
       ExprResult::{ value: Some(array_value), context }
@@ -460,7 +460,7 @@ pub fn convert_expr(
         current_context,
       )
       let return_type = match func_type {
-        Type::Function(_, ret_type, _) => ret_type
+        Type::DirectFn(_, ret_type) => ret_type
         _ =>
           @util.die(
             "CallDirect: not a function type: " +
@@ -473,7 +473,7 @@ pub fn convert_expr(
         Some(v) =>
           // 检查变量类型来决定是直接函数调用还是闭包调用
           match v.ty {
-            Type::Function(_, _, _) =>
+            Type::DirectFn(_, _) =>
               // 统一的函数类型处理
               Opcode::Call(Func::Call(v), arg_values)
             _ => Opcode::Call(Func::Call(v), arg_values) // 默认使用变量调用
@@ -487,7 +487,7 @@ pub fn convert_expr(
       current_context.current_block.instructions.push(instruction)
       ExprResult::{ value: Some(result_value), context: current_context }
     }
-    MakeClosure(func_name, free_var_names, e) => {
+    MakeClosure((name, _func_ty), closure, e) => {
       // 闭包创建
       // @util.logger("MakeClosure: " + func_name.to_string())
       // @util.logger("MakeClosure free_var_names: " + free_var_names.to_string())
@@ -495,36 +495,38 @@ pub fn convert_expr(
       // @util.logger("MakeClosure context.var_env: " + context.var_env.to_string())
       // @util.logger("MakeClosure context.func_env: " + context.func_env.to_string())
 
-      // 查找函数定义以获取类型信息
-      let func_ty = match context.func_env.get(func_name.0) {
+      // // 查找函数定义以获取类型信息
+      let func_ty = match context.func_env.get(name.to_string()) {
         Some(ty) => ty
         None =>
-          fail("MakeClosure: function not found: " + func_name.to_string())
+          fail("MakeClosure: function not found: " + name.to_string())
       }
 
       // 创建闭包值
       let closure_value = Value::{ id: new_value_id(), ty: func_ty }
 
       // 获取自由变量的值
-      let free_var_values = free_var_names.map(fn(var_name) {
-        match context.var_env.get(var_name.to_string()) {
-          Some(v) => v
-          None =>
-            fail(
-              "MakeClosure: free var not found: " +
-              var_name.to_string() +
-              " in closure: " +
-              func_name.to_string() +
-              " context.var_env: " +
-              context.var_env.to_string(),
-            )
+      let free_var_values = []
+      for free_var in closure.actual_free_vars {
+        // @util.logger("MakeClosure free var: " + free_var.to_string() + " = " + free_var_values[i].to_string())
+        match context.var_env.get(free_var.to_string()) {
+          Some(v) => free_var_values.push(v)
+          None => ()
+            // fail(
+            //   "MakeClosure: free var not found: " +
+            //   free_var.to_string() +
+            //   " in closure: " +
+            //   name.to_string() +
+            //   " context.var_env: " +
+            //   context.var_env.to_string(),
+            // )
         }
-      })
+      }
 
       // 创建闭包创建指令
       let instruction = Instruction::{
         result: closure_value,
-        opcode: Opcode::MakeClosure(func_name.0, free_var_values),
+        opcode: Opcode::MakeClosure(name.to_string(), free_var_values),
       }
 
       // 更新当前块的指令列表
@@ -532,7 +534,7 @@ pub fn convert_expr(
 
       // 将闭包值绑定到name变量
       let updated_var_env = context.var_env.add(
-        func_name.0,
+        name.to_string(),
         closure_value,
       )
       let intermediate_context = Context::{
@@ -583,7 +585,8 @@ pub fn convert_expr(
         current_context,
       )
       let return_type = match func_type {
-        Type::Function(_, ret_type, _) => ret_type
+        Type::ClosureFn(_, ret_type) => ret_type
+        Type::DirectFn(_, ret_type) => ret_type
         _ =>
           @util.die(
             "CallClosure: not a function type: " +

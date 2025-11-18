@@ -346,7 +346,7 @@ fn main {
   })
 
   // Input
-  let file = if file.is_empty() {
+  let file = if file is None {
     @util.die("no input file provided")
   } else {
     file.unwrap()

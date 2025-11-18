@@ -493,6 +493,8 @@ fn emit_instruction_with_regalloc(
     // 函数引用调用
     @ssa.Opcode::CallRef(name, args) =>
       emit_function_ref_call_instruction(instr.result, name, args, allocator)
+    @ssa.Opcode::ArrayRef(array) =>
+      emit_array_ref_instruction(instr.result, array, allocator)
     // 内存操作
     @ssa.Opcode::Load(addr) =>
       emit_memory_load_instruction(instr.result, addr, allocator)

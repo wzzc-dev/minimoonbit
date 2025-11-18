@@ -25,10 +25,10 @@ pub fn Expr::to_json(self : Expr) -> Json {
     Expr::Let((n, t), e1, e2) =>
       ["Let", [n.to_json(), t.to_json()], e1.to_json(), e2.to_json()]
     Expr::Var(n) => ["Var", n.to_json()]
-    Expr::MakeClosure(func_name, free_var_names, e) =>
-      ["MakeClosure", func_name.to_json(), free_var_names.to_json(), e.to_json()]
+    Expr::MakeClosure((n, t), c, e) =>
+      ["MakeClosure", [n.to_json(), t.to_json()], c.to_json(), e.to_json()]
     Expr::CallClosure(n, ns) => ["CallClosure", n.to_json(), ns.to_json()]
-    Expr::CallDirect(l, ns) => ["CallDirect", l.inner().to_json(), ns.to_json()]
+    Expr::CallDirect(l, ns) => ["CallDirect", l.0.to_json(), ns.to_json()]
     Expr::MakeTuple(ns) => ["MakeTuple", ns.to_json()]
     Expr::LetTuple(n_ts, n, e) => {
       let n_ts_res = []
@@ -41,7 +41,7 @@ pub fn Expr::to_json(self : Expr) -> Json {
     Expr::ArrayGet(n1, n2) => ["ArrayGet", n1.to_json(), n2.to_json()]
     Expr::ArrayPut(n1, n2, n3) =>
       ["ArrayPut", n1.to_json(), n2.to_json(), n3.to_json()]
-    Expr::ExternalArray(l) => ["ExternalArray", l.inner().to_json()]
+    Expr::ExternalArray(l) => ["ExternalArray", l.0.to_json()]
     Expr::While(cond, body) => ["While", cond.to_json(), body.to_json()]
     Expr::Assign(n1, n2) => ["Assign", n1.to_json(), n2.to_json()]
     IfLt(n1, n2, e1, e2) =>
@@ -90,10 +90,10 @@ pub fn Expr::from_json(json : Json) -> Expr raise {
         Expr::from_json(e2),
       )
     ["Var", n] => Expr::Var(Name::from_json(n))
-    ["MakeClosure", String(func_name), Array(free_var_names), e] =>
+    ["MakeClosure", [n, t], c, e] =>
       Expr::MakeClosure(
-        func_name,
-        free_var_names.map(fn(name) { Name::from_json(name) }),
+        (Name::from_json(n), LowType::from_json(t)),
+        Closure::from_json(c),
         Expr::from_json(e),
       )
     ["CallClosure", n, Array(ns)] => {
@@ -141,6 +141,25 @@ pub fn Expr::from_json(json : Json) -> Expr raise {
   }
 }
 
+
+///|
+pub fn Closure::to_json(self : Closure) -> Json {
+  {
+    "name": self.name.to_json(),
+    "actual_free_vars": self.actual_free_vars.to_json(),
+  }
+}
+
+///|
+pub fn Closure::from_json(json : Json) -> Closure raise {
+  match json {
+    { "name": String(name), "actual_free_vars": Array(actual_free_vars), ..} => {
+      { name: Label(name), actual_free_vars: actual_free_vars.map(n => Name::from_json(n)) }
+    }
+    _ => fail("invalid json")
+  }
+}
+
 ///|
 pub fn LowType::to_json(self : LowType) -> Json {
   match self {
@@ -151,7 +170,8 @@ pub fn LowType::to_json(self : LowType) -> Json {
     LowType::Double => "Double"
     LowType::Tuple(ts) => ["Tuple", ts.to_json()]
     LowType::Array(t) => ["Array", t.to_json()]
-    LowType::Function(ts, t, is_closure) => ["Function", ts.to_json(), t.to_json(), is_closure.to_json()]
+    LowType::ClosureFn(ts, t) => ["ClosureFn", ts.to_json(), t.to_json()]
+    LowType::DirectFn(ts, t) => ["DirectFn", ts.to_json(), t.to_json()]
   }
 }
 
@@ -171,12 +191,12 @@ pub fn LowType::from_json(json : Json) -> LowType raise {
       LowType::Tuple(ts_res)
     }
     ["Array", t] => LowType::Array(LowType::from_json(t))
-    ["Function", Array(ts), t, is_closure] => {
+    ["ClosureFn", Array(ts), t] => {
       let ts_res = []
       for t in ts {
         ts_res.push(LowType::from_json(t))
       }
-      LowType::Function(ts_res, LowType::from_json(t), @json.from_json(is_closure))
+      LowType::ClosureFn(ts_res, LowType::from_json(t))
     }
     _ => fail("invalid json")
   }
@@ -185,7 +205,7 @@ pub fn LowType::from_json(json : Json) -> LowType raise {
 ///|
 pub fn FuncDef::to_json(self : FuncDef) -> Json {
   {
-    "name": self.name.inner().to_json(),
+    "name": self.name.to_json(),
     "old_name": self.old_name.to_json(),
     "is_closure": self.is_closure.to_json(),
     "ty": self.ty.to_json(),
@@ -197,9 +217,9 @@ pub fn FuncDef::to_json(self : FuncDef) -> Json {
       }
       res
     },
-    "free_vars": {
+    "formal_free_vars": {
       let res = []
-      for nt in self.free_vars {
+      for nt in self.formal_free_vars {
         let (n, t) = nt
         res.push(Json::array([n.to_json(), t.to_json()]))
       }
@@ -218,7 +238,7 @@ pub fn FuncDef::from_json(json : Json) -> FuncDef raise {
       "is_closure": b,
       "ty": t,
       "args": Array(args),
-      "free_vars": Array(free_vars),
+      "formal_free_vars": Array(formal_free_vars),
       "body": body,
       ..
     } => {
@@ -230,7 +250,7 @@ pub fn FuncDef::from_json(json : Json) -> FuncDef raise {
         }
       }
       let free_vars_res = []
-      for nt in free_vars {
+      for nt in formal_free_vars {
         match nt {
           [n, t] =>
             free_vars_res.push(
@@ -245,7 +265,7 @@ pub fn FuncDef::from_json(json : Json) -> FuncDef raise {
         is_closure: @json.from_json(b),
         ty: LowType::from_json(t),
         args: args_res,
-        free_vars: free_vars_res,
+        formal_free_vars: free_vars_res,
         body: Expr::from_json(body),
       }
     }
@@ -279,7 +299,7 @@ pub fn LowTypeValue::from_json(json : Json) -> LowTypeValue raise {
 
 ///|
 pub fn StaticArrayData::to_json(self : StaticArrayData) -> Json {
-  { "label": self.label.inner().to_json(), "elements": self.elements.to_json() }
+  { "label": self.label.to_json(), "elements": self.elements.to_json() }
 }
 
 ///|
