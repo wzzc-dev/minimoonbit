@@ -120,7 +120,7 @@ fn gen_body_ret_type(
 }
 
 ///|
-fn ty_to_low_type(ty : Type) -> LowType {
+fn ty_to_low_type(ty : Type, is_closure? : Bool = false) -> LowType {
   match ty {
     Unit => Unit
     Bool => Bool
@@ -146,10 +146,17 @@ fn ty_to_low_type(ty : Type) -> LowType {
     }
     ArrayData(_) => @util.die("ty_to_low_type: ArrayData" + ty.to_string())
     Fun(args_ty, ret_ty) =>
-      DirectFn(
-        args_ty.map(ty => ty_to_low_type(ty)),
-        ty_to_low_type(ret_ty),
-      )
+      if is_closure {
+        ClosureFn(
+          args_ty.map(ty => ty_to_low_type(ty)),
+          ty_to_low_type(ret_ty),
+        )
+      } else {
+        DirectFn(
+          args_ty.map(ty => ty_to_low_type(ty)),
+          ty_to_low_type(ret_ty),
+        )
+      }
   }
 }
 

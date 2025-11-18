@@ -487,7 +487,7 @@ pub fn convert_expr(
       current_context.current_block.instructions.push(instruction)
       ExprResult::{ value: Some(result_value), context: current_context }
     }
-    MakeClosure((name, _func_ty), closure, e) => {
+    MakeClosure((name, func_ty), closure, e) => {
       // 闭包创建
       // @util.logger("MakeClosure: " + func_name.to_string())
       // @util.logger("MakeClosure free_var_names: " + free_var_names.to_string())
@@ -496,14 +496,14 @@ pub fn convert_expr(
       // @util.logger("MakeClosure context.func_env: " + context.func_env.to_string())
 
       // // 查找函数定义以获取类型信息
-      let func_ty = match context.func_env.get(name.to_string()) {
-        Some(ty) => ty
-        None =>
-          fail("MakeClosure: function not found: " + name.to_string())
-      }
+      // let func_ty = match context.func_env.get(name.to_string()) {
+      //   Some(ty) => ty
+      //   None =>
+      //     fail("MakeClosure: function not found: " + name.to_string())
+      // }
 
       // 创建闭包值
-      let closure_value = Value::{ id: new_value_id(), ty: func_ty }
+      let closure_value = Value::{ id: new_value_id(), ty: convert_type(func_ty) }
 
       // 获取自由变量的值
       let free_var_values = []
@@ -526,7 +526,7 @@ pub fn convert_expr(
       // 创建闭包创建指令
       let instruction = Instruction::{
         result: closure_value,
-        opcode: Opcode::MakeClosure(name.to_string(), free_var_values),
+        opcode: Opcode::MakeClosure(closure.name.0, free_var_values),
       }
 
       // 更新当前块的指令列表

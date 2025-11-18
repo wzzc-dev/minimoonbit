@@ -83,18 +83,29 @@ fn knf_to_closure(
         knf_to_closure(funcdefs, env, static_arrays, kb),
       )
     Let((x, ty), e, cont) => {
-      let body = knf_to_closure(funcdefs, env, static_arrays, e)
-      // @util.logger("name: " + (x, ty).to_string())
-      let ty = match ty {
-        // Fun(args_ty, ret_ty) =>
-        // ClosureFn(args_ty.map(ty_to_low_type), ty_to_low_type(ret_ty))
-        Fun(_, ty) => gen_body_ret_type(ty, funcdefs, env, body)
-        _ => ty_to_low_type(ty)
+      match ty {
+        // Fun(_, _) => {
+        //   let closure = {
+        //     name: Label(x.to_string()),
+        //     actual_free_vars: [],
+        //   }
+        //   MakeClosure((x, ty_to_low_type(ty, is_closure = true)), closure, knf_to_closure(funcdefs, env, static_arrays, e))
+        // }
+        _ => {
+          let body = knf_to_closure(funcdefs, env, static_arrays, e)
+          // @util.logger("name: " + (x, ty).to_string())
+          let ty = match ty {
+            // Fun(args_ty, ret_ty) =>
+            // ClosureFn(args_ty.map(ty_to_low_type), ty_to_low_type(ret_ty))
+            Fun(_, ty) => gen_body_ret_type(ty, funcdefs, env, body)
+            _ => ty_to_low_type(ty)
+          }
+          let env = env.add(x, ty)
+          // @util.logger("let: " + (x, ty).to_string())
+          // @util.logger("env: " + env.to_string())
+          Let((x, ty), body, knf_to_closure(funcdefs, env, static_arrays, cont))
+        }
       }
-      let env = env.add(x, ty)
-      // @util.logger("let: " + (x, ty).to_string())
-      // @util.logger("env: " + env.to_string())
-      Let((x, ty), body, knf_to_closure(funcdefs, env, static_arrays, cont))
     }
     LetRec({ name, ty, args, body }, cont) => {
       let free_vars = fv(env, body).difference(
@@ -105,7 +116,7 @@ fn knf_to_closure(
       let mut env = env
       for arg in args {
         free_vars.remove(new_fv(arg.0, Unit))
-        env = env.add(arg.0, ty_to_low_type(arg.1))
+        env = env.add(arg.0, ty_to_low_type(arg.1, is_closure = true))
       }
       free_vars.remove(new_fv(name, Unit))
       let is_closure = not(free_vars.is_empty())
@@ -137,7 +148,7 @@ fn knf_to_closure(
         true => {
           let free_var_names = fv_to_array(free_vars).map(fv => fv.0)
           let closure = {
-            name: name.to_string(),
+            name: def.old_name.to_string(),
             actual_free_vars: free_var_names,
           }
           MakeClosure((name, def.ty),
@@ -188,6 +199,7 @@ fn knf_to_closure(
               actual_free_vars: free_var_names,
             }
             result = MakeClosure((def.old_name, def.ty), closure, result)
+            // result = Let((def.old_name, def.ty), result, result)
             // @util.logger("make closure: " + result.to_string())
           }
           None => () // 不是函数定义，无需处理
