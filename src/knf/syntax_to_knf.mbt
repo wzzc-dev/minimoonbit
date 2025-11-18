@@ -1,5 +1,5 @@
 ///|
-pub typealias @immut/hashmap.HashMap[String, Type] as LocalEnv
+pub type LocalEnv = @immut/hashmap.HashMap[String, Type]
 
 ///|
 pub struct KnfEnv {

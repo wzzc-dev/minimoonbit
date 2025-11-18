@@ -5,10 +5,5 @@
             "path": "moonbitlang/minimbt",
             "alias": "types"
         }
-    ],
-    "test-import": [
-        "moonbitlang/minimbt/parser",
-        "moonbitlang/minimbt/lex",
-        "moonbitlang/minimbt/typing"
     ]
 }

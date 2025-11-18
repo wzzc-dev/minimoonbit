@@ -2163,7 +2163,7 @@ fn ptoken(predicate : (@lex.Token) -> Bool) -> Parser[@lex.Token] {
 }
 
 ///|
-fn[I, O] map(self : Parser[I], f : (I) -> O) -> Parser[O] {
+fn[I, O] Parser::map(self : Parser[I], f : (I) -> O) -> Parser[O] {
   fn(input) {
     match self.parse(input) {
       Some((token, rest)) => Some((f(token), rest))
@@ -2173,7 +2173,7 @@ fn[I, O] map(self : Parser[I], f : (I) -> O) -> Parser[O] {
 }
 
 ///|
-fn[V1, V2] parser_and(
+fn[V1, V2] Parser::parser_and(
   self : Parser[V1],
   parser2 : Parser[V2],
 ) -> Parser[(V1, V2)] {
@@ -2187,7 +2187,7 @@ fn[V1, V2] parser_and(
 }
 
 ///|
-fn[V] or(self : Parser[V], parser2 : Parser[V]) -> Parser[V] {
+fn[V] Parser::or(self : Parser[V], parser2 : Parser[V]) -> Parser[V] {
   fn(input) {
     match self.parse(input) {
       None => parser2.parse(input)
@@ -2197,7 +2197,7 @@ fn[V] or(self : Parser[V], parser2 : Parser[V]) -> Parser[V] {
 }
 
 ///|
-fn[V1, V2] parser_or(
+fn[V1, V2] Parser::parser_or(
   self : Parser[V1],
   parser2 : Parser[V2],
 ) -> Parser[(V1?, V2?)] {
@@ -2214,7 +2214,7 @@ fn[V1, V2] parser_or(
 }
 
 ///|
-fn[Value] many(self : Parser[Value]) -> Parser[Array[Value]] {
+fn[Value] Parser::many(self : Parser[Value]) -> Parser[Array[Value]] {
   fn(input) {
     let cumul = []
     let mut rest = input
@@ -2243,7 +2243,7 @@ fn[Value] many(self : Parser[Value]) -> Parser[Array[Value]] {
 // }
 
 ///|
-fn[V1, V2] zeroOrOnce(
+fn[V1, V2] Parser::zeroOrOnce(
   self : Parser[V1],
   parser2 : Parser[V2],
 ) -> Parser[(V1, V2?)] {
@@ -2261,12 +2261,12 @@ fn[V1, V2] zeroOrOnce(
 pub struct Parser[V]((ArrayView[@lex.Token]) -> (V, ArrayView[@lex.Token])?)
 
 ///|
-fn[V] parse(
+fn[V] Parser::parse(
   self : Parser[V],
   tokens : ArrayView[@lex.Token],
 ) -> (V, ArrayView[@lex.Token])? {
   // println("parsing: " + tokens.to_string())
-  self.inner()(tokens)
+  self.0(tokens)
 }
 
 ///|

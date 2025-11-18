@@ -4,7 +4,7 @@ pub fn KnfEnv::opt_pass(self : KnfEnv, knf : Knf) -> Knf {
 }
 
 ///|
-fn alpha_conversion(self : KnfEnv, existing : Array[Name], knf : Knf) -> Knf {
+fn KnfEnv::alpha_conversion(self : KnfEnv, existing : Array[Name], knf : Knf) -> Knf {
   match knf {
     Let((n, ty), e1, e2) =>
       if existing.contains(n) {

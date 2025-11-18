@@ -197,7 +197,7 @@ pub impl Eq for Type with equal(self, other) -> Bool {
       name1 == name2 && fields1.val == fields2.val
     (Type::Ptr, Type::Ptr) => true
     (Type::ArrayData(_), Type::ArrayData(_)) => true
-    (Type::Var(x), Type::Var(y)) => x.val.op_equal(y.val)
+    (Type::Var(x), Type::Var(y)) => x.val.equal(y.val)
     _ => false
   }
 }

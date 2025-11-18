@@ -204,7 +204,7 @@ fn allocate_normal_register(
   interval : LiveInterval,
   kill_points : Array[Int],
 ) -> Unit {
-  if allocator.available_regs.size() == 0 {
+  if allocator.available_regs.length() == 0 {
     // 没有可用寄存器，需要溢出
     spill_at_interval(allocator, interval)
   } else {
@@ -274,7 +274,7 @@ fn allocate_normal_float_register(
   interval : LiveInterval,
   kill_points : Array[Int],
 ) -> Unit {
-  if allocator.available_fregs.size() == 0 {
+  if allocator.available_fregs.length() == 0 {
     // 没有可用寄存器，需要溢出
     spill_at_interval(allocator, interval)
   } else {

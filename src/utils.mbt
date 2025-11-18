@@ -1,5 +1,5 @@
 ///|
-pub fn to_json(self : Type) -> Json {
+pub fn Type::to_json(self : Type) -> Json {
   match self {
     Unit => "Unit"
     Bool => "Bool"

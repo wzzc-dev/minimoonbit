@@ -5,11 +5,5 @@
             "alias": "types"
         },
         "moonbitlang/minimbt/closure"
-    ],
-    "test-import": [
-        "moonbitlang/minimbt/knf",
-        "moonbitlang/minimbt/parser",
-        "moonbitlang/minimbt/lex",
-        "moonbitlang/minimbt/typing"
     ]
 }

@@ -171,7 +171,7 @@ struct LocalCtx(@immut/sorted_map.SortedMap[String, @types.Type])
 ///|
 pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
   // println("infer: " + e.to_string())
-  // println("extenv: " + ctx.inner().to_string())
+  // println("extenv: " + ctx.0.to_string())
   match e {
     Unit => Unit
     Bool(_) => Bool
@@ -180,7 +180,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     Double(_) => Double
     Struct(name, _, fields, rest) => {
       let ty = @types.Type::UserDefineType(name, { val: fields })
-      let newctx = ctx.inner().add(name, ty)
+      let newctx = ctx.0.add(name, ty)
       infer(newctx, rest)
     }
     StructConstruct(name, fields) => {
@@ -202,15 +202,15 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       })
       for variant in enum_variant_list_ty {
         let (name, _) = variant
-        newctx = newctx.inner().add(name, ty)
+        newctx = newctx.0.add(name, ty)
       }
       // @util.logger("Enum: " + enum_name + " " + ty.to_string())
-      let newctx = newctx.inner().add(enum_name, ty)
+      let newctx = newctx.0.add(enum_name, ty)
       // @util.logger("Enum: " + enum_name + " " + ty.to_string() + "; newctx: " + newctx.to_string())
       infer(newctx, cont)
     }
     EnumConstruct(enum_name, _arr) =>
-      match ctx.inner().get(enum_name) {
+      match ctx.0.get(enum_name) {
         Some(ty) => ty
         None =>
           raise TyErr(
@@ -218,7 +218,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
             enum_name +
             " \n" +
             "ctx: " +
-            ctx.inner().to_string(),
+            ctx.0.to_string(),
           )
       }
     FieldAccess(e, name) => {
@@ -231,7 +231,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
               return ty
             }
           }
-          let struct_ty = ctx.inner().get(struct_name)
+          let struct_ty = ctx.0.get(struct_name)
           match struct_ty {
             Some(UserDefineType(_, fields)) =>
               for field in fields.val {
@@ -259,10 +259,10 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
     }
     Var(x) =>
       // if x == "_arr" {
-      //   @util.logger("infer: Var(x) =>" + x + "\n  ctx.inner().get(x): " + ctx.inner().get(x).to_string())
+      //   @util.logger("infer: Var(x) =>" + x + "\n  ctx.0.get(x): " + ctx.0.get(x).to_string())
       // }
       // println("infer var: " + x)
-      match ctx.inner().get(x) {
+      match ctx.0.get(x) {
         Some(t) =>
           // println("infer: " + x + " is " + t.to_string())
           t.repr()
@@ -399,7 +399,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           Double
         }
         (t1, t2) =>
-          // @util.logger("ctx: " + ctx.inner().to_string())
+          // @util.logger("ctx: " + ctx.0.to_string())
           raise TyErr(
             "The operands of Prim should have same type: " +
             l.to_string() +
@@ -491,19 +491,19 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         Var({ val: None }) => {
           let t = infer(ctx, value)
           unify(ty, t)
-          let newctx = ctx.inner().add(name, t)
+          let newctx = ctx.0.add(name, t)
           infer(newctx, s1)
         }
         Array(_) => {
           let t = infer(ctx, value)
           unify(ty, t)
-          let newctx = ctx.inner().add(name, t)
+          let newctx = ctx.0.add(name, t)
           infer(newctx, s1)
         }
         UserDefineType(name, _fields) => {
           let t = infer(ctx, value)
           unify(ty, t)
-          let newctx = ctx.inner().add(name, t)
+          let newctx = ctx.0.add(name, t)
           infer(newctx, s1)
         }
         _ => {
@@ -513,7 +513,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           // println("TY: " + ty.repr().to_string());
           // println("after")
           if t == ty.repr() {
-            let newctx = ctx.inner().add(name, t)
+            let newctx = ctx.0.add(name, t)
             infer(newctx, s1)
           } else {
             raise TyErr(
@@ -531,7 +531,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         }
       }
     LetRec({ name: (f, t), args: params, body }, rest) => {
-      let mut env_with_f = ctx.inner().add(f, t)
+      let mut env_with_f = ctx.0.add(f, t)
       // let params_ty = params.map(t => t.1.repr())
       let params_ty = params.map(t => t.1.repr())
       for p in params {
@@ -553,7 +553,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           for i, value in arr {
             unify(value.1, arr_tup[i])
             // @util.logger("unify: name: " + value.0 + " with " + value.1.to_string() + " with " + arr_tup[i].to_string())
-            newctx = newctx.inner().add(value.0, arr_tup[i])
+            newctx = newctx.0.add(value.0, arr_tup[i])
           }
           infer(newctx, s2)
         }
@@ -631,16 +631,16 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
       let mut body_ty = @types.Type::Unit
       let (pat, body) = arms[0]
       // @util.logger("match: pat: " + pat.to_string())
-      // @util.logger("match: ctx: " + ctx.inner().to_string())
+      // @util.logger("match: ctx: " + ctx.0.to_string())
       let mut ctx = ctx
       match pat {
         PEnumVariant(name, patts) => {
-          let index = match ctx.inner().get(name) {
+          let index = match ctx.0.get(name) {
             Some(UserDefineType(_, fields)) =>
               fields.val.search_by(fn(input) { input.0 == name })
             _ => @util.die("match: not found var: " + name.to_string())
           }
-          let arr = match ctx.inner().get(name) {
+          let arr = match ctx.0.get(name) {
             Some(UserDefineType(_, fields)) =>
               fields.val.get(index.unwrap()).unwrap().1
             _ => @util.die("match: not found var: " + name.to_string())
@@ -657,7 +657,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           }
           let _ = patts.mapi(fn(i, pat) {
             match pat {
-              PVar(name) => ctx = ctx.inner().add(name, arr[i])
+              PVar(name) => ctx = ctx.0.add(name, arr[i])
               _ => @util.die("not support match pattern: " + pat.to_string())
             }
           })
@@ -665,7 +665,7 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
         }
         _ => @util.die("not support match pattern: " + pat.to_string())
       }
-      // @util.logger("match: pat_ty: " + ctx.inner().to_string())
+      // @util.logger("match: pat_ty: " + ctx.0.to_string())
       body_ty = infer(ctx, body)
       // @util.logger("match: body_ty: " + body_ty.to_string())
       body_ty
@@ -714,7 +714,7 @@ fn get_ctx_ty(
               let mut newctx = ctx
               for i, t in tys {
                 unify(t, tys[i])
-                newctx = newctx.inner().add(field_names[i], t)
+                newctx = newctx.0.add(field_names[i], t)
               }
               newctx
             }
@@ -860,9 +860,9 @@ pub fn get_type(
   e : @types.Syntax,
 ) -> @types.Type raise TyErr {
   let mut sort_map : LocalCtx = @immut/sorted_map.new()
-  m.each((k, v) => sort_map = sort_map.inner().add(k, v))
+  m.each((k, v) => sort_map = sort_map.0.add(k, v))
   // @util.logger("get_type: " + e.to_string())
-  // @util.logger("sort_map: " + sort_map.inner().to_string())
+  // @util.logger("sort_map: " + sort_map.0.to_string())
   infer(sort_map, e)
 }
 
