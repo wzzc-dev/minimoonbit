@@ -97,7 +97,7 @@ fn knf_to_closure(
           let ty = match ty {
             // Fun(args_ty, ret_ty) =>
             // ClosureFn(args_ty.map(ty_to_low_type), ty_to_low_type(ret_ty))
-            Fun(_, ty) => gen_body_ret_type(ty, funcdefs, env, body)
+            Fun(_) => gen_body_ret_type(ty, funcdefs, env, body)
             _ => ty_to_low_type(ty)
           }
           let env = env.add(x, ty)

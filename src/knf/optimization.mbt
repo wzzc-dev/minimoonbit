@@ -3,6 +3,7 @@ pub fn KnfEnv::opt_pass(self : KnfEnv, knf : Knf) -> Knf {
   // Apply optimizations in sequence
   let optimized = knf
   let optimized = self.alpha_conversion(@immut/hashmap.HashMap::new(), optimized)
+  let optimized = self.let_inlining(optimized)
   self.beta_reduction(optimized)
 }
 
@@ -30,6 +31,23 @@ fn KnfEnv::beta_reduction(
     }
     LetRec(func, m) => {
       LetRec(func, self.beta_reduction(m))
+    }
+    _ => knf
+  }
+}
+
+fn KnfEnv::let_inlining(
+  self : KnfEnv,
+  knf : Knf
+) -> Knf {
+  match knf {
+    Let((x, x_ty), e, m) => {
+      let e = self.let_inlining(e)
+      let m = self.let_inlining(m)
+      Let((x, x_ty), e, m)
+    }
+    LetRec(func, m) => {
+      LetRec(func, self.let_inlining(m))
     }
     _ => knf
   }
