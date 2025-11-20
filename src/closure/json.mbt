@@ -145,7 +145,7 @@ pub fn Expr::from_json(json : Json) -> Expr raise {
 ///|
 pub fn Closure::to_json(self : Closure) -> Json {
   {
-    "name": self.name.to_json(),
+    "name": self.name.0,
     "actual_free_vars": self.actual_free_vars.to_json(),
   }
 }
@@ -205,7 +205,7 @@ pub fn LowType::from_json(json : Json) -> LowType raise {
 ///|
 pub fn FuncDef::to_json(self : FuncDef) -> Json {
   {
-    "name": self.name.to_json(),
+    "name": self.name.0.to_json(),
     "old_name": self.old_name.to_json(),
     "is_closure": self.is_closure.to_json(),
     "ty": self.ty.to_json(),
