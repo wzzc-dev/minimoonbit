@@ -1,0 +1,89 @@
+;; ModuleID = 'examples/funcomp.mbt'
+;; Source File = "examples/funcomp.mbt"
+
+declare void @print_int(i32)
+
+define ptr @compose(ptr %0, ptr %1) {
+entry:
+  %2 = call ptr @moonbit_malloc(i32 24)
+  %3 = getelementptr { ptr, ptr, ptr }, ptr %2, i32 0, i32 0
+  store ptr @compose$composed, ptr %3, align 8
+  %5 = getelementptr { ptr, ptr, ptr }, ptr %2, i32 0, i32 1
+  store ptr %1, ptr %5, align 8
+  %7 = getelementptr { ptr, ptr, ptr }, ptr %2, i32 0, i32 2
+  store ptr %0, ptr %7, align 8
+  ret ptr %2
+}
+
+define i32 @dbl(i32 %0) {
+entry:
+  %1 = add i32 %0, %0
+  ret i32 %1
+}
+
+define i32 @inc(i32 %0) {
+entry:
+  %1 = add i32 %0, 1
+  ret i32 %1
+}
+
+define i32 @dec(i32 %0) {
+entry:
+  %1 = sub i32 %0, 1
+  ret i32 %1
+}
+
+define void @moonbit_main() {
+entry:
+  %0 = call ptr @moonbit_malloc(i32 8)
+  %1 = getelementptr { ptr }, ptr %0, i32 0, i32 0
+  store ptr @dbl$closure, ptr %1, align 8
+  %3 = call ptr @moonbit_malloc(i32 8)
+  %4 = getelementptr { ptr }, ptr %3, i32 0, i32 0
+  store ptr @dec$closure, ptr %4, align 8
+  %6 = call ptr @compose(ptr %0, ptr %3)
+  %7 = call ptr @moonbit_malloc(i32 8)
+  %8 = getelementptr { ptr }, ptr %7, i32 0, i32 0
+  store ptr @inc$closure, ptr %8, align 8
+  %10 = call ptr @compose(ptr %7, ptr %6)
+  %11 = getelementptr { ptr }, ptr %10, i32 0, i32 0
+  %12 = load ptr, ptr %11, align 8
+  %13 = call i32 %12(ptr %10, i32 123)
+  call void @print_int(i32 %13)
+  ret void 
+}
+
+define i32 @compose$composed(ptr %0, i32 %1) {
+entry:
+  %2 = getelementptr { ptr, ptr, ptr }, ptr %0, i32 0, i32 1
+  %3 = load ptr, ptr %2, align 8
+  %4 = getelementptr { ptr, ptr, ptr }, ptr %0, i32 0, i32 2
+  %5 = load ptr, ptr %4, align 8
+  %6 = getelementptr { ptr }, ptr %5, i32 0, i32 0
+  %7 = load ptr, ptr %6, align 8
+  %8 = call i32 %7(ptr %5, i32 %1)
+  %9 = getelementptr { ptr }, ptr %3, i32 0, i32 0
+  %10 = load ptr, ptr %9, align 8
+  %11 = call i32 %10(ptr %3, i32 %8)
+  ret i32 %11
+}
+
+declare ptr @moonbit_malloc(i32)
+
+define i32 @dbl$closure(ptr %0, i32 %1) {
+entry:
+  %2 = call i32 @dbl(i32 %1)
+  ret i32 %2
+}
+
+define i32 @dec$closure(ptr %0, i32 %1) {
+entry:
+  %2 = call i32 @dec(i32 %1)
+  ret i32 %2
+}
+
+define i32 @inc$closure(ptr %0, i32 %1) {
+entry:
+  %2 = call i32 @inc(i32 %1)
+  ret i32 %2
+}
