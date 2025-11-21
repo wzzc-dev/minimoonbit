@@ -658,12 +658,13 @@ pub fn infer(ctx : LocalCtx, e : @types.Syntax) -> @types.Type raise TyErr {
           let _ = patts.mapi(fn(i, pat) {
             match pat {
               PVar(name) => ctx = ctx.0.add(name, arr[i])
-              _ => @util.die("not support match pattern: " + pat.to_string())
+              _ => @util.die("not support match pattern 6: " + pat.to_string())
             }
           })
 
         }
-        _ => @util.die("not support match pattern: " + pat.to_string())
+        PBool(_) => ()
+        _ => @util.die("not support match pattern 7: " + pat.to_string())
       }
       // @util.logger("match: pat_ty: " + ctx.0.to_string())
       body_ty = infer(ctx, body)

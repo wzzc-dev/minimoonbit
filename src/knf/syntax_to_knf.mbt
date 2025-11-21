@@ -749,7 +749,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
             }
             index
           }
-          _ => @util.die("not support match pattern: " + pat.to_string())
+          _ => @util.die("not support match pattern 4: " + pat.to_string())
         }
         let body = KnfEnv::get_knf(self, body)
         // IfEq(tag, is_expr.0, body.2, acc)
@@ -763,13 +763,14 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
                   patts.map(fn(pat) {
                     match pat {
                       PVar(name) => Name::name_only(name)
+                      PBool(_) => Name::name_only("bool")
                       _ =>
                         @util.die(
-                          "not support match pattern: " + pat.to_string(),
+                          "not support match pattern 1: " + pat.to_string(),
                         )
                     }
                   })
-                _ => @util.die("not support match pattern: " + pat.to_string())
+                _ => @util.die("not support match pattern 2: " + pat.to_string())
               }
               let result = body.2
               patterns_ty.foldi(init=result, (i, acc, pat_ty) => Let(
@@ -778,7 +779,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
                 acc,
               ))
             }
-          _ => @util.die("not support match pattern: " + pat.to_string())
+          _ => @util.die("not support match pattern 3: " + pat.to_string())
         }
       }
 
@@ -809,7 +810,7 @@ pub fn KnfEnv::to_knf(self : KnfEnv, s : @types.Syntax) -> Knf raise KnfErr { //
             }
             index
           }
-          _ => @util.die("not support match pattern: " + pat.to_string())
+          _ => @util.die("not support match pattern 5: " + pat.to_string())
         }
         let is_expr = KnfEnv::get_knf(self, Int(index.0))
         let pattern_body = gen_match(arm)

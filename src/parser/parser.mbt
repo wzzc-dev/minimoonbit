@@ -1163,7 +1163,8 @@ fn matchArmList(
   // @util.logger("matchArmList: " + tokens[:10].to_string())
   Parser(matchArm)
   .parser_and(semicolon.parser_and(matchArm).many())
-  .parser_and(semicolon)
+  // .parser_and(semicolon)
+  .zeroOrOnce(semicolon)
   .map(fn(input) {
     // @util.logger("matchArmList input: " + input.to_string())
     match input {
@@ -1296,7 +1297,8 @@ fn pattern(
         @types.Pattern::PTuple(result)
       }
       (Some((Some((None, Some(WILDCARD))), None)), None) =>
-        @util.die("暂未实现: " + @lex.WILDCARD.to_string())
+        // @util.die("暂未实现: " + @lex.WILDCARD.to_string())
+        @types.Pattern::PEnumVariant("_", [])
       (None, Some(IDENTIFIER(identifier))) => @types.Pattern::PVar(identifier)
       (Some((None, Some(((UPPER_IDENTIFIER(id), None), None)))), None) =>
         // @types.Syntax::EnumConstruct(id, [])
@@ -2006,6 +2008,8 @@ fn parseType(
       @lex.Token::BOOL => true
       @lex.Token::INT => true
       @lex.Token::DOUBLE => true
+      @lex.Token::IDENTIFIER(_) => true
+      @lex.Token::UPPER_IDENTIFIER(_) => true
       _ => false
     }
   })
@@ -2015,6 +2019,8 @@ fn parseType(
       BOOL => @types.Type::Bool
       INT => @types.Type::Int
       DOUBLE => @types.Type::Double
+      IDENTIFIER(name) => @types.Type::UserDefineType(name, { val: [] })
+      UPPER_IDENTIFIER(name) => @types.Type::UserDefineType(name, { val: [] })
       _ => panic()
     }
   })
