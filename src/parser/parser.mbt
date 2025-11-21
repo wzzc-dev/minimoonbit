@@ -2266,7 +2266,7 @@ fn[V] Parser::parse(
   tokens : ArrayView[@lex.Token],
 ) -> (V, ArrayView[@lex.Token])? {
   // println("parsing: " + tokens.to_string())
-  self.0(tokens)
+  self(tokens)
 }
 
 ///|
@@ -2302,7 +2302,7 @@ test {
 test {
   let tokens = []
   let _test2 = @fs.read_file_to_string(
-    "contest-2025-data/test_cases/mbt/test.mbt",
+    "contest-2025-data/test_cases/size/almabench.mbt",
   )
   println(_test2)
   @lex.julex({ str: _test2, offset: 0, array: tokens })
