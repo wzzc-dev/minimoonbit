@@ -134,7 +134,11 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
                     }),
                   )
                 }
-                None => fail("Closure parameter {} has no register or spill slot" + closure_var.id.to_string())
+                None =>
+                  fail(
+                    "Closure parameter {} has no register or spill slot" +
+                    closure_var.id.to_string(),
+                  )
               }
           }
         _ =>
@@ -154,7 +158,11 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
                     }),
                   )
                 }
-                None => fail("Closure parameter {} has no register or spill slot" + closure_var.id.to_string())
+                None =>
+                  fail(
+                    "Closure parameter {} has no register or spill slot" +
+                    closure_var.id.to_string(),
+                  )
               }
           }
       }
@@ -164,14 +172,13 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
     // 分别跟踪整数和浮点参数计数，遵循RISC-V ABI规范
     let mut int_param_count = 0
     let mut float_param_count = 0
-    let mut stack_param_index = 0  // 统一跟踪栈参数索引
-
+    let mut stack_param_index = 0 // 统一跟踪栈参数索引
     for param in func.params {
       match param.ty {
-        Float => {
-          if float_param_count < 7 {  // 闭包函数中Fa0被占用，只能用Fa1-Fa7
+        Float =>
+          if float_param_count < 7 { // 闭包函数中Fa0被占用，只能用Fa1-Fa7
             let input_freg = match float_param_count {
-              0 => Fa1  // 第一个浮点参数用Fa1
+              0 => Fa1 // 第一个浮点参数用Fa1
               1 => Fa2
               2 => Fa3
               3 => Fa4
@@ -181,22 +188,25 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
               _ => @util.die("TODO: 普通参数超过8个")
             }
             asm_instructions.append(
-              store_value_to_allocator_freg_or_spill(param, input_freg, allocator),
+              store_value_to_allocator_freg_or_spill(
+                param, input_freg, allocator,
+              ),
             )
             float_param_count += 1
           } else {
             // 超过7个浮点参数，从栈加载
             asm_instructions.append(
-              store_value_to_freg_or_spill_from_stack(param, stack_param_index, allocator),
+              store_value_to_freg_or_spill_from_stack(
+                param, stack_param_index, allocator,
+              ),
             )
             stack_param_index += 1
             float_param_count += 1
           }
-        }
-        _ => {
-          if int_param_count < 7 {  // 闭包函数中A0被占用，只能用A1-A7
+        _ =>
+          if int_param_count < 7 { // 闭包函数中A0被占用，只能用A1-A7
             let input_reg = match int_param_count {
-              0 => A1   // 第一个整数参数用A1
+              0 => A1 // 第一个整数参数用A1
               1 => A2
               2 => A3
               3 => A4
@@ -205,6 +215,11 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
               6 => A7
               _ => @util.die("TODO")
             }
+            if func.name.contains("$closure") {
+              asm_instructions.push(
+                Mv(reg_arg_list[int_param_count], input_reg),
+              )
+            }
             asm_instructions.append(
               store_value_to_allocator_reg_or_spill(param, input_reg, allocator),
             )
@@ -212,12 +227,13 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
           } else {
             // 超过7个整数参数，从栈加载
             asm_instructions.append(
-              store_value_to_reg_or_spill_from_stack(param, stack_param_index, allocator),
+              store_value_to_reg_or_spill_from_stack(
+                param, stack_param_index, allocator,
+              ),
             )
             stack_param_index += 1
             int_param_count += 1
           }
-        }
       }
     }
   } else {
@@ -225,12 +241,11 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
     // 分别跟踪整数和浮点参数计数，遵循RISC-V ABI规范
     let mut int_param_count = 0
     let mut float_param_count = 0
-    let mut stack_param_index = 0  // 统一跟踪栈参数索引
-
+    let mut stack_param_index = 0 // 统一跟踪栈参数索引
     for param in func.params {
       match param.ty {
-        Float => {
-          if float_param_count < 8 {  // 可以使用Fa0-Fa7
+        Float =>
+          if float_param_count < 8 { // 可以使用Fa0-Fa7
             let input_freg = match float_param_count {
               0 => Fa0
               1 => Fa1
@@ -243,20 +258,23 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
               _ => @util.die("TODO: 浮点参数超过8个")
             }
             asm_instructions.append(
-              store_value_to_allocator_freg_or_spill(param, input_freg, allocator),
+              store_value_to_allocator_freg_or_spill(
+                param, input_freg, allocator,
+              ),
             )
             float_param_count += 1
           } else {
             // 超过8个浮点参数，从栈加载
             asm_instructions.append(
-              store_value_to_freg_or_spill_from_stack(param, stack_param_index, allocator),
+              store_value_to_freg_or_spill_from_stack(
+                param, stack_param_index, allocator,
+              ),
             )
             stack_param_index += 1
             float_param_count += 1
           }
-        }
-        _ => {
-          if int_param_count < 8 {  // 可以使用A0-A7
+        _ =>
+          if int_param_count < 8 { // 可以使用A0-A7
             let input_reg = match int_param_count {
               0 => A0
               1 => A1
@@ -268,6 +286,14 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
               7 => A7
               _ => @util.die("TODO: 参数超过8个")
             }
+            if func.name.contains("$closure") {
+              asm_instructions.push(
+                Mv(
+                  reg_arg_list[int_param_count],
+                  reg_arg_list[int_param_count + 1],
+                ),
+              )
+            }
             asm_instructions.append(
               store_value_to_allocator_reg_or_spill(param, input_reg, allocator),
             )
@@ -275,12 +301,13 @@ fn emit_function(func : @ssa.Function) -> AssemblyFunction raise {
           } else {
             // 超过8个整数参数，从栈加载
             asm_instructions.append(
-              store_value_to_reg_or_spill_from_stack(param, stack_param_index, allocator),
+              store_value_to_reg_or_spill_from_stack(
+                param, stack_param_index, allocator,
+              ),
             )
             stack_param_index += 1
             int_param_count += 1
           }
-        }
       }
     }
   }
@@ -509,12 +536,11 @@ fn emit_instruction_with_regalloc(
     @ssa.Opcode::Malloc(size) =>
       emit_malloc_instruction(instr.result, size, allocator)
     @ssa.Opcode::Store(value, base, offset) =>
-      emit_store_instruction(instr.result, value, base, offset, allocator)
+      emit_store_instruction(value, base, offset, allocator)
     @ssa.Opcode::Load(base, offset, ty) =>
       emit_load_instruction(instr.result, base, offset, ty, allocator)
     @ssa.Opcode::ConstFuncPtr(name) =>
       emit_func_ptr_instruction(instr.result, name, allocator)
-
     @ssa.Opcode::CallClosure(closure, args) =>
       emit_closure_call(
         instr.result,

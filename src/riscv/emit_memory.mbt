@@ -121,7 +121,6 @@ pub fn emit_malloc_instruction(
 ///|
 /// 生成存储指令
 pub fn emit_store_instruction(
-  result_val : @ssa.Value,
   value : @ssa.Value,
   base : @ssa.Value,
   offset : Int,

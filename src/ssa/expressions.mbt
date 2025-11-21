@@ -479,7 +479,7 @@ pub fn convert_expr(
       current_context.current_block.instructions.push(instruction)
       ExprResult::{ value: Some(result_value), context: current_context }
     }
-    MakeClosure((name, func_ty), closure, e) => {
+    MakeClosure((name, _), closure, e) => {
       // 获取自由变量的值
       let free_var_values = []
       for free_var in closure.actual_free_vars {
