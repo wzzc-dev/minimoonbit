@@ -299,7 +299,7 @@ pub fn LowTypeValue::from_json(json : Json) -> LowTypeValue raise {
 
 ///|
 pub fn StaticArrayData::to_json(self : StaticArrayData) -> Json {
-  { "label": self.label.to_json(), "elements": self.elements.to_json() }
+  { "label": self.label.0.to_json(), "elements": self.elements.to_json() }
 }
 
 ///|

@@ -205,6 +205,23 @@ fn knf_to_closure(
         false => CallDirect(name.to_string(), args_name)
       }
 
+      result = match funcdefs.search_by(fn(def) { def.old_name == name }) {
+        Some(index) => {
+          let def = funcdefs.get(index).unwrap()
+          if def.is_closure {
+            let free_var_names = def.formal_free_vars.map(fv => fv.0)
+            let closure = {
+              name: def.name,
+              actual_free_vars: free_var_names,
+            }
+            MakeClosure((def.old_name, def.ty), closure, result)
+          } else {
+            result
+          }
+        }
+        None => result
+      }
+
       // 为函数参数创建闭包（从右到左处理，以保持正确的变量绑定顺序）
       let mut i = args_name.length() - 1
       while i >= 0 {
