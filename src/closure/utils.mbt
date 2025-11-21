@@ -49,7 +49,7 @@ fn gen_body_ret_type(
     MakeClosure(_, _, ret_expr) => gen_body_ret_type(ty, funcdefs, env, ret_expr)
     Let(_, _, body) => gen_body_ret_type(ty, funcdefs, env, body)
     CallClosure(name, _) =>
-      match funcdefs.search_by(fn(f) { f.name.0 == name.name.unwrap() }) {
+      match funcdefs.search_by(fn(f) { f.old_name == name }) {
         Some(index) =>
           match funcdefs.get(index) {
             Some(f) => f.ty

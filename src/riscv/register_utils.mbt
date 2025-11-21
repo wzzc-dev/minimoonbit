@@ -242,17 +242,17 @@ fn move_block_params_to_target_reg_or_spill(
     @util.die("找不到目标块 id=" + target.id.to_string())
   }
   let target = target_block.unwrap()
-  if args.length() != target.params.length() {
-    @util.logger(
-      "Jump 参数数量与目标块参数数量不匹配: " +
-      "block " +
-      target.id.to_string() +
-      " args " +
-      args.map(fn(arg) { arg.id.to_string() }).join(", ") +
-      " target params " +
-      target.params.map(fn(param) { param.id.to_string() }).join(", "),
-    )
-  }
+  // if args.length() != target.params.length() {
+  //   @util.logger(
+  //     "Jump 参数数量与目标块参数数量不匹配: " +
+  //     "block " +
+  //     target.id.to_string() +
+  //     " args " +
+  //     args.map(fn(arg) { arg.id.to_string() }).join(", ") +
+  //     " target params " +
+  //     target.params.map(fn(param) { param.id.to_string() }).join(", "),
+  //   )
+  // }
   for i, arg in args {
     if arg.ty == @ssa.Type::Unit {
       continue
