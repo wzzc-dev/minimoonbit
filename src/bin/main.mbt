@@ -109,7 +109,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
       let source_code = self.source_code.unwrap()
       let parsed = @parser.parse_from_string(source_code)
       self.ast = Some(parsed)
-      @util.debug("parsed ast: \n" + parsed.to_json().stringify())
+      @util.debug("parsed ast: \n" + parsed.to_json().stringify() + "\n")
     }
     Typecheck => {
       let typechecked = try? @typing.typing(self.ast.unwrap())
@@ -119,14 +119,14 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
       }
     }
     Knf => {
-      // @util.logger("typechecked ast: " + self.typechecked.unwrap().to_json().stringify())
+      @util.logger("typechecked ast: \n" + self.typechecked.unwrap().to_json().stringify() + "\n")
       let pre = @knf.KnfEnv::syntax_preprocess(
         self.knf_env,
         self.typechecked.unwrap(),
       )
       // @util.logger("preprocessed ast: " + pre.to_json().stringify())
       let knf = try? self.knf_env.to_knf(pre)
-      @util.debug("knf ir: \n" + knf.unwrap().to_json().stringify())
+      @util.debug("knf ir: \n" + knf.unwrap().to_json().stringify() + "\n")
       match knf {
         Ok(_) => self.knf = Some(knf.unwrap())
         Err(e) => @util.die(e.to_json().to_string())
@@ -137,7 +137,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
       let optimized = self.knf_env.opt_pass(knf)
       // TODO: optimize
       self.opt_knf = Some(optimized)
-      @util.debug("optimized knf ir: \n" + self.opt_knf.unwrap().to_json().stringify())
+      @util.debug("optimized knf ir: \n" + self.opt_knf.unwrap().to_json().stringify() + "\n")
     }
     Closure => {
       let closure_ir = @closure.knf_program_to_closure(
@@ -145,12 +145,12 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
         Map::new(),
         // Map::from_iter(externals().iter()),
       )
-      @util.debug("closure ir: \n" + closure_ir.to_json().stringify())
+      @util.debug("closure ir: \n" + closure_ir.to_json().stringify() + "\n")
       self.closure_ir = Some(closure_ir)
     }
     Ssa => {
       let ssa = @ssa.to_ssa(self.closure_ir.unwrap())
-      @util.debug("ssa ir: \n" + ssa.to_json().stringify())
+      @util.debug("ssa ir: \n" + ssa.to_json().stringify() + "\n")
       self.ssa = Some(ssa)
     }
     Asm =>

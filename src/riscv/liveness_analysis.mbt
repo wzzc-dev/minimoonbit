@@ -18,12 +18,8 @@ struct LiveInterval {
   is_call_result : Bool // 是否是函数调用结果
 } derive(Show)
 
-///| 计算SSA函数的活跃区间
-
 ///|
-
-///|
-/// 跟踪每个值的实际最后一次使用位置，确保寄存器分配准确
+/// 计算SSA函数的活跃区间
 pub fn compute_live_intervals_for_function(
   func : @ssa.Function,
 ) -> (Array[LiveInterval], @sorted_map.SortedMap[Int, Int], Array[Int]) {

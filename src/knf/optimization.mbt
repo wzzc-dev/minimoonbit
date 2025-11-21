@@ -1,6 +1,14 @@
 ///|
 /// Generate fresh name for alpha conversion
-fn KnfEnv::generate_fresh_name(self : KnfEnv, original_name : Name) -> Name {
+fn KnfEnv::generate_fresh_name(
+  self : KnfEnv,
+  rho : @immut/hashmap.HashMap[Name, Name],
+  original_name : Name,
+) -> Name {
+  // Check if original name is already mapped in rho
+  if !rho.contains(original_name) {
+    return original_name
+  }
   // Generate fresh name by appending suffix to original name
   match original_name.name {
     Some(_) => self.new_name("alpha_" + original_name.to_string())
@@ -19,11 +27,13 @@ pub fn KnfEnv::opt_pass(self : KnfEnv, knf : Knf) -> Knf {
   )
   // β-Reduction
   let optimized = self.beta_reduction(optimized)
+  let optimized = self.nested_let_reduction(optimized)
   let optimized = self.let_inlining(optimized)
-  // let optimized = self.constant_folding_and_unused_variable_elimination(
-  //   optimized,
-  // )
-  self.nested_let_reduction(optimized)
+  let optimized = self.constant_folding_and_unused_variable_elimination_with_env(
+    @immut/hashmap.HashMap::new(),
+    optimized,
+  )
+  optimized
 }
 
 ///|
@@ -133,7 +143,7 @@ fn KnfEnv::alpha_conversion(
     // Let binding - introduce new mapping
     Let((x, x_ty), e, m) => {
       // Generate fresh name for bound variable x
-      let fresh_x = self.generate_fresh_name(x)
+      let fresh_x = self.generate_fresh_name(rho, x)
       // Extend mapping: old name x -> fresh name fresh_x
       let extended_rho = rho.add(x, fresh_x)
       // Convert expression e with extended mapping (x is in scope)
@@ -150,7 +160,7 @@ fn KnfEnv::alpha_conversion(
       let mut param_rho = rho
       for name_ty in func.args {
         let (param_name, param_ty) = name_ty
-        let fresh_param_name = self.generate_fresh_name(param_name)
+        let fresh_param_name = self.generate_fresh_name(rho, param_name)
         new_args.push((fresh_param_name, param_ty))
         param_rho = param_rho.add(param_name, fresh_param_name)
       }
@@ -175,7 +185,7 @@ fn KnfEnv::alpha_conversion(
       let mut tuple_rho = rho
       for name_ty in xs {
         let (x, ty) = name_ty
-        let fresh_x = self.generate_fresh_name(x)
+        let fresh_x = self.generate_fresh_name(rho, x)
         new_xs.push((fresh_x, ty))
         tuple_rho = tuple_rho.add(x, fresh_x)
       }
@@ -779,6 +789,33 @@ fn KnfEnv::nested_let_reduction(self : KnfEnv, knf : Knf) -> Knf {
 }
 
 ///|
+/// Check if an expression is simple enough to be inlined
+fn is_simple_for_inlining(expr : Knf) -> Bool {
+  match expr {
+    Var(_) => true
+    Unit | Int(_) | Int64(_) | Double(_) | Bool(_) => true
+    Neg(_) | FNeg(_) => true
+    Add(_, _) | Sub(_, _) | Mul(_, _) | Div(_, _) | Mod(_) => true
+    FAdd(_, _) | FSub(_, _) | FMul(_, _) | FDiv(_, _) | FMod(_, _) => true
+    Tuple(_) => true
+    _ => false  // Too complex for safe inlining
+  }
+}
+
+///|
+/// Estimate expression complexity for inlining decisions
+fn expr_inline_complexity(expr : Knf) -> Int {
+  match expr {
+    Var(_) | Unit | Int(_) | Int64(_) | Double(_) | Bool(_) => 1
+    Neg(_) | FNeg(_) => 2
+    Add(_, _) | Sub(_, _) | Mul(_, _) | Div(_, _) | Mod(_) => 3
+    FAdd(_, _) | FSub(_, _) | FMul(_, _) | FDiv(_, _) | FMod(_, _) => 3
+    Tuple(xs) => 1 + Array::length(xs)
+    _ => 10  // Complex expressions get high complexity
+  }
+}
+
+///|
 fn KnfEnv::let_inlining(self : KnfEnv, knf : Knf) -> Knf {
   match knf {
     // Constants - no inlining needed
@@ -815,11 +852,50 @@ fn KnfEnv::let_inlining(self : KnfEnv, knf : Knf) -> Knf {
     IfLt(a, b, then_branch, else_branch) =>
       IfLt(a, b, self.let_inlining(then_branch), self.let_inlining(else_branch))
 
-    // Let binding - could implement inlining optimization here
+    // Let binding - implement inlining optimization
     Let((x, x_ty), e, m) => {
-      let e = self.let_inlining(e)
-      let m = self.let_inlining(m)
-      Let((x, x_ty), e, m)
+      let optimized_e = self.let_inlining(e)
+      let optimized_m = self.let_inlining(m)
+
+      // Check inlining conditions
+      let usage_count = self.count_var_usage(x, optimized_m)
+      let expr_complexity = expr_inline_complexity(optimized_e)
+      let is_simple = is_simple_for_inlining(optimized_e)
+      let no_side_effects = !self.has_side_effects(optimized_e)
+
+      // Inline conditions:
+      // 1. Simple expression used once (always inline)
+      // 2. Very simple expression (constant/var) used multiple times
+      // 3. No side effects, low complexity
+      if (is_simple && usage_count == 1 && no_side_effects) ||
+         (is_simple_for_inlining(optimized_e) && usage_count <= 3) ||
+         (no_side_effects && expr_complexity <= 5) {
+
+        // Perform substitution based on expression type
+        match optimized_e {
+          Var(y) => {
+            if x_ty is Fun(_, _) {
+              // Function type - don't inline variables
+              Let((x, x_ty), optimized_e, optimized_m)
+            } else {
+              // Simple variable substitution
+              self.substitute_simple(y, x, optimized_m)
+            }
+          }
+          Unit | Int(_) | Int64(_) | Double(_) | Bool(_) => {
+            // For constants, use the existing constant folding mechanism
+            // Don't inline here, let constant folding handle it
+            Let((x, x_ty), optimized_e, optimized_m)
+          }
+          _ => {
+            // Complex expression - be conservative and don't inline to avoid capture issues
+            Let((x, x_ty), optimized_e, optimized_m)
+          }
+        }
+      } else {
+        // Don't inline, keep the let binding
+        Let((x, x_ty), optimized_e, optimized_m)
+      }
     }
 
     // Recursive function binding
@@ -1049,6 +1125,58 @@ fn KnfEnv::eval_conditional(
 }
 
 ///|
+/// Check if a variable is assigned to within a KNF expression
+fn KnfEnv::is_var_assigned(self : KnfEnv, var_name : Name, expr : Knf) -> Bool {
+  match expr {
+    Unit | Int(_) | Int64(_) | Double(_) | Bool(_) => false
+    Var(_) => false
+    Neg(_) | FNeg(_) => false
+    Add(_, _) | Sub(_, _) | Mul(_, _) | Div(_, _) | Mod(_, _) => false
+    FAdd(_, _) | FSub(_, _) | FMul(_, _) | FDiv(_, _) | FMod(_, _) => false
+    FieldAccess(_, _, _) => false
+    Get(_, _) => false
+    Put(_, _, _) => false
+    ExternalArray(_) => false
+    ExternalFunctionApplication(_, _) => false
+
+    Assign(lhs, _) => lhs == var_name
+
+    IfEq(_, _, then_branch, else_branch) =>
+      self.is_var_assigned(var_name, then_branch) || self.is_var_assigned(var_name, else_branch)
+    IfLe(_, _, then_branch, else_branch) =>
+      self.is_var_assigned(var_name, then_branch) || self.is_var_assigned(var_name, else_branch)
+    IfLt(_, _, then_branch, else_branch) =>
+      self.is_var_assigned(var_name, then_branch) || self.is_var_assigned(var_name, else_branch)
+
+    Let((x, _), e, body) => {
+      let e_assigned = self.is_var_assigned(var_name, e)
+      let body_assigned = if x == var_name {
+        // Don't look in body if this binding shadows our variable
+        false
+      } else {
+        self.is_var_assigned(var_name, body)
+      }
+      e_assigned || body_assigned
+    }
+
+    LetRec(func, m) =>
+      self.is_var_assigned(var_name, func.body) || self.is_var_assigned(var_name, m)
+    Apply(_, _) => false
+    Tuple(_) => false
+    LetTuple(_, _, m) => self.is_var_assigned(var_name, m)
+    ArrayData(_, elements) => {
+      for elem in elements {
+        if self.is_var_assigned(var_name, elem) {
+          return true
+        }
+      }
+      false
+    }
+    While(condition, body) =>
+      self.is_var_assigned(var_name, condition) || self.is_var_assigned(var_name, body)
+  }
+}
+///|
 /// Count variable usage in a KNF expression
 fn KnfEnv::count_var_usage(self : KnfEnv, var_name : Name, expr : Knf) -> Int {
   match expr {
@@ -1174,18 +1302,6 @@ fn KnfEnv::count_var_usage(self : KnfEnv, var_name : Name, expr : Knf) -> Int {
 }
 
 ///|
-/// Main constant folding and unused variable elimination function
-fn KnfEnv::constant_folding_and_unused_variable_elimination(
-  self : KnfEnv,
-  knf : Knf,
-) -> Knf {
-  self.constant_folding_and_unused_variable_elimination_with_env(
-    @immut/hashmap.HashMap::new(),
-    knf,
-  )
-}
-
-///|
 /// Internal version with constant propagation environment
 fn KnfEnv::constant_folding_and_unused_variable_elimination_with_env(
   self : KnfEnv,
@@ -1193,6 +1309,63 @@ fn KnfEnv::constant_folding_and_unused_variable_elimination_with_env(
   knf : Knf,
 ) -> Knf {
   match knf {
+    // Variable reference - check if it's a known constant
+    Var(x) =>
+      match lookup_constant(env, x) {
+        Some(const_val) => const_val
+        None => Var(x)
+      }
+    // Let binding - check for unused variable elimination and constant propagation
+    Let((x, x_ty), e, body) => {
+      let optimized_e = self.constant_folding_and_unused_variable_elimination_with_env(
+        env, e,
+      )
+      // Check if e is a constant and x is not used elsewhere
+      match is_constant_expr(optimized_e) {
+        Some(const_val) => {
+          // Only treat x as constant if it's never assigned to in the body
+          let is_assigned = self.is_var_assigned(x, body)
+          if !is_assigned {
+            // Add x to constant environment
+            let extended_env = env.add(x, const_val)
+            let usage_count = self.count_var_usage(x, body)
+            if usage_count == 0 {
+              // x is unused and bound to constant, can eliminate binding
+              self.constant_folding_and_unused_variable_elimination_with_env(
+                extended_env, body,
+              )
+            } else {
+              // x is used, keep binding but propagate constant
+              let optimized_body = self.constant_folding_and_unused_variable_elimination_with_env(
+                extended_env, body,
+              )
+              Let((x, x_ty), optimized_e, optimized_body)
+            }
+          } else {
+            // x is assigned to in body, don't treat as constant
+            let optimized_body = self.constant_folding_and_unused_variable_elimination_with_env(
+              env, body,
+            )
+            Let((x, x_ty), optimized_e, optimized_body)
+          }
+        }
+        None => {
+          // e is not a constant, optimize body without adding to constant env
+          let optimized_body = self.constant_folding_and_unused_variable_elimination_with_env(
+            env, body,
+          )
+          let usage_count = self.count_var_usage(x, body)
+          if usage_count == 0 && !self.has_side_effects(optimized_e) {
+            // x is unused and e has no side effects, eliminate binding
+            optimized_body
+          } else {
+            // Keep binding
+            Let((x, x_ty), optimized_e, optimized_body)
+          }
+        }
+      }
+    }
+
     // Constants - return as-is
     Unit => Unit
     Int(_) => knf
@@ -1201,12 +1374,6 @@ fn KnfEnv::constant_folding_and_unused_variable_elimination_with_env(
     Bool(_) => knf
     ExternalArray(_) => knf
 
-    // Variable reference - check if it's a known constant
-    Var(x) =>
-      match lookup_constant(env, x) {
-        Some(const_val) => const_val
-        None => Var(x)
-      }
 
     // Unary operations - try constant folding
     Neg(x) =>
@@ -1355,48 +1522,7 @@ fn KnfEnv::constant_folding_and_unused_variable_elimination_with_env(
       }
     }
 
-    // Let binding - check for unused variable elimination and constant propagation
-    Let((x, x_ty), e, body) => {
-      let optimized_e = self.constant_folding_and_unused_variable_elimination_with_env(
-        env, e,
-      )
-      // Check if e is a constant and x is not used elsewhere
-      match is_constant_expr(optimized_e) {
-        Some(const_val) => {
-          // Add x to constant environment
-          let extended_env = env.add(x, const_val)
-          let usage_count = self.count_var_usage(x, body)
-          if usage_count == 0 {
-            // x is unused and bound to constant, can eliminate binding
-            self.constant_folding_and_unused_variable_elimination_with_env(
-              extended_env, body,
-            )
-          } else {
-
-            // x is used, keep binding but propagate constant
-            let optimized_body = self.constant_folding_and_unused_variable_elimination_with_env(
-              extended_env, body,
-            )
-            Let((x, x_ty), optimized_e, optimized_body)
-          }
-        }
-        None => {
-          // e is not a constant, optimize body without adding to constant env
-          let optimized_body = self.constant_folding_and_unused_variable_elimination_with_env(
-            env, body,
-          )
-          let usage_count = self.count_var_usage(x, body)
-          if usage_count == 0 && !self.has_side_effects(optimized_e) {
-            // x is unused and e has no side effects, eliminate binding
-            optimized_body
-          } else {
-            // Keep binding
-            Let((x, x_ty), optimized_e, optimized_body)
-          }
-        }
-      }
-    }
-
+    
     // Recursive function binding
     LetRec(func, m) => {
       let optimized_body = self.constant_folding_and_unused_variable_elimination_with_env(
