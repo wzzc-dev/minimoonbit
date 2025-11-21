@@ -428,14 +428,6 @@ pub fn convert_expr(
       }
     }
     CallDirect(label, args) => {
-      // @util.logger("CallDirect: " + label.0)
-      // @util.logger("CallDirect args: " + args.to_string())
-      // @util.logger(
-      //   "CallDirect var: " +
-      //   context.var_env.to_string() +
-      //   " func_env: " +
-      //   context.func_env.to_string(),
-      // )
       // 直接函数调用
       // 先转换所有参数
       let mut current_context = context
@@ -488,23 +480,6 @@ pub fn convert_expr(
       ExprResult::{ value: Some(result_value), context: current_context }
     }
     MakeClosure((name, func_ty), closure, e) => {
-      // 闭包创建
-      // @util.logger("MakeClosure: " + func_name.to_string())
-      // @util.logger("MakeClosure free_var_names: " + free_var_names.to_string())
-      // @util.logger("MakeClosure e: " + e.to_string())
-      // @util.logger("MakeClosure context.var_env: " + context.var_env.to_string())
-      // @util.logger("MakeClosure context.func_env: " + context.func_env.to_string())
-
-      // // 查找函数定义以获取类型信息
-      // let func_ty = match context.func_env.get(name.to_string()) {
-      //   Some(ty) => ty
-      //   None =>
-      //     fail("MakeClosure: function not found: " + name.to_string())
-      // }
-
-      // 创建闭包值
-      let closure_value = Value::{ id: new_value_id(), ty: convert_type(func_ty) }
-
       // 获取自由变量的值
       let free_var_values = []
       for free_var in closure.actual_free_vars {
@@ -512,30 +487,50 @@ pub fn convert_expr(
         match context.var_env.get(free_var.to_string()) {
           Some(v) => free_var_values.push(v)
           None => ()
-            // fail(
-            //   "MakeClosure: free var not found: " +
-            //   free_var.to_string() +
-            //   " in closure: " +
-            //   name.to_string() +
-            //   " context.var_env: " +
-            //   context.var_env.to_string(),
-            // )
         }
       }
 
-      // 创建闭包创建指令
-      let instruction = Instruction::{
-        result: closure_value,
-        opcode: Opcode::MakeClosure(closure.name.0, free_var_values),
+      // 创建闭包对象，模仿LLVM IR的模式
+      // 1. 计算闭包大小（函数指针 + 自由变量）
+      let closure_size = free_var_values.length() + 1
+      let size_in_bytes = closure_size * 8
+
+      // 2. 分配内存
+      let malloc_result = Value::{ id: new_value_id(), ty: Type::Pointer(Type::Int) }
+      let malloc_instruction = Instruction::{
+        result: malloc_result,
+        opcode: Opcode::Malloc(size_in_bytes),
+      }
+      context.current_block.instructions.push(malloc_instruction)
+
+      // 3. 存储函数指针到偏移0处
+      let func_ptr_value = Value::{ id: new_value_id(), ty: Type::Pointer(Type::Int) }
+      let func_ptr_instruction = Instruction::{
+        result: func_ptr_value,
+        opcode: Opcode::ConstFuncPtr(closure.name.0),
+      }
+      context.current_block.instructions.push(func_ptr_instruction)
+
+      let store_func_ptr_instruction = Instruction::{
+        result: Value::{ id: new_value_id(), ty: Type::Unit },
+        opcode: Opcode::Store(func_ptr_value, malloc_result, 0),
+      }
+      context.current_block.instructions.push(store_func_ptr_instruction)
+
+      // 4. 存储自由变量到闭包对象
+      for i, free_var_value in free_var_values {
+        let store_instruction = Instruction::{
+          result: Value::{ id: new_value_id(), ty: Type::Unit },
+          opcode: Opcode::Store(free_var_value, malloc_result, (i + 1) * 8),
+        }
+        context.current_block.instructions.push(store_instruction)
       }
 
-      // 更新当前块的指令列表
-      context.current_block.instructions.push(instruction)
-
+      // 5. 最终结果是闭包对象的指针（malloc_result）
       // 将闭包值绑定到name变量
       let updated_var_env = context.var_env.add(
         name.to_string(),
-        closure_value,
+        malloc_result,
       )
       let intermediate_context = Context::{
         current_block: context.current_block,
@@ -587,6 +582,7 @@ pub fn convert_expr(
       let return_type = match func_type {
         Type::ClosureFn(_, ret_type) => ret_type
         Type::DirectFn(_, ret_type) => ret_type
+        Type::Pointer(ret_type) => ret_type
         _ =>
           @util.die(
             "CallClosure: not a function type: " +

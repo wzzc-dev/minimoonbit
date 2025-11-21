@@ -495,11 +495,6 @@ fn emit_instruction_with_regalloc(
       emit_function_ref_call_instruction(instr.result, name, args, allocator)
     @ssa.Opcode::ArrayRef(array) =>
       emit_array_ref_instruction(instr.result, array, allocator)
-    // 内存操作
-    @ssa.Opcode::Load(addr) =>
-      emit_memory_load_instruction(instr.result, addr, allocator)
-    @ssa.Opcode::Store(addr, value) =>
-      emit_memory_store_instruction(addr, value, allocator)
     // 数组操作
     @ssa.Opcode::ArrayGet(array, index) =>
       emit_array_access_instruction(instr.result, array, index, allocator)
@@ -510,12 +505,16 @@ fn emit_instruction_with_regalloc(
       emit_tuple_instruction(instr.result, values, allocator)
     @ssa.Opcode::GetElement(tuple, index) =>
       emit_get_element_instruction(instr.result, tuple, index, allocator)
-    // 内存分配
-    @ssa.Opcode::Alloc(ty) =>
-      emit_memory_allocation(instr.result, ty, allocator)
-    // 闭包操作
-    @ssa.Opcode::MakeClosure(func_name, free_vars) =>
-      emit_closure_creation(instr.result, func_name, free_vars, allocator)
+    // 内存操作
+    @ssa.Opcode::Malloc(size) =>
+      emit_malloc_instruction(instr.result, size, allocator)
+    @ssa.Opcode::Store(value, base, offset) =>
+      emit_store_instruction(instr.result, value, base, offset, allocator)
+    @ssa.Opcode::Load(base, offset, ty) =>
+      emit_load_instruction(instr.result, base, offset, ty, allocator)
+    @ssa.Opcode::ConstFuncPtr(name) =>
+      emit_func_ptr_instruction(instr.result, name, allocator)
+
     @ssa.Opcode::CallClosure(closure, args) =>
       emit_closure_call(
         instr.result,

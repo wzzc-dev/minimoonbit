@@ -78,3 +78,142 @@ pub fn emit_memory_allocation(
   }
   instrs
 }
+
+///|
+/// 新的内存操作指令生成函数
+
+///|
+/// 生成malloc指令
+pub fn emit_malloc_instruction(
+  result_val : @ssa.Value,
+  size : Int,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let instrs = []
+  instrs.push(Comment("Malloc: " + size.to_string() + " bytes"))
+
+  let (result_reg, load_instrs) = get_register_or_spill_load(
+    result_val.id,
+    allocator,
+  )
+  instrs.append(load_instrs)
+
+  // 调用minimbt_malloc
+  instrs.push(Li(A0, size.to_string()))
+  instrs.push(Call(Label("minimbt_malloc")))
+
+  // 将返回值移动到结果寄存器
+  if result_reg != A0 {
+    instrs.push(Mv(result_reg, A0))
+  }
+
+  // 如果结果需要溢出，生成存储指令
+  let spill_instrs = generate_spill_store_if_needed(
+    result_val.id,
+    result_reg,
+    allocator,
+  )
+  instrs.append(spill_instrs)
+
+  instrs
+}
+
+///|
+/// 生成存储指令
+pub fn emit_store_instruction(
+  result_val : @ssa.Value,
+  value : @ssa.Value,
+  base : @ssa.Value,
+  offset : Int,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let instrs = []
+  instrs.push(Comment("Store: offset " + offset.to_string()))
+
+  // 获取各个操作数的寄存器
+  let (value_reg, value_load_instrs) = get_register_or_spill_load(
+    value.id,
+    allocator,
+  )
+  instrs.append(value_load_instrs)
+
+  let (base_reg, base_load_instrs) = get_register_or_spill_load(
+    base.id,
+    allocator,
+  )
+  instrs.append(base_load_instrs)
+
+  // 生成存储指令
+  instrs.push(Sd(value_reg, { base: base_reg, offset: offset }))
+
+  // Store指令的返回值是Unit，通常不需要处理
+  instrs
+}
+
+///|
+/// 生成加载指令
+pub fn emit_load_instruction(
+  result_val : @ssa.Value,
+  base : @ssa.Value,
+  offset : Int,
+  ty : @ssa.Type,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let instrs = []
+  instrs.push(Comment("Load: offset " + offset.to_string() + " type " + ty.to_string()))
+
+  let (result_reg, load_instrs) = get_register_or_spill_load(
+    result_val.id,
+    allocator,
+  )
+  instrs.append(load_instrs)
+
+  let (base_reg, base_load_instrs) = get_register_or_spill_load(
+    base.id,
+    allocator,
+  )
+  instrs.append(base_load_instrs)
+
+  // 目前只用于指针类型，使用整数加载
+  instrs.push(Ld(result_reg, { base: base_reg, offset: offset }))
+
+  // 如果结果需要溢出，生成存储指令
+  let spill_instrs = generate_spill_store_if_needed(
+    result_val.id,
+    result_reg,
+    allocator,
+  )
+  instrs.append(spill_instrs)
+
+  instrs
+}
+
+///|
+/// 生成函数指针指令
+pub fn emit_func_ptr_instruction(
+  result_val : @ssa.Value,
+  name : String,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let instrs = []
+  instrs.push(Comment("ConstFuncPtr: " + name))
+
+  let (result_reg, load_instrs) = get_register_or_spill_load(
+    result_val.id,
+    allocator,
+  )
+  instrs.append(load_instrs)
+
+  // 加载函数地址到结果寄存器
+  instrs.push(La(result_reg, Label(name)))
+
+  // 如果结果需要溢出，生成存储指令
+  let spill_instrs = generate_spill_store_if_needed(
+    result_val.id,
+    result_reg,
+    allocator,
+  )
+  instrs.append(spill_instrs)
+
+  instrs
+}

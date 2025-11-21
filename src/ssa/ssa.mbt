@@ -43,11 +43,6 @@ pub(all) enum Opcode {
   Gt(Value, Value)
   Ge(Value, Value)
 
-  // 内存操作
-  Alloc(Type)
-  Load(Value)
-  Store(Value, Value)
-
   // 函数调用
   Call(Func, Array[Value])
   // 函数引用
@@ -56,8 +51,12 @@ pub(all) enum Opcode {
   // 静态数组引用
   ArrayRef(String)
 
-  // 闭包操作
-  MakeClosure(String, Array[Value]) // 创建闭包：函数名，自由变量值列表
+  // 内存操作
+  Malloc(Int) // 分配内存，大小参数
+  Store(Value, Value, Int) // 存储值到内存地址：值，基地址，偏移量
+  Load(Value, Int, Type) // 从内存地址加载值：基地址，偏移量，类型
+  ConstFuncPtr(String) // 常量函数指针
+
   CallClosure(Func, Array[Value]) // 调用闭包：闭包值，参数列表
 
   // 元组操作

@@ -95,7 +95,8 @@ pub fn compute_live_intervals_for_function(
     for instr in block.instructions {
       // 记录kill points（函数调用位置）
       match instr.opcode {
-        Call(_) | CallRef(_, _) | CallClosure(_, _) | MakeClosure(_) | Tuple(_) =>
+        Call(_) | CallRef(_, _) | CallClosure(_, _) | Tuple(_) |
+        Malloc(_) | Store(_, _, _) | Load(_, _, _) | ConstFuncPtr(_) =>
           kill_points.push(instruction_count)
         _ => ()
       }
@@ -131,7 +132,10 @@ pub fn compute_live_intervals_for_function(
         @ssa.Opcode::Call(_, _)
         | @ssa.Opcode::CallRef(_, _)
         | @ssa.Opcode::CallClosure(_, _)
-        | @ssa.Opcode::MakeClosure(_) => true
+        | @ssa.Opcode::Malloc(_)
+        | @ssa.Opcode::Store(_, _, _)
+        | @ssa.Opcode::Load(_, _, _)
+        | @ssa.Opcode::ConstFuncPtr(_) => true
         _ => false
       }
       intervals = intervals.add(def_value_id, {
@@ -269,20 +273,18 @@ fn get_instruction_uses_ids(instr : @ssa.Instruction) -> Array[Int] {
         uses.push(arg.id)
       }
     }
-    @ssa.Opcode::Load(addr) => uses.push(addr.id)
-    @ssa.Opcode::Store(addr, value) => {
-      uses.push(addr.id)
-      uses.push(value.id)
-    }
     @ssa.Opcode::Tuple(values) =>
       for val in values {
         uses.push(val.id)
       }
     @ssa.Opcode::GetElement(tuple, _) => uses.push(tuple.id)
-    @ssa.Opcode::MakeClosure(_, free_vars) =>
-      for free_var in free_vars {
-        uses.push(free_var.id)
-      }
+    @ssa.Opcode::Malloc(_) => () // 没有操作数
+    @ssa.Opcode::Store(value, base, _) => {
+      uses.push(value.id)
+      uses.push(base.id)
+    }
+    @ssa.Opcode::Load(base, _, _) => uses.push(base.id)
+    @ssa.Opcode::ConstFuncPtr(_) => () // 没有操作数
     @ssa.Opcode::CallClosure(closure, args) => {
       match closure {
         @ssa.Func::Call(callee) => uses.push(callee.id)
@@ -292,7 +294,6 @@ fn get_instruction_uses_ids(instr : @ssa.Instruction) -> Array[Int] {
         uses.push(arg.id)
       }
     }
-    Alloc(_) => ()
     FMod(lhs, rhs) => {
       uses.push(lhs.id)
       uses.push(rhs.id)

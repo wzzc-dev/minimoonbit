@@ -65,9 +65,6 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
     Opcode::Le(v1, v2) => ["Le", v1.to_json(), v2.to_json()]
     Opcode::Gt(v1, v2) => ["Gt", v1.to_json(), v2.to_json()]
     Opcode::Ge(v1, v2) => ["Ge", v1.to_json(), v2.to_json()]
-    Opcode::Alloc(ty) => ["Alloc", ty.to_json()]
-    Opcode::Load(value) => ["Load", value.to_json()]
-    Opcode::Store(v1, v2) => ["Store", v1.to_json(), v2.to_json()]
     Opcode::Call(name, values) => {
       let values_json = values.map(Value::to_json)
       ["Call", name.to_json(), values_json]
@@ -77,6 +74,10 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
       ["CallRef", name.to_json(), values_json]
     }
     Opcode::ArrayRef(name) => ["ArrayRef", name.to_json()]
+    Opcode::Malloc(size) => ["Malloc", size]
+    Opcode::Store(value, base, offset) => ["Store", value.to_json(), base.to_json(), offset]
+    Opcode::Load(base, offset, ty) => ["Load", base.to_json(), offset, ty.to_json()]
+    Opcode::ConstFuncPtr(name) => ["ConstFuncPtr", name.to_json()]
     Opcode::Tuple(values) => {
       let values_json = values.map(Value::to_json)
       ["Tuple", values_json]
@@ -85,10 +86,6 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
     Opcode::ArrayGet(v1, v2) => ["ArrayGet", v1.to_json(), v2.to_json()]
     Opcode::ArrayPut(v1, v2, v3) =>
       ["ArrayPut", v1.to_json(), v2.to_json(), v3.to_json()]
-    Opcode::MakeClosure(func_name, free_vars) => {
-      let free_vars_json = free_vars.map(Value::to_json)
-      ["MakeClosure", func_name, free_vars_json]
-    }
     Opcode::CallClosure(closure, args) => {
       let args_json = args.map(Value::to_json)
       ["CallClosure", closure.to_json(), args_json]
@@ -118,10 +115,6 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
     ["Le", v1, v2] => Opcode::Le(Value::from_json(v1), Value::from_json(v2))
     ["Gt", v1, v2] => Opcode::Gt(Value::from_json(v1), Value::from_json(v2))
     ["Ge", v1, v2] => Opcode::Ge(Value::from_json(v1), Value::from_json(v2))
-    ["Alloc", ty] => Opcode::Alloc(Type::from_json(ty))
-    ["Load", value] => Opcode::Load(Value::from_json(value))
-    ["Store", v1, v2] =>
-      Opcode::Store(Value::from_json(v1), Value::from_json(v2))
     ["Call", String(name), Array(values)] => {
       let values_res = []
       for v in values {
@@ -129,6 +122,20 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
       }
       Opcode::Call(Func::Label(name), values_res)
     }
+    ["CallRef", String(name), Array(values)] => {
+      let values_res = []
+      for v in values {
+        values_res.push(Value::from_json(v))
+      }
+      Opcode::CallRef(name, values_res)
+    }
+    ["ArrayRef", String(name)] => Opcode::ArrayRef(name)
+    ["Malloc", size] => Opcode::Malloc(size.as_number().unwrap().to_int())
+    ["Store", value, base, offset] =>
+      Opcode::Store(Value::from_json(value), Value::from_json(base), offset.as_number().unwrap().to_int())
+    ["Load", base, offset, ty] =>
+      Opcode::Load(Value::from_json(base), offset.as_number().unwrap().to_int(), Type::from_json(ty))
+    ["ConstFuncPtr", String(name)] => Opcode::ConstFuncPtr(name)
     ["Tuple", Array(values)] => {
       let values_res = []
       for v in values {
@@ -149,13 +156,6 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
         Value::from_json(v2),
         Value::from_json(v3),
       )
-    ["MakeClosure", String(func_name), Array(free_vars)] => {
-      let free_vars_res = []
-      for fv in free_vars {
-        free_vars_res.push(Value::from_json(fv))
-      }
-      Opcode::MakeClosure(func_name, free_vars_res)
-    }
     ["CallClosure", closure, Array(args)] => {
       let args_res = []
       for a in args {
