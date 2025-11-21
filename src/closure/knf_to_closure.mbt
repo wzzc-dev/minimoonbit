@@ -30,6 +30,7 @@ pub fn knf_program_to_closure(
     fundefs,
     LocalEnv::new(),
     static_arrays,
+    [],
     prog,
   )
   { fundefs, static_arrays, body }
@@ -40,6 +41,7 @@ fn knf_to_closure(
   funcdefs : Array[FuncDef],
   env : LocalEnv,
   static_arrays : Array[StaticArrayData],
+  func_stack : Array[@types.Name],
   e : @knf.Knf,
 ) -> Expr {
   // println("knf_to_closure: " + e.to_string())
@@ -65,22 +67,22 @@ fn knf_to_closure(
       IfEq(
         a,
         b,
-        knf_to_closure(funcdefs, env, static_arrays, ka),
-        knf_to_closure(funcdefs, env, static_arrays, kb),
+        knf_to_closure(funcdefs, env, static_arrays, func_stack, ka),
+        knf_to_closure(funcdefs, env, static_arrays, func_stack, kb),
       )
     IfLe(a, b, ka, kb) =>
       IfLe(
         a,
         b,
-        knf_to_closure(funcdefs, env, static_arrays, ka),
-        knf_to_closure(funcdefs, env, static_arrays, kb),
+        knf_to_closure(funcdefs, env, static_arrays, func_stack, ka),
+        knf_to_closure(funcdefs, env, static_arrays, func_stack, kb),
       )
     IfLt(a, b, ka, kb) =>
       IfLt(
         a,
         b,
-        knf_to_closure(funcdefs, env, static_arrays, ka),
-        knf_to_closure(funcdefs, env, static_arrays, kb),
+        knf_to_closure(funcdefs, env, static_arrays, func_stack, ka),
+        knf_to_closure(funcdefs, env, static_arrays, func_stack, kb),
       )
     Let((x, ty), e, cont) => {
       match ty {
@@ -92,7 +94,7 @@ fn knf_to_closure(
         //   MakeClosure((x, ty_to_low_type(ty, is_closure = true)), closure, knf_to_closure(funcdefs, env, static_arrays, e))
         // }
         _ => {
-          let body = knf_to_closure(funcdefs, env, static_arrays, e)
+          let body = knf_to_closure(funcdefs, env, static_arrays, func_stack, e)
           // @util.logger("name: " + (x, ty).to_string())
           let ty = match ty {
             // Fun(args_ty, ret_ty) =>
@@ -103,7 +105,7 @@ fn knf_to_closure(
           let env = env.add(x, ty)
           // @util.logger("let: " + (x, ty).to_string())
           // @util.logger("env: " + env.to_string())
-          Let((x, ty), body, knf_to_closure(funcdefs, env, static_arrays, cont))
+          Let((x, ty), body, knf_to_closure(funcdefs, env, static_arrays, func_stack, cont))
         }
       }
     }
@@ -121,10 +123,19 @@ fn knf_to_closure(
       free_vars.remove(new_fv(name, Unit))
       let is_closure = not(free_vars.is_empty())
       // @util.logger("letrec: " + name.to_string() + " env: " + env.to_string())
+
+      // 生成限定名称
+      let qualified_name = if func_stack.length() > 0 {
+        let parent_name = func_stack[func_stack.length() - 1]
+        parent_name.to_string() + "$" + name.to_string()
+      } else {
+        name.to_string()
+      }
+
       // 处理函数体
       let make_def = fn(body : Expr) -> FuncDef {
         {
-          name: name.to_string(),
+          name: if is_closure { qualified_name } else { name.to_string() },
           old_name: name,
           is_closure,
           ty: gen_func_type(ty, is_closure, funcdefs, env, body),
@@ -139,7 +150,15 @@ fn knf_to_closure(
         }
       }
       funcdefs.push(make_def(Unit))
-      let body = knf_to_closure(funcdefs, env, static_arrays, body)
+
+      // 将当前函数名压入栈中，用于处理嵌套函数
+      let new_func_stack = []
+      for item in func_stack {
+        new_func_stack.push(item)
+      }
+      new_func_stack.push(name)
+      let body = knf_to_closure(funcdefs, env, static_arrays, new_func_stack, body)
+
       let def = make_def(body)
       let index = funcdefs.search_by(fn(def) { def.old_name == name }).unwrap()
       let _ = funcdefs.remove(index)
@@ -148,15 +167,15 @@ fn knf_to_closure(
         true => {
           let free_var_names = fv_to_array(free_vars).map(fv => fv.0)
           let closure = {
-            name: def.old_name.to_string(),
+            name: qualified_name,
             actual_free_vars: free_var_names,
           }
           MakeClosure((name, def.ty),
             closure,
-            knf_to_closure(funcdefs, env, static_arrays, cont),
+            knf_to_closure(funcdefs, env, static_arrays, func_stack, cont),
           )
         }
-        false => knf_to_closure(funcdefs, env, static_arrays, cont)
+        false => knf_to_closure(funcdefs, env, static_arrays, func_stack, cont)
       }
     }
     Apply(name, args_name) => {
@@ -218,7 +237,7 @@ fn knf_to_closure(
       LetTuple(
         arr_name,
         name,
-        knf_to_closure(funcdefs, env, static_arrays, cont),
+        knf_to_closure(funcdefs, env, static_arrays, func_stack, cont),
       )
     }
     Put(name, name1, name2) => ArrayPut(name, name1, name2)
@@ -227,8 +246,8 @@ fn knf_to_closure(
     ExternalFunctionApplication(name, arr_name) => CallDirect(name, arr_name)
     While(cond, body) =>
       While(
-        knf_to_closure(funcdefs, env, static_arrays, cond),
-        knf_to_closure(funcdefs, env, static_arrays, body),
+        knf_to_closure(funcdefs, env, static_arrays, func_stack, cond),
+        knf_to_closure(funcdefs, env, static_arrays, func_stack, body),
       )
     Assign(x, y) => Assign(x, y)
     FieldAccess(x, ty, y) => TupleGet(x, ty_to_low_type(ty), y)

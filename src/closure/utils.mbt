@@ -92,7 +92,7 @@ fn gen_body_ret_type(
         None => ty_to_low_type(ty)
       }
     Var(name) =>
-      match funcdefs.search_by(fn(f) { f.name.0 == name.name.unwrap() }) {
+      match funcdefs.search_by(fn(f) { f.old_name == name }) {
         Some(index) =>
           match funcdefs.get(index) {
             Some(f) => f.ty

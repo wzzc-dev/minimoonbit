@@ -51,7 +51,7 @@ pub fn convert_function_with_env(
 
   // 添加当前函数到函数环境
   let final_func_env = func_env.add(
-    fundef.name.0.to_string(),
+    fundef.old_name.to_string(),
     convert_type(fundef.ty),
   )
 
