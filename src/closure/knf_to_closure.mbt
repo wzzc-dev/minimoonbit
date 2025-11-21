@@ -212,13 +212,23 @@ fn knf_to_closure(
         match funcdefs.search_by(fn(def) { def.old_name == arg_name }) {
           Some(index) => {
             let def = funcdefs.get(index).unwrap()
+
+            // 为所有函数生成闭包，包括没有自由变量的函数
+            let closure_name = if def.is_closure {
+              def.name
+            } else {
+              // 为非闭包函数生成 $closure 包装函数
+              let wrapper_name = def.name.0 + "$closure"
+              generate_closure_wrapper(funcdefs, def, wrapper_name)
+              wrapper_name
+            }
+
             let free_var_names = def.formal_free_vars.map(fv => fv.0)
             let closure = {
-              name: def.name,
+              name: closure_name,
               actual_free_vars: free_var_names,
             }
             result = MakeClosure((def.old_name, def.ty), closure, result)
-            // result = Let((def.old_name, def.ty), result, result)
             // @util.logger("make closure: " + result.to_string())
           }
           None => () // 不是函数定义，无需处理
@@ -269,6 +279,33 @@ fn knf_to_closure(
 
       static_arrays.push({ label: name, elements: gen_static_array_data(datas) })
       ExternalArray(name)
+    }
+  }
+}
+
+///|
+fn generate_closure_wrapper(
+  funcdefs : Array[FuncDef],
+  def : FuncDef,
+  wrapper_name : String,
+) -> Unit {
+  // 检查是否已经生成了包装函数
+  if funcdefs.search_by(fn(d) { d.name.0 == wrapper_name }) is None {
+    match def.ty {
+      DirectFn(arg_tys, ret_ty) => {
+        // 生成闭包包装函数
+        let wrapper_def = {
+          name: wrapper_name,
+          old_name: Name::name_only(wrapper_name),
+          is_closure: true,
+          ty: ClosureFn(arg_tys, ret_ty),
+          args: def.args, // 使用原始参数
+          formal_free_vars: [],
+          body: CallDirect(def.name, def.args.map(fn(arg) { arg.0 })),
+        }
+        funcdefs.push(wrapper_def)
+      }
+      _ => () // 已经是闭包函数，无需包装
     }
   }
 }
