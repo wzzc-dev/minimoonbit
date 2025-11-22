@@ -119,7 +119,7 @@ fn CompileStatus::step(self : CompileStatus, backend : Backend) -> Bool {
       }
     }
     Knf => {
-      @util.logger("typechecked ast: \n" + self.typechecked.unwrap().to_json().stringify() + "\n")
+      @util.debug("typechecked ast: \n" + self.typechecked.unwrap().to_json().stringify() + "\n")
       let pre = @knf.KnfEnv::syntax_preprocess(
         self.knf_env,
         self.typechecked.unwrap(),

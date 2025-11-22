@@ -1955,7 +1955,10 @@ fn enumConstructExpr(
       ) => @types.Syntax::EnumConstruct(name, enum_construct_field_list)
       ((UPPER_IDENTIFIER(name), None), None) =>
         @types.Syntax::EnumConstruct(name, [])
-      _ => @util.die("enumConstructExpr: not handled")
+      ((UPPER_IDENTIFIER(name), Some(((COLON, COLON), UPPER_IDENTIFIER(field)))), None) => {
+        @types.Syntax::EnumConstruct(name + "::" + field, [])
+      }
+      _ => @util.die("enumConstructExpr: not handled: " + input.to_string())
     }
   })
   .parse(tokens)

@@ -6,7 +6,7 @@ pub fn logger(msg : String) -> Unit {
   }
 }
 pub fn debug(msg : String) -> Unit {
-  let debug = true
+  let debug = false
   if debug {
     println("logger: " + msg)
   }
