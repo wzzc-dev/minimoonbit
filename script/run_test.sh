@@ -43,8 +43,22 @@ for TEST_DIR in "${TEST_DIRS[@]}"; do
     moon run -g src/bin/main.mbt -- "$MBT_FILE" -o "$OUTPUT_FILE" --ssa &&
     zig build-exe -target riscv64-linux -femit-bin=test-exe-file "$OUTPUT_FILE" ./riscv_rt/zig-out/lib/libmincaml.a -O Debug -fno-strip -mcpu=baseline_rv64 &&
 
-    # 运行模拟器并将输出提取到临时文件（只取 >>> 前内容）
-    ./rvlinux -n test-exe-file | sed '/>>>/q' > output.txt
+    # 运行模拟器并将输出提取到临时文件（只取 >>> 前内容），添加 10 秒超时限制
+    timeout 10 ./rvlinux -n test-exe-file | sed '/>>>/q' > output.txt
+    TIMEOUT_EXIT=$?
+    
+    # 检查是否超时
+    if [ $TIMEOUT_EXIT -eq 124 ]; then
+      echo "Test $TEST_DIR/$BASE_NAME failed: Timed out after 10 seconds"
+      ((FAILED_COUNT++))
+      FAILED_TESTS+=("$TEST_DIR/$BASE_NAME")
+      continue
+    elif [ $TIMEOUT_EXIT -ne 0 ]; then
+      echo "Test $TEST_DIR/$BASE_NAME failed: Simulator error (exit code: $TIMEOUT_EXIT)"
+      ((FAILED_COUNT++))
+      FAILED_TESTS+=("$TEST_DIR/$BASE_NAME")
+      continue
+    fi
 
     # 检查对应的 .ans 文件是否存在
     if [[ -f "$ANS_FILE" ]]; then
