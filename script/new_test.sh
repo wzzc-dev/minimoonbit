@@ -22,24 +22,36 @@ FAILED_CASES=()
 TEST_BASE_DIR="contest-2025-data/test_cases"
 
 # 定义各个测试部分及其测试用例（参考 config.yml）
-declare -A TEST_SECTIONS
-TEST_SECTIONS[tyck]="arrary_type_mismatch array_put_type_mismatch assign_type_mismatch binary_type_mismatch block_type_mismatch closure_func_type_incorrect func_arg_type_mismacth func_ret_type_mismatch if_branch_type_mismatch if_cond_not_bool let_tuple_type_mismatch let_type_mismatch return_type_mismatch tuple_type_mismatch unary_type_mismatch"
+# 使用单独的变量代替关联数组，以兼容更多bash环境
+test_tyck="arrary_type_mismatch array_put_type_mismatch assign_type_mismatch binary_type_mismatch block_type_mismatch closure_func_type_incorrect func_arg_type_mismacth func_ret_type_mismatch if_branch_type_mismatch if_cond_not_bool let_tuple_type_mismatch let_type_mismatch return_type_mismatch tuple_type_mismatch unary_type_mismatch"
+test_codegen="ack adder adder2 caltz clamp cls-bug cls-bug2 cls-rec cls-reg-bug counter even-odd float funcomp gcd id inprod-loop inprod-rec inprod join-reg join-reg2 join-stack join-stack2 join-stack3 non-tail-if non-tail-if2 print shuffle spill spill2 spill3 sum-tail sum"
+test_optional_asm="ack adder adder2 caltz clamp cls-bug cls-bug2 cls-rec cls-reg-bug counter even-odd float funcomp gcd id inprod-loop inprod-rec inprod join-reg join-reg2 join-stack join-stack2 join-stack3 non-tail-if non-tail-if2 print shuffle spill spill2 spill3 sum-tail sum"
+test_optional_enum_only="enum1 enum2 enum3 enum4 enum5"
+test_optional_generic_only="generic1 generic2 generic3 generic4 generic5"
+test_optional_mixed="generic_enum1 generic_enum2 generic_struct_enum generic_struct1 generic_struct2 smith1 smith2 smith3 smith4 smith5 struct_enum1 struct_enum2"
+test_optional_struct_only="struct1 struct2 struct3 struct4 struct5"
+test_size="almabench cholesky conv_pool2 conv_pool3 eigen fpquicksort invmat lu nbody qr queen schur svd"
+test_speed="almabench cholesky conv_pool2 conv_pool3 eigen fpquicksort invmat lu nbody qr queen schur svd"
 
-TEST_SECTIONS[codegen]="ack adder adder2 caltz clamp cls-bug cls-bug2 cls-rec cls-reg-bug counter even-odd float funcomp gcd id inprod-loop inprod-rec inprod join-reg join-reg2 join-stack join-stack2 join-stack3 non-tail-if non-tail-if2 print shuffle spill spill2 spill3 sum-tail sum"
+# 定义所有测试部分
+ALL_SECTIONS=("tyck" "codegen" "optional-asm" "optional-enum-only" "optional-generic-only" "optional-mixed" "optional-struct-only" "size" "speed")
 
-TEST_SECTIONS[optional-asm]="ack adder adder2 caltz clamp cls-bug cls-bug2 cls-rec cls-reg-bug counter even-odd float funcomp gcd id inprod-loop inprod-rec inprod join-reg join-reg2 join-stack join-stack2 join-stack3 non-tail-if non-tail-if2 print shuffle spill spill2 spill3 sum-tail sum"
-
-TEST_SECTIONS[optional-enum-only]="enum1 enum2 enum3 enum4 enum5"
-
-TEST_SECTIONS[optional-generic-only]="generic1 generic2 generic3 generic4 generic5"
-
-TEST_SECTIONS[optional-mixed]="generic_enum1 generic_enum2 generic_struct_enum generic_struct1 generic_struct2 smith1 smith2 smith3 smith4 smith5 struct_enum1 struct_enum2"
-
-TEST_SECTIONS[optional-struct-only]="struct1 struct2 struct3 struct4 struct5"
-
-TEST_SECTIONS[size]="almabench cholesky conv_pool2 conv_pool3 eigen fpquicksort invmat lu nbody qr queen schur svd"
-
-TEST_SECTIONS[speed]="almabench cholesky conv_pool2 conv_pool3 eigen fpquicksort invmat lu nbody qr queen schur svd"
+# 获取指定部分的测试用例函数
+get_test_cases() {
+    local section="$1"
+    case "$section" in
+        "tyck") echo "$test_tyck" ;;
+        "codegen") echo "$test_codegen" ;;
+        "optional-asm") echo "$test_optional_asm" ;;
+        "optional-enum-only") echo "$test_optional_enum_only" ;;
+        "optional-generic-only") echo "$test_optional_generic_only" ;;
+        "optional-mixed") echo "$test_optional_mixed" ;;
+        "optional-struct-only") echo "$test_optional_struct_only" ;;
+        "size") echo "$test_size" ;;
+        "speed") echo "$test_speed" ;;
+        *) echo "" ;;
+    esac
+}
 
 # 默认测试部分
 DEFAULT_SECTIONS=("tyck" "codegen" "optional-asm" "optional-enum-only" "optional-generic-only" "optional-mixed" "optional-struct-only")
@@ -47,19 +59,17 @@ DEFAULT_SECTIONS=("tyck" "codegen" "optional-asm" "optional-enum-only" "optional
 # 获取要测试的部分
 SECTIONS_TO_TEST=()
 if [ $# -eq 0 ]; then
-    SECTIONS_TO_TEST=("${DEFAULT_SECTIONS[@]}")
+    SECTIONS_TO_TEST=("${ALL_SECTIONS[@]}")
 else
     # 检查是否提供了特殊参数
-    if [ "$1" == "all" ]; then
-        # 获取所有部分的键
-        for section in "${!TEST_SECTIONS[@]}"; do
-            SECTIONS_TO_TEST+=("$section")
-        done
+    if [ "$1" == "base" ]; then
+        # 获取所有部分
+        SECTIONS_TO_TEST=("${DEFAULT_SECTIONS[@]}")
     elif [ "$1" == "size-speed" ]; then
         SECTIONS_TO_TEST=("size" "speed")
     else
         # 使用提供的部分
-        SECTIONS_TO_TEST=("$@")
+        SECTIONS_TO_TEST=("${ALL_SECTIONS[@]}")
     fi
 fi
 
@@ -69,8 +79,11 @@ echo "========================================"
 
 # 遍历指定的测试部分
 for SECTION in "${SECTIONS_TO_TEST[@]}"; do
+    # 获取该部分的测试用例
+    TEST_CASES_STR=$(get_test_cases "$SECTION")
+    
     # 检查部分是否存在
-    if [[ -z "${TEST_SECTIONS[$SECTION]}" ]]; then
+    if [[ -z "$TEST_CASES_STR" ]]; then
         yellow "Warning: Section '$SECTION' not found, skipping..."
         continue
     fi
@@ -78,8 +91,6 @@ for SECTION in "${SECTIONS_TO_TEST[@]}"; do
     blue "Processing section: $SECTION"
     echo "----------------------------------------"
     
-    # 获取该部分的测试用例
-    TEST_CASES_STR="${TEST_SECTIONS[$SECTION]}"
     read -ra TEST_CASES <<< "$TEST_CASES_STR"
     
     # 遍历测试用例
@@ -131,9 +142,9 @@ for SECTION in "${SECTIONS_TO_TEST[@]}"; do
                 ;;
             *)
                 # 其他部分的常规测试（编译并运行）
-                if moon run -g src/bin/main.mbt -- "$TEST_FILE" -o "out.s" --ssa && \
-                   zig build-exe -target riscv64-linux -femit-bin=test-exe-file "out.s" ./riscv_rt/zig-out/lib/libmincaml.a -O Debug -fno-strip -mcpu=baseline_rv64 >/dev/null 2>&1 && \
-                   timeout 10 ./rvlinux -n test-exe-file | sed '/>>>/q' > output.txt; then
+                    if moon run -g src/bin/main.mbt -- "$TEST_FILE" -o "out.s" --ssa && \
+                       zig build-exe -target riscv64-linux -femit-bin=test-exe-file "out.s" ./riscv_rt/zig-out/lib/libmincaml.a -O Debug -fno-strip -mcpu=baseline_rv64 >/dev/null 2>&1 && \
+                       ./rvlinux -n test-exe-file | sed '/>>>/q' > output.txt; then
                     
                     # 检查是否有答案文件进行比较
                     if [[ -f "$ANS_FILE" ]]; then

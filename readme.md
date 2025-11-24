@@ -50,7 +50,7 @@ flowchart LR
 测试全部
 
 ```shell
-./script/run_test.sh
+./script/new_test.sh
 ```
 
 闭包 IR 
