@@ -33,7 +33,7 @@ flowchart LR
   parserAST -->|"typing"| TypedAST
   TypedAST -->|"A-Normalization"| knfIr
   knfIr -->|"Closure Conversion"| closureIr
-  TypedAST -->|"SSA Construction(TODO)"| ssa("TODO")
+  TypedAST -->|"SSA Construction"| ssa
   closureIr -->|"emit"| Assembly
   ssa -->|"emit"| Assembly
   closureIr -->|"emit"| javascript
