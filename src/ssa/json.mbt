@@ -78,6 +78,8 @@ pub fn Opcode::to_json(self : Opcode) -> Json {
     Opcode::Store(value, base, offset) => ["Store", value.to_json(), base.to_json(), offset]
     Opcode::Load(base, offset, ty) => ["Load", base.to_json(), offset, ty.to_json()]
     Opcode::ConstFuncPtr(name) => ["ConstFuncPtr", name.to_json()]
+    Opcode::IncRef(value) => ["IncRef", value.to_json()]
+    Opcode::DecRef(value) => ["DecRef", value.to_json()]
     Opcode::Tuple(values) => {
       let values_json = values.map(Value::to_json)
       ["Tuple", values_json]
@@ -136,6 +138,8 @@ pub fn Opcode::from_json(json : Json) -> Opcode raise {
     ["Load", base, offset, ty] =>
       Opcode::Load(Value::from_json(base), offset.as_number().unwrap().to_int(), Type::from_json(ty))
     ["ConstFuncPtr", String(name)] => Opcode::ConstFuncPtr(name)
+    ["IncRef", value] => Opcode::IncRef(Value::from_json(value))
+    ["DecRef", value] => Opcode::DecRef(Value::from_json(value))
     ["Tuple", Array(values)] => {
       let values_res = []
       for v in values {

@@ -17,6 +17,10 @@ let offset = 0
 let whitespace_regex = /^\s+/
 let int_regex = /^-?\d+/
 
+// 引用计数管理（用于堆分配的对象）
+// 内存布局: [ref_count: u32][用户数据...]
+const refCountMap = new Map();
+
 let importObject = {
     minimbt_read_int: () => {
         // skip whitespace
@@ -39,14 +43,50 @@ let importObject = {
     minimbt_print_char: (value) => process.stdout.write(String.fromCharCode(value)),
     minimbt_print_endline: () => process.stdout.write('\n'),
     minimbt_print_newline: () => process.stdout.write('\n'),
-    minimbt_malloc: (size) => {
-        if (memory.buffer.byteLength < offset + size) {
-            memory.grow(1)
+
+    // 引用计数内存分配
+    minimbt_alloc: (size) => {
+        // 分配: ref_count(4 bytes) + 用户数据
+        let total_size = size + 4;
+        if (memory.buffer.byteLength < offset + total_size) {
+            memory.grow(Math.ceil((offset + total_size - memory.buffer.byteLength) / 65536) + 1);
         }
-        let ptr = offset
-        offset += size
-        return ptr;
+        let data_ptr = offset + 4; // 用户数据区域
+        // 初始化 ref_count = 1
+        let view = new Uint32Array(memory.buffer, offset, 1);
+        view[0] = 1;
+        offset += total_size;
+        return data_ptr;
     },
+    minimbt_malloc: (size) => {
+        // 兼容旧接口
+        return importObject.minimbt_alloc(size);
+    },
+
+    // 增加引用计数
+    minimbt_incref: (data_ptr) => {
+        if (data_ptr === 0) return;
+        let ref_count_ptr = data_ptr - 4;
+        let view = new Uint32Array(memory.buffer, ref_count_ptr, 1);
+        view[0] += 1;
+    },
+
+    // 减少引用计数，如果为 0 则释放
+    minimbt_decref: (data_ptr) => {
+        if (data_ptr === 0) return;
+        let ref_count_ptr = data_ptr - 4;
+        let view = new Uint32Array(memory.buffer, ref_count_ptr, 1);
+        let new_count = view[0] - 1;
+        if (new_count === 0) {
+            // 引用计数为 0，标记为已释放（在实际实现中可能需要更复杂的内存管理）
+            view[0] = 0;
+            // 注意：简单实现中我们不回收内存，只标记
+            // 更完整的实现需要维护空闲列表
+        } else {
+            view[0] = new_count;
+        }
+    },
+
     minimbt_create_array: (size, initial) => {
         if (offset % 4 != 0) {
             offset = Math.ceil(offset / 4) * 4

@@ -541,6 +541,10 @@ fn emit_instruction_with_regalloc(
       emit_load_instruction(instr.result, base, offset, ty, allocator)
     @ssa.Opcode::ConstFuncPtr(name) =>
       emit_func_ptr_instruction(instr.result, name, allocator)
+    @ssa.Opcode::IncRef(ptr) =>
+      emit_incref_instruction(ptr, allocator)
+    @ssa.Opcode::DecRef(ptr) =>
+      emit_decref_instruction(ptr, allocator)
     @ssa.Opcode::CallClosure(closure, args) =>
       emit_closure_call(
         instr.result,

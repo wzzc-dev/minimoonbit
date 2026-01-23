@@ -14,6 +14,10 @@ let ptr = 0
 let whitespace_regex = /^\s+/
 let int_regex = /^-?\d+/
 
+// 引用计数内存管理
+// JavaScript 有自己的 GC，incref/decref 为空操作（保持 API 兼容）
+const refCountMap = new Map();
+
 let importObject = {
     minimbt_read_int: () => {
         // skip whitespace
@@ -53,7 +57,34 @@ let importObject = {
     minimbt_sqrt: (f) => Math.sqrt(f),
     minimbt_sin: (f) => Math.sin(f),
     minimbt_cos: (f) => Math.cos(f),
-    minimbt_atan: (f) => Math.atan(f)
+    minimbt_atan: (f) => Math.atan(f),
+
+    // 引用计数 API（JavaScript GC 处理内存，这些函数为空操作）
+    minimbt_alloc: (size) => {
+        // 返回用户数据区域指针（JS 中为对象引用）
+        return new ArrayBuffer(size + 4); // +4 用于 ref_count 头
+    },
+    minimbt_malloc: (size) => {
+        return importObject.minimbt_alloc(size);
+    },
+    minimbt_incref: (ptr) => {
+        if (ptr === null || ptr === undefined) return;
+        // JS GC 自动管理，不需要显式 incref
+        // 如果需要跟踪，可以更新 refCountMap
+        let count = refCountMap.get(ptr) || 1;
+        refCountMap.set(ptr, count + 1);
+    },
+    minimbt_decref: (ptr) => {
+        if (ptr === null || ptr === undefined) return;
+        // JS GC 自动管理，不需要显式 decref
+        let count = refCountMap.get(ptr) || 1;
+        if (count <= 1) {
+            refCountMap.delete(ptr);
+            // 在实际使用中，这里可以触发 GC
+        } else {
+            refCountMap.set(ptr, count - 1);
+        }
+    },
 }
 
 for (let k in importObject) {

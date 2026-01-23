@@ -312,6 +312,8 @@ fn get_instruction_uses_ids(instr : @ssa.Instruction) -> Array[Int] {
       uses.push(index.id)
       uses.push(value.id)
     }
+    IncRef(ptr) => uses.push(ptr.id)
+    DecRef(ptr) => uses.push(ptr.id)
     ConstFloat(_) | ConstInt(_) | ConstBool(_) => ()
   }
   uses

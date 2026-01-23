@@ -216,3 +216,55 @@ pub fn emit_func_ptr_instruction(
 
   instrs
 }
+
+///|
+/// 生成引用计数增加指令 (IncRef)
+pub fn emit_incref_instruction(
+  ptr_val : @ssa.Value,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let instrs = []
+  instrs.push(Comment("IncRef"))
+
+  // 获取指针的寄存器
+  let (ptr_reg, load_instrs) = get_register_or_spill_load(
+    ptr_val.id,
+    allocator,
+  )
+  instrs.append(load_instrs)
+
+  // 调用 minimbt_incref(ptr)
+  // 指针在 A0 中
+  if ptr_reg != A0 {
+    instrs.push(Mv(A0, ptr_reg))
+  }
+  instrs.push(Call(Label("minimbt_incref")))
+
+  instrs
+}
+
+///|
+/// 生成引用计数减少指令 (DecRef)
+pub fn emit_decref_instruction(
+  ptr_val : @ssa.Value,
+  allocator : RegisterAllocator,
+) -> Array[RvAsm] raise {
+  let instrs = []
+  instrs.push(Comment("DecRef"))
+
+  // 获取指针的寄存器
+  let (ptr_reg, load_instrs) = get_register_or_spill_load(
+    ptr_val.id,
+    allocator,
+  )
+  instrs.append(load_instrs)
+
+  // 调用 minimbt_decref(ptr)
+  // 指针在 A0 中
+  if ptr_reg != A0 {
+    instrs.push(Mv(A0, ptr_reg))
+  }
+  instrs.push(Call(Label("minimbt_decref")))
+
+  instrs
+}

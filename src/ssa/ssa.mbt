@@ -56,6 +56,8 @@ pub(all) enum Opcode {
   Store(Value, Value, Int) // 存储值到内存地址：值，基地址，偏移量
   Load(Value, Int, Type) // 从内存地址加载值：基地址，偏移量，类型
   ConstFuncPtr(String) // 常量函数指针
+  IncRef(Value) // 引用计数 +1
+  DecRef(Value) // 引用计数 -1，如果为 0 则释放
 
   CallClosure(Func, Array[Value]) // 调用闭包：闭包值，参数列表
 

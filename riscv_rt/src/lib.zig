@@ -94,9 +94,47 @@ export fn minimbt_atan(f: f64) f64 {
     return std.math.atan(f);
 }
 
+// 引用计数内存管理
+// 内存布局: [ref_count: u32][用户数据...]
+
+// 分配带引用计数的对象，ref_count 初始化为 1
+export fn minimbt_alloc(sz: u32) [*]u8 {
+    const total_size = sz + 4; // 额外 4 字节存储引用计数
+    const payload = allocator.allocWithOptions(u8, total_size, @alignOf(u32), null) catch @panic("Alloc failed!");
+    // 初始化引用计数为 1
+    const ref_count_ptr = @ptrCast([*]u32, @alignCast(@ptrCast([*]u8, payload.ptr)));
+    ref_count_ptr[0] = 1;
+    // 返回用户数据区域的指针（跳过 ref_count）
+    return @ptrCast([*]u8, @ptrCast([*]u8, &payload[4]));
+}
+
+// 兼容旧接口：内部调用 minimbt_alloc
 export fn minimbt_malloc(sz: u32) [*]u8 {
-    const payload = allocator.allocWithOptions(u8, sz, @alignOf(u32), null) catch @panic("Aalloc failed!");
-    return @ptrCast(payload);
+    return minimbt_alloc(sz);
+}
+
+// 增加引用计数
+export fn minimbt_incref(ptr: [*]u8) void {
+    if (ptr == null) return;
+    // 获取 ref_count 的位置（ptr 前 4 字节）
+    const ref_count_ptr = @ptrCast([*]u32, @alignCast(@ptrCast([*]u8, @ptrCast([*]u8, ptr) - 4)));
+    ref_count_ptr[0] += 1;
+}
+
+// 减少引用计数，如果为 0 则释放内存
+export fn minimbt_decref(ptr: [*]u8) void {
+    if (ptr == null) return;
+    // 获取 ref_count 的位置
+    const ref_count_ptr = @ptrCast([*]u32, @alignCast(@ptrCast([*]u8, @ptrCast([*]u8, ptr) - 4)));
+    const new_count = ref_count_ptr[0] - 1;
+    if (new_count == 0) {
+        // 引用计数为 0，释放内存
+        // 需要获取原始指针（包括 ref_count 区域）
+        const original_ptr = @ptrCast([*]u8, @ptrCast([*]u8, ptr) - 4);
+        allocator.free(original_ptr[0..]);
+    } else {
+        ref_count_ptr[0] = new_count;
+    }
 }
 
 export fn minimbt_create_array(n: u32, v: i32) [*]i32 {
@@ -169,7 +207,7 @@ export fn mincaml_atan(f: f64) f64 {
 }
 
 export fn mincaml_malloc(sz: u32) [*]u8 {
-    return minimbt_malloc(sz);
+    return minimbt_alloc(sz);
 }
 
 export fn mincaml_create_array(n: u32, v: i32) [*]i32 {
@@ -182,4 +220,13 @@ export fn mincaml_create_ptr_array(n: u32, init: *anyopaque) [*]*anyopaque {
 
 export fn mincaml_create_float_array(n: u32, v: f64) [*]f64 {
     return minimbt_create_float_array(n, v);
+}
+
+// Mincaml compatibility for reference counting
+export fn mincaml_incref(ptr: [*]u8) void {
+    minimbt_incref(ptr);
+}
+
+export fn mincaml_decref(ptr: [*]u8) void {
+    minimbt_decref(ptr);
 }

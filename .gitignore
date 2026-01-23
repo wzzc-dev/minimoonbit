@@ -31,3 +31,4 @@ out.ir
 .antlr/*
 /miniju.iml
 .moonagent/**
+_build/**

@@ -526,6 +526,9 @@ pub fn convert_expr(
         context.current_block.instructions.push(store_instruction)
       }
 
+      // 注意：minimbt_alloc 已经将 ref_count 初始化为 1
+      // 不需要额外 incref，变量绑定时会自动处理
+
       // 5. 最终结果是闭包对象的指针（malloc_result）
       // 将闭包值绑定到name变量
       let updated_var_env = context.var_env.add(
